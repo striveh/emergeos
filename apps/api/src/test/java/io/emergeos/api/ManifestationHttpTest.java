@@ -19,7 +19,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 @SpringBootTest(properties = "emerge.prototype.principal-id=http-test-owner")
-class ManifestationHttpTest {
+class ManifestationHttpTest extends PostgresApiTest {
 
   private MockMvc mockMvc;
 

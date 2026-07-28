@@ -91,6 +91,25 @@ Receipt:
 - another principal receives the same response shape as a missing Capture;
 - the captured value survives a real process restart.
 
+#### S1 slice delta · 2026-07-28
+
+- Observable result: `POST /api/v1/captures` accepts one synthetic text, link or voice-file
+  reference and `GET /api/v1/captures/{id}` returns the same owner-scoped Capture after the
+  packaged application is killed and a different JVM starts against the same PostgreSQL.
+- First Red: a Failsafe HTTP acceptance starts the packaged jar and PostgreSQL as independent
+  processes, then expects create/read/restart/read. Before implementation it must fail at the
+  missing Capture HTTP behavior rather than at build, container or application startup.
+- Owned files: the minimal Capture types/port in Core, one `adapters/postgres` module and migration,
+  thin API wiring and S1 tests/docs. Existing Manifestation repositories remain in-memory; S2/S3
+  persistence is out of scope.
+- Predicted failures: check-then-insert races create two results; client-controlled identity or hash
+  defeats isolation/idempotency; an in-JVM context rebuild falsely appears to prove restart safety.
+- Fault cases: same nonce/same hash replays the committed original; same nonce/different hash is a
+  non-leaking conflict; foreign-owner and missing reads are indistinguishable; wildcard/non-loopback
+  binding fails before the web server starts.
+- Receipt target: Red summary, database-backed focused tests, two distinct application PIDs, dual
+  configured principals sharing one database, review findings, and exact verification commands.
+
 ### S2 · Conflict-safe Revision
 
 User result: revise an Artifact without silently overwriting a newer revision.
@@ -259,8 +278,16 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
 
 - [x] 2026-07-28: foundation and current failure boundaries documented.
 - [x] 2026-07-28: Stage 1 recut into concurrent engineering, market and learning lanes.
+- [x] 2026-07-28 14:38 +08:00: confirmed clean `main` at
+  `7d1b1576adbe0173c4a46951f606f613cac132f5` before S1.
+- [x] 2026-07-28 14:55 +08:00: S1 slice delta and packaged-process HTTP Acceptance Red
+  recorded before production implementation.
+- [x] 2026-07-28 15:15 +08:00: minimum Core/schema/adapter/API and targeted concurrency,
+  packaged restart, dual-principal and loopback fault checks green.
+- [x] 2026-07-28 15:24 +08:00: independent production review closed with no remaining
+  P0/P1; complete post-review packaged-process Receipt recorded.
 - [ ] Lane B Day 1: start Founder Log, interview recruitment and Concierge offer.
-- [ ] S1 restart-safe Capture.
+- [x] 2026-07-28 15:25 +08:00: S1 restart-safe Capture engineering Receipt complete.
 - [ ] S2 conflict-safe Revision.
 - [ ] S3 recoverable local Action.
 - [ ] S4 operating and interview evidence.
@@ -273,13 +300,81 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
 - Use a Snapshot rather than prematurely normalizing a full Working Self relation model.
 - Defer Outbox/Inbox until an asynchronous event flow requires it.
 - Treat product discovery as a parallel lane with a hard infrastructure freeze rule.
+- 2026-07-28, S1: add a separate thin `/api/v1/captures` vertical boundary and one Capture
+  store rather than partially serializing the existing Manifestation aggregate or horizontally
+  replacing its five in-memory repositories. The Stage 0 Manifestation flow remains explicitly
+  in-memory until its later slices.
+- 2026-07-28, S1: compute a versioned request hash in pure Java from validated semantic fields;
+  scope the database nonce uniqueness by configured principal. The client supplies neither
+  principal nor request hash.
+- 2026-07-28, S1: use one explicit `READ COMMITTED` transaction around
+  `INSERT ... ON CONFLICT DO NOTHING` and the winner select. Always return the row read from
+  PostgreSQL, including after an initial insert, so first response and replay share the same
+  database-canonical timestamp.
+- 2026-07-28, S1: register an early environment guard for the packaged application. The default
+  and any override of the main listener must resolve only to loopback; a separately configured
+  management port also requires an explicit loopback address.
 
 ## Surprises, failures and verification receipts
 
 Append dated discoveries and exact Receipt locations here. Self-reported completion and green unit tests alone
 do not count.
 
+- 2026-07-28 14:55 +08:00 · S1 Acceptance Red:
+  `./mvnw --batch-mode --no-transfer-progress -pl apps/api -am verify
+  -Dit.test=RestartSafeCaptureHttpIT -Dfailsafe.failIfNoSpecifiedTests=false` built the
+  packaged jar, started Testcontainers `postgres:18.4-alpine`, and reached application health.
+  The first outside-in request failed at the intended missing behavior:
+  `POST /api/v1/captures` expected `201` but received `404`. No production Capture code or
+  migration existed when this Red was recorded.
+- 2026-07-28 14:56 +08:00 · S1 Focused Red:
+  `./mvnw --batch-mode --no-transfer-progress -pl modules/core -am
+  -Dtest=CaptureCommandTest -Dsurefire.failIfNoSpecifiedTests=false test` reached Core test
+  compilation and failed because the server-owned `CaptureCommand` and its canonical
+  `requestHash` behavior did not exist. The test fixes the v1 hash golden value, payload fields,
+  identity/nonce exclusion, source-type allow-list, and nonce bounds before implementation.
+- 2026-07-28 15:09 +08:00 · S1 packaged-process/fault Green:
+  the same targeted Failsafe command passed with distinct packaged application processes
+  `firstPid=59845`, `restartedPid=59883` and `otherPrincipalPid=59893` against one PostgreSQL.
+  Its printed receipt observed restart/retrieval `200` and matching foreign/missing `404` shapes.
+  It did not print the replay/conflict fields, so those claims require the later final run rather
+  than being attributed retrospectively to this PID line. A second packaged scenario rejected
+  `server.address=0.0.0.0` before startup.
+- 2026-07-28 15:14 +08:00 · main-thread Diff review/focused database failure:
+  a new nanosecond timestamp case expected PostgreSQL to truncate but failed with its actual
+  microsecond rounding, `123456789ns → 123457µs`. The adapter was corrected to return the
+  selected database row on initial insert as well as replay; the corrected adapter run passed
+  12 Core and 6 PostgreSQL tests.
+- 2026-07-28 15:15 +08:00 · preliminary repository checks:
+  `./scripts/verify-contracts.sh` validated 4 schemas, 8 fixtures and 1 synthetic task pack;
+  `./scripts/verify-doc-links.sh` validated local links in 52 Markdown files. These preliminary
+  checks do not replace the required final runs after independent review.
+- 2026-07-28 · independent production review:
+  no P0 was found. Its one P1 identified that the 15:09 PID line did not print replay/conflict
+  fields while the draft Receipt attributed those observations to it; the claims were narrowed
+  and require a new final run. A P2 NUL-input/500 boundary was fixed in Core. Remaining P2 risks
+  are an unbounded wait behind a long uncommitted competing transaction and the packaged test's
+  low-probability release-then-bind port race; neither expands S1 scope.
+- 2026-07-28 15:24 +08:00 · complete post-review S1 process Receipt:
+  the targeted Failsafe command passed on the reviewed code and printed
+  `firstPid=68652`, `restartedPid=68698`, `otherPrincipalPid=68735`,
+  `restart=200`, `replay=200`, `conflict=409`, `foreign=404`, `missing=404`.
+  The first process was confirmed dead before the new JVM read the database value; the owner and
+  other-principal applications shared the same PostgreSQL. The suite also passed the packaged
+  wildcard-bind rejection.
+- 2026-07-28 15:25 +08:00 · required final verification:
+  `./scripts/verify-contracts.sh` passed 4 schemas, 8 fixtures and 1 synthetic task pack;
+  `./scripts/verify-doc-links.sh` passed local links in 52 Markdown files; and
+  `./mvnw --batch-mode --no-transfer-progress verify` passed 12 Core, 6 in-memory adapter,
+  6 PostgreSQL adapter, 13 API and 2 packaged-process tests. The full run printed
+  `firstPid=69640`, `restartedPid=69651`, `otherPrincipalPid=69652`,
+  `restart=200`, `replay=200`, `conflict=409`, `foreign=404`, `missing=404`.
+
 ## Outcome and next hypothesis
 
-Open. Stage 2 begins only when the engineering, market and human-learning Gates are all decided; a failed
-market hypothesis leads to a new vertical product result, not automatic runtime expansion.
+S1 engineering is complete. Stage 1 remains active: S2–S4, the owner-led Teach-back/transfer exercises
+and Lane B market evidence are still open. The next engineering hypothesis is that PostgreSQL
+compare-and-swap can make two separately configured application instances produce exactly one Artifact
+revision winner without silent overwrite. Stage 2 begins only when the full engineering, market and
+human-learning Gates are decided; a failed market hypothesis leads to a new vertical product result,
+not automatic runtime expansion.

@@ -1,5 +1,6 @@
 package io.emergeos.api;
 
+import io.emergeos.core.application.CaptureNonceConflictException;
 import java.net.URI;
 import java.util.NoSuchElementException;
 import org.springframework.http.HttpStatus;
@@ -9,6 +10,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 class ApiExceptionHandler {
+
+  @ExceptionHandler(CaptureNonceConflictException.class)
+  ProblemDetail captureNonceConflict(CaptureNonceConflictException exception) {
+    var problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+    problem.setTitle("Capture nonce conflict");
+    problem.setType(URI.create("urn:emergeos:problem:capture-nonce-conflict"));
+    return problem;
+  }
 
   @ExceptionHandler(IllegalArgumentException.class)
   ProblemDetail badRequest(IllegalArgumentException exception) {

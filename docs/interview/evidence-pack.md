@@ -30,6 +30,7 @@ Remaining risk
 | Case | 可以开始对外主张的 Gate |
 |---|---|
 | 为什么采用模块化单体和 framework-neutral Core | Stage 0 teach-back 通过 |
+| 为什么 Capture 同时需要数据库唯一约束与 server-owned request hash | S1 工程回执完成且 owner Teach-back 通过 |
 | ActionAttempt、Receipt 与 reconciliation 如何处理平台成功/响应丢失 | Stage 1 故障 Gate 通过 |
 | 固定模型下 H0/H1 Harness 如何排除“换模型”干扰 | Stage 2 重复实验完成 |
 | Evidence-backed Self Model 如何避免把推断当人格事实 | Self Eval 与纠正/撤销流程完成 |
@@ -76,12 +77,15 @@ Remaining risk
 ## 当前可说的 90 秒版本
 
 > 我做的不是聊天壳，而是一套把个人的所见、所思、所愿变成可验证成果的
-> Personal AI OS。当前是一个内存型研究原型：模块化单体和纯 Java 领域核心已经跑通本地
-> Thought → Artifact → Approval → Receipt 闭环，并用领域测试约束 Evidence、版本 Hash、
-> 用户授权和本地幂等；它还没有生产数据库、真实模型或真实平台 Connector。研发中我把 Codex
+> Personal AI OS。当前是一个研究原型：模块化单体和纯 Java 领域核心已经跑通本地
+> Thought → Artifact → Approval → Receipt 闭环；第一个 PostgreSQL Capture 切片已用数据库
+> 唯一约束、两个配置主体和真实 JVM 重启证明持久化与隔离。Manifestation 其余状态仍在内存，
+> 系统也没有生产认证、真实模型或真实平台 Connector。研发中我把 Codex
 > 当受监督的工程团队，主线程整合需求与验证证据，Subagent 做边界清楚的探索、测试设计和独立
-> 审查，但风险接受和里程碑 go/no-go 由我负责。下一阶段正在用 PostgreSQL、双实例竞争和故障
-> 注入验证跨进程正确性，同时从第一天并行做真实访谈、Concierge 交付和价格实验。
+> 审查，但风险接受和里程碑 go/no-go 由我负责。下一步是 Revision compare-and-swap、
+> ActionAttempt 对账和备份恢复证据；真实访谈、复用与价格实验仍需项目所有者开始记录。
+
+这段是仓库提供的表达草稿；项目所有者完成无资料 Teach-back 前，不得把它当作个人能力已验证。
 
 ## 仅在 Stage 1 Gate 通过后可说的增量
 

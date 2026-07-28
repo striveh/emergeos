@@ -14,8 +14,11 @@ modules/core
 adapters/inmemory
   内存 Ledger、确定性草稿生成、Policy、Action Stub
 
+adapters/postgres
+  S1 Capture 的 JdbcClient 适配器与单表 Flyway migration
+
 apps/api
-  HTTP DTO、Controller、异常映射、依赖装配
+  HTTP DTO、Controller、异常映射、loopback 启动保护、依赖装配
 ```
 
 ## 依赖规则
@@ -23,13 +26,16 @@ apps/api
 ```mermaid
 flowchart RL
   API["apps/api"]
-  AD["adapters/inmemory"]
+  MEM["adapters/inmemory"]
+  PG["adapters/postgres"]
   CORE["modules/core"]
   CT["modules/contracts"]
 
-  API --> AD
+  API --> MEM
+  API --> PG
   API --> CORE
-  AD --> CORE
+  MEM --> CORE
+  PG --> CORE
   CORE --> CT
 ```
 
@@ -57,10 +63,10 @@ flowchart RL
 
 当一个领域拥有独立数据、不变量、维护者和发布节奏时，再将其提升为独立构建模块或服务。
 
-## 后续 Adapter
+## 当前与后续 Adapter
 
 ```text
-adapters/postgres
+adapters/postgres            # 已实现：仅 S1 Capture
 adapters/object-storage
 adapters/agent-agentscope
 adapters/agent-pi
@@ -68,4 +74,4 @@ adapters/temporal
 adapters/connectors/*
 ```
 
-这些是计划，不应在存在真实实现前创建空目录。
+除已标记的 PostgreSQL Capture 适配器外，其余都是计划，不应在存在真实实现前创建空目录。

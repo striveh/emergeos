@@ -1,6 +1,13 @@
 spring:
   application:
     name: emerge-api
+  datasource:
+    url: ${EMERGE_DB_URL}
+    username: ${EMERGE_DB_USER}
+    password: ${EMERGE_DB_PASSWORD}
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
 
 server:
   address: 127.0.0.1
@@ -15,7 +22,8 @@ management:
 info:
   emerge:
     maturity: research-prototype
-    side-effects: local-memory-only
+    capture-persistence: postgresql
+    manifestation-side-effects: local-memory-only
 
 emerge:
   prototype:

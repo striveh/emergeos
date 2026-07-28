@@ -7,11 +7,15 @@ import io.emergeos.adapters.inmemory.LocalDraftActionExecutor;
 import io.emergeos.adapters.inmemory.LocalWorkingSelfProjector;
 import io.emergeos.adapters.inmemory.TemplateArtifactGenerator;
 import io.emergeos.adapters.inmemory.UuidIdGenerator;
+import io.emergeos.adapters.postgres.PostgresCaptureStore;
+import io.emergeos.core.application.CaptureService;
 import io.emergeos.core.application.ManifestationService;
 import io.emergeos.core.port.IdGenerator;
 import java.time.Clock;
+import javax.sql.DataSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
 class ApiConfiguration {
@@ -24,6 +28,18 @@ class ApiConfiguration {
   @Bean
   IdGenerator idGenerator() {
     return new UuidIdGenerator();
+  }
+
+  @Bean
+  PostgresCaptureStore captureStore(
+      DataSource dataSource, PlatformTransactionManager transactionManager) {
+    return new PostgresCaptureStore(dataSource, transactionManager);
+  }
+
+  @Bean
+  CaptureService captureService(
+      PostgresCaptureStore captureStore, IdGenerator idGenerator, Clock clock) {
+    return new CaptureService(captureStore, idGenerator, clock);
   }
 
   @Bean
