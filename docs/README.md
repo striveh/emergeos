@@ -43,7 +43,7 @@ RFC 表示“正在提议”；ADR 表示“已经决定”。ADR 接受后不�
 - [模块化单体 ADR](./architecture/decisions/0001-modular-monolith.md)
 - [真相与上下文 ADR](./architecture/decisions/0002-truth-and-projections.md)
 - [外部副作用 ADR](./architecture/decisions/0003-durable-side-effects.md)
-- [ActionAttempt 与对账提案](./architecture/decisions/0004-action-attempt-reconciliation.md)
+- [ActionAttempt 与对账决策](./architecture/decisions/0004-action-attempt-reconciliation.md)
 - [五结果研发制度 ADR](./architecture/decisions/0005-five-outcome-development-system.md)
 
 ### 想参与研究与共同进化
@@ -53,6 +53,7 @@ RFC 表示“正在提议”；ADR 表示“已经决定”。ADR 接受后不�
 - [Learning Note 模板](./learning/learning-note-template.md)
 - [S1 Capture 学习草稿](./learning/notes/2026-07-28-s1-restart-safe-capture.md)
 - [S2 Conflict-safe Revision 学习草稿](./learning/notes/2026-07-28-s2-conflict-safe-revision.md)
+- [S3 Recoverable local Action 学习草稿](./learning/notes/2026-07-28-s3-recoverable-local-action.md)
 - [Harness 验证计划](./research/harness-validation.md)
 - [公开运营模型](./operations/operating-model.md)
 - [五结果周度/月度计分卡](./operations/five-outcome-scorecard.md)
@@ -62,6 +63,7 @@ RFC 表示“正在提议”；ADR 表示“已经决定”。ADR 接受后不�
 - [五结果研发制度 Build Note](./operations/build-notes/2026-07-28-five-outcome-process.md)
 - [S1 Restart-safe Capture Build Note](./operations/build-notes/2026-07-28-s1-restart-safe-capture.md)
 - [S2 Conflict-safe Revision Build Note](./operations/build-notes/2026-07-28-s2-conflict-safe-revision.md)
+- [S3 Recoverable local Action Build Note](./operations/build-notes/2026-07-28-s3-recoverable-local-action.md)
 - [商业验证路线](./business/validation-roadmap.md)
 - [14 天 Founder Seed Log 模板](./business/founder-seed-log-template.md)
 - [用户研究数据协议](./business/research-data-protocol.md)

@@ -169,6 +169,57 @@ Receipt: the Fake Provider exposes one provider-observable **simulated object**,
 successful Receipt after a real application-process restart, and the transition history explains
 `UNKNOWN → RECONCILING → SUCCEEDED`. This is not claimed as a real-platform result.
 
+#### S3 slice delta · 2026-07-28
+
+- Baseline and user result: start from clean `main@6c5713bcb883777f759f879c46b42c51c45cb8ca`.
+  From one current, owned S2 Artifact, an explicit loopback-only local approval creates a durable
+  ActionPlan and exact Capability, persists an ActionAttempt before any provider call, and returns
+  an inspectable outcome. If a separate simulated provider creates its object but loses the
+  response, killing the application and starting a new JVM must reconcile the same idempotency key
+  into one successful Receipt without creating a second simulated object.
+- State machine:
+  `PLANNED --atomic capability-use claim--> DISPATCHING`;
+  `DISPATCHING --> SUCCEEDED | FAILED | UNKNOWN`;
+  `UNKNOWN --atomic capability-use claim--> RECONCILING`;
+  `RECONCILING --> SUCCEEDED | FAILED | UNKNOWN`.
+  `SUCCEEDED` and `FAILED` are terminal; `UNKNOWN` is a durable holding state and the only automatic
+  recovery entry is reconciliation. A response timeout without a provider identifier returns to
+  `UNKNOWN`; it must not create a Receipt or infer success. Every transition and capability-use
+  count is PostgreSQL-canonical.
+- Capability boundary: the persisted grant must bind the configured principal, exact ActionPlan ID
+  and hash, configured connector audience and account, current Artifact hash, idempotency key and
+  expiry. Provider-call budget is persisted and consumed by an atomic database predicate before
+  dispatch or reconciliation; two service instances cannot spend the same use.
+- First Acceptance Red: add a Failsafe `RecoverableLocalActionHttpIT` that starts one PostgreSQL,
+  an independent Fake Provider process with file-backed idempotency state, and two separately
+  packaged application JVMs. It creates the S1 Capture and S2 Artifact over HTTP, configures the
+  provider to create once and drop the first response, then races the same local-action request
+  through both applications. Before S3 production code exists, the test must reach healthy
+  provider/app processes and fail only because
+  `POST /api/v1/artifacts/{artifactId}/actions` returns `404`.
+  After Green it must observe one durable attempt/object, kill both applications, start a new JVM,
+  reconcile `UNKNOWN → RECONCILING → SUCCEEDED`, and read one Receipt.
+- Predicted failures: dispatch before the PLANNED commit loses the recovery anchor; a Java lock or
+  read-then-increment budget lets two JVMs call the provider; blind retry after response loss creates
+  two objects; treating timeout as success fabricates a Receipt; checking only Capability ID misses
+  audience/account/plan/hash/key/expiry substitution; state and Receipt in separate transactions can
+  split completion; an unscoped conflict lookup leaks a foreign attempt; an in-JVM fake or memory-only
+  provider state falsely appears to prove crash recovery.
+- File ownership: the main thread is the only writer. S3 may add only the framework-neutral local
+  ActionPlan/Capability/Attempt/Receipt state and ports in Core; one forward-only V3 migration and
+  thin SQL adapter in `adapters/postgres`; one non-production HTTP adapter for the simulated provider;
+  one loopback-only Action API, packaged-process fixture/tests and S3 documentation. Existing S1/S2
+  files change only for demonstrated migration/test cleanup or wiring. No Temporal, real Connector,
+  generic outbox, AgentKernel, model, UI, authentication, public listener or real user data is owned.
+- Fault/receipt target: PostgreSQL enforces exact
+  `(connector, account_ref, idempotency_key)` uniqueness and current Artifact provenance; the
+  independent provider and application have distinct PIDs and storage; two app instances spend one
+  initial provider call; the provider state file contains exactly one simulated object; after both
+  application PIDs die, a new JVM creates exactly one Receipt by reconciliation. Audience, account,
+  plan, hash, key and expiry mismatches fail before provider access; a no-object timeout remains
+  `UNKNOWN`; foreign and missing GET/reconcile use the same response shape. A fresh V3 install and a
+  V2 database containing S1/S2 data upgraded to V3 both pass, followed by all S1/S2 regressions.
+
 ### S4 · Operating and interview evidence
 
 User result: another developer can run the durable flow and distinguish readiness from failure.
@@ -327,7 +378,19 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   tests, two-process CAS, third-JVM restart, owner isolation and S1 packaged regression green.
 - [x] 2026-07-28 16:34 +08:00: S2 independent production review closed with
   `P0=0`, `P1=0`; post-review process Receipt and final repository verification passed.
-- [ ] S3 recoverable local Action.
+- [x] 2026-07-28 18:01 +08:00: confirmed clean `main` at
+  `6c5713bcb883777f759f879c46b42c51c45cb8ca`; recorded the S3 user result,
+  state machine, first Acceptance Red, predicted faults and single-writer file ownership.
+- [x] 2026-07-28 18:22 +08:00: S3 Acceptance Red and framework-neutral Focused Red
+  recorded before production implementation.
+- [x] 2026-07-28 18:34 +08:00: S3 minimum Core/schema/adapter/API, migration,
+  exact-Capability tests and preliminary multi-process fault Receipt green.
+- [x] 2026-07-28 18:43 +08:00: independent review's four P1 findings fixed; focused
+  regressions and the packaged response-loss/kill/reconcile scenario rerun green.
+- [x] 2026-07-28 18:47 +08:00: independent post-fix review closed with `P0=0`,
+  `P1=0`; ADR-0004 Required evidence accepted.
+- [x] 2026-07-28 18:47 +08:00: S3 required final verification passed; engineering
+  Receipt and focused commit prepared.
 - [ ] S4 operating and interview evidence.
 - [ ] Stage gate and `continue / narrow / pivot` decision.
 
@@ -361,6 +424,23 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
 - 2026-07-28, S2: a CAS miss is classified only by an owner-scoped head lookup. The dedicated
   `409` returns `currentVersion` and requires GET reload; it never returns content or a
   content-derived hash. Foreign and missing exact-base PUT remain the same `404`.
+- 2026-07-28, S3: add only three durable tables: ActionAttempt with its immutable authority
+  snapshot/current state/budget, append-only transitions, and one terminal Receipt. Exact
+  `(connector, account_ref, idempotency_key)` uniqueness does not include principal because
+  the simulated provider identity and duplicate-object boundary are connector-account scoped.
+- 2026-07-28, S3: a same-key semantic replay ignores newly generated IDs and timestamps and
+  returns the database winner; a different principal, Artifact/version/hash, connector/account,
+  action target, policy, audience or budget is a generic conflict. Dispatch and reconciliation
+  each consume one of the selected two provider calls with a guarded database update and transition
+  in one transaction; provider HTTP executes after that transaction returns.
+- 2026-07-28, S3: current Artifact head is required only when entering `DISPATCHING`. Once an
+  exact plan was dispatched and became `UNKNOWN`, a later Artifact revision must not prevent
+  reconciliation of the already possible provider object; reconciliation still uses the persisted
+  principal/plan/hash/connector/audience/account/key and budget.
+- 2026-07-28, S3: provider success is trusted only when its complete authority/plan/Artifact/key
+  echo matches the request. Missing, malformed or substituted echoes remain `UNKNOWN`. S3
+  canonicalizes generated ActionPlan time to microseconds before hashing so PostgreSQL
+  `TIMESTAMPTZ` round-trip cannot change the plan identity.
 
 ## Surprises, failures and verification receipts
 
@@ -475,12 +555,72 @@ do not count.
   11 PostgreSQL adapter, 17 API and 3 packaged-process tests. The full run printed the S2 Receipt
   with PIDs `5136/5142/5152/5162` and the S1 regression Receipt with PIDs
   `5177/5187/5188`.
+- 2026-07-28 18:15 +08:00 · S3 Acceptance Red:
+  `./mvnw --batch-mode --no-transfer-progress -pl apps/api -am verify
+  -Dit.test=RecoverableLocalActionHttpIT -Dfailsafe.failIfNoSpecifiedTests=false` packaged the
+  application, started Testcontainers `postgres:18.4-alpine`, an independent file-backed provider
+  JVM, and two independent packaged application JVMs against the same database. It created the S1
+  Capture and S2 Artifact over HTTP, then failed at the intended missing behavior:
+  `POST /api/v1/artifacts/{artifactId}/actions` expected `202` but received `404`. No S3
+  production Action type, migration, adapter or controller existed when this Red was recorded.
+- 2026-07-28 18:22 +08:00 · S3 Focused Red:
+  `./mvnw --batch-mode --no-transfer-progress -pl modules/core -am
+  -Dtest=ActionAttemptInvariantTest -Dsurefire.failIfNoSpecifiedTests=false test` reached Core
+  test compilation and failed because the durable `ActionCapability`, `ActionAttempt`, explicit
+  statuses/transitions and S3 `ActionReceipt` did not exist. The focused contract fixes exact
+  principal/connector/audience/account/plan/hash/key/expiry binding, the declared transition graph,
+  persistent call-budget bounds and the rule that only a definite terminal provider result can
+  create a Receipt.
+- 2026-07-28 18:34 +08:00 · preliminary S3 packaged-process Receipt:
+  the targeted Failsafe command passed with independent provider PID `60902`, competing packaged
+  application PIDs `60903/60916`, restarted PID `60956` and foreign-principal PID `60966`.
+  PostgreSQL contained one attempt, two atomic capability uses and one Receipt; the provider
+  state file contained one simulated object after two calls. The exact history was
+  `PLANNED → DISPATCHING → UNKNOWN → RECONCILING → SUCCEEDED`. Wrong-audience/account
+  application PIDs `60926/60939` received `409` without a provider observation change; foreign
+  and missing GET/reconcile were equivalent `404`. This remained preliminary until review.
+- 2026-07-28 · first S3 independent production review:
+  the read-only reviewer ran the packaged IT successfully and found `P0=0`, `P1=4`. The four P1s
+  were a torn two-query ActionAttempt read under concurrent transition, an incorrect current-head
+  predicate on reconciliation after Artifact revision, an incomplete provider success echo that
+  omitted audience, and nanosecond ActionPlan expiry changing its hash after PostgreSQL
+  microsecond round-trip. No P1 was waived.
+- 2026-07-28 18:43 +08:00 · P1 corrections and post-fix fault Green:
+  `findOwned` now assembles attempt/Receipt/transitions from one SQL statement and a concurrent
+  read-versus-transition regression passed; a dispatched v1 plan reconciles after the Artifact
+  advances to v2; the provider protocol echoes and validates principal, connector, audience,
+  account, plan ID/hash, Artifact ID/version/hash and key; and a `123456789ns` fixed clock
+  round-trips through the real store with a stable plan hash. The focused command passed 5 Core,
+  7 PostgreSQL Action and 2 provider-adapter tests. The packaged Failsafe rerun then printed
+  `providerPid=67839`, `firstAppPid=67841`, `secondAppPid=67859`,
+  `restartedAppPid=67889`, `otherPrincipalPid=67900`, one attempt, one Receipt,
+  two capability uses, one provider object, two provider calls, the exact five-state history,
+  wrong-audience/account `409`, equivalent foreign/missing GET/reconcile `404`, and
+  `simulated=true`.
+- 2026-07-28 18:47 +08:00 · independent post-fix production review:
+  the same read-only reviewer verified all four P1 corrections, found no new P0/P1, and independently
+  reran 7 PostgreSQL Action-store plus 2 provider-adapter tests successfully. ADR-0004's five
+  Required evidence items are now all mapped to executable evidence, so its status changed from
+  Proposed to Accepted. The acceptance is limited to this simulated local boundary and does not
+  claim a real Connector or exactly-once provider calls. Remaining P2s are documented rather than
+  hidden: startup failure before `ProcessBuilder.start` returns can leave a test temp path, provider
+  file reload is not separately proven by restarting the provider itself, and a crash left in
+  `DISPATCHING` needs a later stale-claim operating policy.
+- 2026-07-28 18:47 +08:00 · required final S3 verification:
+  `./scripts/verify-contracts.sh` passed 4 schemas, 8 fixtures and 1 synthetic task pack;
+  `./scripts/verify-doc-links.sh` passed local links in 56 Markdown files; and
+  `./mvnw --batch-mode --no-transfer-progress verify` passed 23 Core, 6 in-memory adapter,
+  19 PostgreSQL adapter, 20 API and 4 packaged-process tests. The full run printed final S3
+  PIDs `provider=70192`, competing apps `70193/70206`, restarted app `70238`,
+  foreign-principal app `70248` and wrong-authority apps `70216/70226`, with one attempt,
+  one simulated object, one Receipt, two calls and the exact five-state recovery history.
+  S2 regressed green with PIDs `70074/70086/70097/70108`; S1 regressed green with
+  PIDs `70133/70145/70147`.
 
 ## Outcome and next hypothesis
 
-S1 and S2 engineering are complete. Stage 1 remains active: S3–S4, the owner-led
-Teach-back/transfer exercises and Lane B market evidence are still open. The next engineering
-hypothesis is that a durable local ActionAttempt plus reconciliation can survive an application crash
-without duplicate observable work or a false completion Receipt. Stage 2 begins only when the full
-engineering, market and human-learning Gates are decided; a failed market hypothesis leads to a new
-vertical product result, not automatic runtime expansion.
+S1–S3 engineering Receipts are complete. Stage 1 remains active because S4, owner-led
+Teach-back/transfer exercises and Lane B market evidence are still open. The S3 result is exactly one
+recoverable simulated local object; it is not a real Connector or exactly-once provider-call claim.
+Stage 2 begins only when the full engineering, market and human-learning Gates are decided; a failed market
+hypothesis leads to a new vertical product result, not automatic runtime expansion.

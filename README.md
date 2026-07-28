@@ -7,9 +7,11 @@ EmergeOS 不是聊天机器人、笔记 App 或自动化工具箱。它要解决
 > **把一个人刚刚看到、想到、想要的东西，在几分钟内变成有证据、可编辑、可执行、可复盘的作品或行动。**
 
 当前阶段是 `0.1 / research prototype`。仓库已经建立第一条无外部副作用的纵向闭环，并完成
-前两个 PostgreSQL 纵向切片：Capture 可在真实应用进程重启后取回；两个独立应用实例并发
-修订同一 Artifact base 时，数据库 compare-and-swap 只允许一个新版本。真实模型、Temporal、
-生产认证、加密存储和平台连接器尚未接入，不应将演示结果理解为生产能力。
+前三个 PostgreSQL 纵向切片：Capture 可在真实应用进程重启后取回；两个独立应用实例并发
+修订同一 Artifact base 时，数据库 compare-and-swap 只允许一个新版本；独立、持久化状态的
+Fake Provider 在响应丢失与真实应用 JVM 重启后，可把一个模拟对象对账成一张 Receipt。
+真实模型、Temporal、生产认证、加密存储和平台连接器尚未接入，不应将演示结果理解为生产
+能力或真实平台结果。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
 中的单用户 `local-user`，没有实现登录或多租户身份验证。主体不接受 Header 或请求体覆盖，
@@ -39,8 +41,9 @@ Secret Broker 落地前，持久化 Capture 会拒绝 `SENSITIVE` 和 `SECRET` �
   → ReflectionCandidate
 ```
 
-Stage 0 Manifestation 闭环仍刻意使用内存存储和确定性 Stub。Stage 1 已把独立的 Capture
-和 Artifact lineage 边界替换为 PostgreSQL；Action 和 Operations 将继续按纵向切片逐个验证。
+Stage 0 Manifestation 闭环仍刻意使用内存存储和确定性 Stub。Stage 1 已把独立的 Capture、
+Artifact lineage 和 local ActionAttempt/Receipt 边界替换为 PostgreSQL；S3 Action 只连接
+loopback-only 模拟 Provider，Operations 将继续作为 S4 单独验证。
 
 ## 快速开始
 
@@ -64,6 +67,11 @@ EMERGE_DB_USER='emerge' \
 EMERGE_DB_PASSWORD='local-prototype-only' \
 java -jar apps/api/target/emerge-api-0.1.0-SNAPSHOT.jar
 ```
+
+S3 Action API 还要求另行启动测试用的 loopback Fake Provider。默认地址故意指向不可用的
+`127.0.0.1:1`，因此普通快速启动不会产生模拟对象；若批准 Action，只会得到可解释的
+`UNKNOWN`，不会伪造成功 Receipt。完整外部进程与故障恢复证据由 packaged-process 验收测试
+提供，不把 test fixture 包装成可用 Connector。
 
 另开终端：
 
@@ -125,7 +133,8 @@ curl -s \
 ```
 
 Capture 与独立 Artifact lineage 写入本机 PostgreSQL；Manifestation 仍只写入应用进程内存
-中的草稿回执。它们都不会访问或发布到任何外部平台。
+中的草稿回执。独立 local ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问
+loopback Fake Provider 并产生模拟对象。它们都不会访问或发布到任何真实外部平台。
 
 ## 仓库地图
 
@@ -134,7 +143,7 @@ apps/api/                 HTTP 入口与依赖装配
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例与端口
 adapters/inmemory/        本地开发与测试适配器
-adapters/postgres/        S1 Capture、S2 Artifact lineage 的薄 PostgreSQL 适配器与 migrations
+adapters/postgres/        S1 Capture、S2 Artifact、S3 local Action 的薄 PostgreSQL 适配器
 contracts/                跨语言 JSON Schema
 evals/                    合成任务与回归证据
 docs/                     产品、架构、研究、运营和共同治理

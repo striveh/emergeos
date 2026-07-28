@@ -36,6 +36,26 @@ stateDiagram-v2
 
 反思是独立轴。反思失败不能把已经有 Receipt 的行动改成失败。
 
+### S3 durable local Action 状态
+
+```mermaid
+stateDiagram-v2
+  [*] --> PLANNED
+  PLANNED --> DISPATCHING: atomic capability-use claim
+  DISPATCHING --> SUCCEEDED: definite provider object + Receipt
+  DISPATCHING --> FAILED: definite provider failure + Receipt
+  DISPATCHING --> UNKNOWN: timeout or response loss
+  UNKNOWN --> RECONCILING: atomic capability-use claim
+  RECONCILING --> SUCCEEDED: existing object + Receipt
+  RECONCILING --> FAILED: definite provider failure + Receipt
+  RECONCILING --> UNKNOWN: still no definite result
+```
+
+S3 中 `ActionAttempt`、不可变 transition、Capability 调用预算和 Receipt 由 PostgreSQL 持有。
+Provider 调用发生在 claim 事务提交之后；`SUCCEEDED/FAILED`、最后一条 transition 与 Receipt
+同事务提交。`UNKNOWN` 没有 Receipt，也不能显示为完成。测试用 Fake Provider 在独立 JVM 与
+独立文件中持有模拟对象；这不是 Temporal，也不是生产 Connector。
+
 ## Durable Runtime 边界
 
 Temporal 只承载粗粒度、需要可靠性的流程：
@@ -46,6 +66,8 @@ Temporal 只承载粗粒度、需要可靠性的流程：
 - 外部副作用的幂等与对账。
 
 它不记录每个 token，也不替代 Evidence Ledger、Self Model、Artifact Store 或 Receipt Ledger。
+S3 已在不引入 Temporal 的前提下证明数据库 ActionAttempt + provider reconciliation 的最小
+真相边界；后续 Runtime 只能编排这条边界，不能绕开其唯一约束、预算或 Receipt 原子性。
 
 ## 交接契约
 
@@ -71,4 +93,3 @@ traceRef
 ```
 
 不传输隐藏思维链。
-

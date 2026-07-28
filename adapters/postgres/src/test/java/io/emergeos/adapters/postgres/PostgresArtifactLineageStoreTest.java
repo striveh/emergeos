@@ -62,7 +62,10 @@ class PostgresArtifactLineageStoreTest {
 
   @BeforeEach
   void clearArtifacts() {
-    jdbc.sql("TRUNCATE TABLE artifact_versions, artifacts, captures").update();
+    jdbc.sql(
+            "TRUNCATE TABLE action_receipts, action_attempt_transitions, action_attempts, "
+                + "artifact_versions, artifacts, captures")
+        .update();
   }
 
   @AfterAll

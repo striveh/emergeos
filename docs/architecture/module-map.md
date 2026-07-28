@@ -15,10 +15,10 @@ adapters/inmemory
   内存 Ledger、确定性草稿生成、Policy、Action Stub
 
 adapters/postgres
-  S1 Capture、S2 Artifact lineage 的 JdbcClient 适配器与前向 Flyway migrations
+  S1 Capture、S2 Artifact lineage、S3 local Action 的 JdbcClient 适配器与前向 Flyway migrations
 
 apps/api
-  HTTP DTO、Controller、异常映射、loopback 启动保护、依赖装配
+  HTTP DTO、Controller、异常映射、loopback 启动保护、S3 模拟 Provider HTTP adapter、依赖装配
 ```
 
 ## 依赖规则
@@ -66,7 +66,7 @@ flowchart RL
 ## 当前与后续 Adapter
 
 ```text
-adapters/postgres            # 已实现：S1 Capture、S2 Artifact lineage
+adapters/postgres            # 已实现：S1 Capture、S2 Artifact lineage、S3 local Action
 adapters/object-storage
 adapters/agent-agentscope
 adapters/agent-pi
@@ -74,4 +74,5 @@ adapters/temporal
 adapters/connectors/*
 ```
 
-除已标记的 PostgreSQL Capture/Artifact 适配器外，其余都是计划，不应在存在真实实现前创建空目录。
+除已标记的 PostgreSQL Capture/Artifact/local Action 适配器外，其余都是计划，不应在存在真实
+实现前创建空目录。S3 模拟 Provider 属于 API 外层的 test-only 协议，不代表真实 Connector。

@@ -1,5 +1,6 @@
 package io.emergeos.api;
 
+import io.emergeos.core.application.ActionIdempotencyConflictException;
 import io.emergeos.core.application.CaptureNonceConflictException;
 import io.emergeos.core.application.ArtifactRevisionConflictException;
 import java.net.URI;
@@ -11,6 +12,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 class ApiExceptionHandler {
+
+  @ExceptionHandler(ActionIdempotencyConflictException.class)
+  ProblemDetail actionIdempotencyConflict(ActionIdempotencyConflictException exception) {
+    var problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+    problem.setTitle("Action idempotency conflict");
+    problem.setType(URI.create("urn:emergeos:problem:action-idempotency-conflict"));
+    return problem;
+  }
 
   @ExceptionHandler(ArtifactRevisionConflictException.class)
   ProblemDetail artifactRevisionConflict(ArtifactRevisionConflictException exception) {

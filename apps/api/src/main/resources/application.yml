@@ -24,8 +24,18 @@ info:
     maturity: research-prototype
     capture-persistence: postgresql
     artifact-lineage-persistence: postgresql
+    action-attempt-persistence: postgresql
+    action-provider: simulated-loopback-only
     manifestation-side-effects: local-memory-only
 
 emerge:
   prototype:
     principal-id: local-user
+  simulated-provider:
+    base-url: http://127.0.0.1:1
+    connector: simulated.local-draft
+    audience: adapter:simulated-provider
+    account-ref: simulated-account:${emerge.prototype.principal-id}
+    request-timeout: PT0.5S
+    capability-ttl: PT5M
+    max-provider-calls: 2

@@ -47,7 +47,9 @@ class CaptureHttpTest extends PostgresApiTest {
   void setUp() {
     mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
     JdbcClient.create(dataSource)
-        .sql("TRUNCATE TABLE artifact_versions, artifacts, captures")
+        .sql(
+            "TRUNCATE TABLE action_receipts, action_attempt_transitions, action_attempts, "
+                + "artifact_versions, artifacts, captures")
         .update();
   }
 
