@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": "task-001",
+  "status": "SUCCEEDED",
+  "artifactRefs": ["artifact://article/001"],
+  "evidenceRefs": ["evidence://thought/001"],
+  "claims": [
+    {
+      "text": "A local draft was created.",
+      "evidenceRefs": ["receipt://001"],
+      "confidence": 1.5
+    }
+  ],
+  "uncertainty": [],
+  "receiptRefs": ["receipt://001"],
+  "resolvedModel": "model-fixture-001",
+  "agentVersion": "agent-fixture-001",
+  "verifierVersion": "verifier-fixture-001",
+  "costUsd": 0,
+  "latencyMs": 125,
+  "traceRef": "trace://001",
+  "failureReason": null
+}

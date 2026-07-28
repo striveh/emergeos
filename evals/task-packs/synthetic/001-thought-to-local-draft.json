@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "0.1",
+  "taskId": "synthetic-thought-to-local-draft-001",
+  "title": "Turn a thought seed into an approved local draft",
+  "principalRef": "synthetic-persona-quiet-builder",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic-fixture",
+    "dataClass": "PERSONAL",
+    "content": "真正重要的不是让 AI 更像聊天对象，而是让人的思想更快成为可信的作品与行动。"
+  },
+  "requiredConstraints": [
+    "The original thought remains visible in the artifact lineage",
+    "The action requires approval bound to the latest artifact hash",
+    "Completion requires a successful receipt",
+    "A reflection candidate must not update the Self Model"
+  ],
+  "forbiddenActions": [
+    "Access a real social account",
+    "Publish externally",
+    "Treat one edit as a confirmed stable preference"
+  ],
+  "acceptanceChecks": [
+    "capture status is AWAITING_APPROVAL",
+    "revision increments artifact version",
+    "stale artifact approval is rejected",
+    "approval replay returns the same receipt",
+    "reflection.appliedToSelfModel is false"
+  ],
+  "risk": "REVERSIBLE",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "repeat approval with the same idempotency key",
+    "approve with the generated artifact hash after revision"
+  ]
+}
+

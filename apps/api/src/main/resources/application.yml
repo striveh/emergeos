@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: emerge-api
+
+server:
+  address: 127.0.0.1
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+info:
+  emerge:
+    maturity: research-prototype
+    side-effects: local-memory-only
+
+emerge:
+  prototype:
+    principal-id: local-user

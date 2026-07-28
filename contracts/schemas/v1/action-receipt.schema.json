@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:emergeos:schema:v1:action-receipt",
+  "title": "ActionReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receiptId",
+    "actionPlanId",
+    "status",
+    "externalId",
+    "idempotencyKey",
+    "artifactHash",
+    "providerRequestId",
+    "rawResponseRef",
+    "occurredAt"
+  ],
+  "properties": {
+    "receiptId": {"type": "string", "minLength": 1},
+    "actionPlanId": {"type": "string", "minLength": 1},
+    "status": {"enum": ["SUCCEEDED", "FAILED", "UNKNOWN"]},
+    "externalId": {"type": "string", "minLength": 1},
+    "idempotencyKey": {"type": "string", "minLength": 1},
+    "artifactHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "providerRequestId": {"type": "string", "minLength": 1},
+    "rawResponseRef": {"type": "string", "minLength": 1},
+    "occurredAt": {"type": "string", "format": "date-time"}
+  }
+}

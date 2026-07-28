@@ -1,0 +1,45 @@
+name: Unexpected agent behavior
+description: Report unauthorized, duplicated, cross-user, misleading or unrecoverable behavior
+title: "[Agent behavior] "
+labels: ["agent-behavior", "needs-triage"]
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Unauthorized action
+        - Duplicate side effect
+        - Cross-user or cross-session data
+        - Unsupported personality inference
+        - Missing or false receipt
+        - Context drift
+        - Recovery failure
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observable behavior
+      description: Use a synthetic scenario and references or hashes rather than private content.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions and environment
+      description: Include model, harness, policy, tool registry and commit versions when available.
+  - type: textarea
+    id: receipt
+    attributes:
+      label: Artifact and receipt state
+      description: Provide synthetic IDs or redacted structural facts only.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Data safety
+      options:
+        - label: I confirm this report contains no credentials, real user data, private prompts or complete real traces.
+          required: true
+

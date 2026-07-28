@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install contract tooling
+        run: npm ci
+
+      - name: Verify public contracts
+        run: ./scripts/verify-contracts.sh
+
+      - name: Verify documentation links
+        run: ./scripts/verify-doc-links.sh
+
+      - name: Build and test
+        run: ./mvnw --batch-mode --no-transfer-progress verify

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:emergeos:schema:v1:result-envelope",
+  "title": "ResultEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "taskId",
+    "status",
+    "artifactRefs",
+    "evidenceRefs",
+    "claims",
+    "uncertainty",
+    "receiptRefs",
+    "agentVersion",
+    "verifierVersion",
+    "costUsd",
+    "latencyMs"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "taskId": {"type": "string", "minLength": 1},
+    "status": {"enum": ["SUCCEEDED", "FAILED", "NEEDS_INPUT", "BLOCKED", "CANCELLED"]},
+    "artifactRefs": {"type": "array", "items": {"type": "string"}},
+    "evidenceRefs": {"type": "array", "items": {"type": "string"}},
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "evidenceRefs", "confidence"],
+        "properties": {
+          "text": {"type": "string", "minLength": 1},
+          "evidenceRefs": {"type": "array", "items": {"type": "string"}},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "uncertainty": {"type": "array", "items": {"type": "string"}},
+    "receiptRefs": {"type": "array", "items": {"type": "string"}},
+    "resolvedModel": {"type": ["string", "null"]},
+    "agentVersion": {"type": "string", "minLength": 1},
+    "verifierVersion": {"type": "string", "minLength": 1},
+    "costUsd": {"type": "number", "minimum": 0},
+    "latencyMs": {"type": "integer", "minimum": 0},
+    "traceRef": {"type": ["string", "null"]},
+    "failureReason": {"type": ["string", "null"]}
+  }
+}

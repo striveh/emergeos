@@ -1,0 +1,11 @@
+{
+  "receiptId": "receipt-001",
+  "actionPlanId": "plan-001",
+  "status": "SUCCEEDED",
+  "externalId": "local-draft-001",
+  "idempotencyKey": "approve-plan-001",
+  "artifactHash": "5ea4f10e16f8309f4591630ccad9de7c4aa89b8d28165e35f4b1022dc6c7d893",
+  "providerRequestId": "request-001",
+  "rawResponseRef": "memory://receipts/receipt-001",
+  "occurredAt": "2026-07-28T08:30:00Z"
+}
