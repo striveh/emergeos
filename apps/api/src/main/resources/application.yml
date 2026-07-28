@@ -23,6 +23,7 @@ info:
   emerge:
     maturity: research-prototype
     capture-persistence: postgresql
+    artifact-lineage-persistence: postgresql
     manifestation-side-effects: local-memory-only
 
 emerge:

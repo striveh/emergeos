@@ -122,6 +122,37 @@ User result: revise an Artifact without silently overwriting a newer revision.
 Receipt: exactly one revision wins, the loser is observable as a conflict, lineage remains intact and the
 result survives restart.
 
+#### S2 slice delta · 2026-07-28
+
+- User result: starting from one owned, PostgreSQL-backed S1 Capture, create Artifact v1 through
+  `POST /api/v1/artifacts`, then revise it through `PUT /api/v1/artifacts/{artifactId}` with
+  `expectedBaseVersion + expectedBaseHash`. `GET /api/v1/artifacts/{artifactId}` returns the
+  owner-scoped lineage. This is a separate durable Artifact boundary; the Stage 0 Manifestation,
+  ActionPlan, approval and Reflection graph remains in memory.
+- First Acceptance Red: add a Failsafe `ConflictSafeRevisionHttpIT` that starts one PostgreSQL and
+  two separately packaged application processes configured as the same principal, creates the
+  owned Capture and Artifact v1 over HTTP, then releases two concurrent revisions against the
+  same base. It expects exactly one success and one dedicated, non-leaking `409`, kills both
+  applications, starts a different JVM and verifies the exact v1 → v2 lineage. Before production
+  implementation, the test must reach healthy S1 applications and fail at the missing Artifact
+  HTTP behavior, not at packaging, PostgreSQL, startup or Capture.
+- Predicted failures: a read-then-insert sequence lets both writers create v2; checking only version
+  accepts the wrong base hash; advancing a mutable head separately from immutable lineage leaves
+  split state on failure; classifying a failed CAS before an owner-scoped lookup leaks foreign
+  existence; returning a proposed timestamp instead of the database row changes the lineage after
+  restart; rebuilding two services in one JVM does not prove process concurrency.
+- File ownership: main thread only. S2 may add the minimum framework-neutral Artifact lineage,
+  command/result/service and port in Core; one forward-only V2 Flyway migration and thin SQL adapter
+  in `adapters/postgres`; one Artifact HTTP controller, dedicated conflict mapping and S2 tests in
+  `apps/api`; and S2-specific docs/receipts. Existing S1 Capture code changes only for shared test
+  support or a demonstrated regression fix. No AgentKernel, Temporal, outbox, model, UI,
+  authentication, Connector or horizontal Manifestation repository work is owned.
+- Fault/receipt target: the database predicate contains principal, artifact ID, expected current
+  version and expected current hash; two independent application PIDs produce one v2 and one
+  explicit conflict without exposing content; owner-scoped foreign and missing lookups remain
+  indistinguishable; a new application PID returns exactly two immutable versions whose v2
+  `baseVersion/baseHash` points to v1; S1 packaged restart and all repository checks remain green.
+
 ### S3 · Recoverable local Action
 
 User result: approve a simulated action and understand whether it completed even when the response is lost.
@@ -288,7 +319,14 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   P0/P1; complete post-review packaged-process Receipt recorded.
 - [ ] Lane B Day 1: start Founder Log, interview recruitment and Concierge offer.
 - [x] 2026-07-28 15:25 +08:00: S1 restart-safe Capture engineering Receipt complete.
-- [ ] S2 conflict-safe Revision.
+- [x] 2026-07-28 16:05 +08:00: S2 slice delta and file ownership recorded before
+  production implementation.
+- [x] 2026-07-28 16:13 +08:00: S2 packaged-process HTTP Acceptance Red and
+  framework-neutral Core Focused Red recorded before production implementation.
+- [x] 2026-07-28 16:23 +08:00: minimum S2 Core/schema/adapter/API, transaction-fault
+  tests, two-process CAS, third-JVM restart, owner isolation and S1 packaged regression green.
+- [x] 2026-07-28 16:34 +08:00: S2 independent production review closed with
+  `P0=0`, `P1=0`; post-review process Receipt and final repository verification passed.
 - [ ] S3 recoverable local Action.
 - [ ] S4 operating and interview evidence.
 - [ ] Stage gate and `continue / narrow / pivot` decision.
@@ -314,6 +352,15 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
 - 2026-07-28, S1: register an early environment guard for the packaged application. The default
   and any override of the main listener must resolve only to loopback; a separately configured
   management port also requires an explicit loopback address.
+- 2026-07-28, S2: add a separate durable `ArtifactLineage` boundary rather than reuse the Stage 0
+  `ArtifactVersion`. The latter requires real evidence, Working Self and generator provenance; S2
+  must not fabricate them or make those existing invariants nullable.
+- 2026-07-28, S2: keep one owner-scoped Artifact head plus immutable version rows. A deferred
+  head-to-version foreign key, exact parent version/hash foreign key and one transaction make the
+  head CAS, version append and canonical read one commit-or-rollback unit.
+- 2026-07-28, S2: a CAS miss is classified only by an owner-scoped head lookup. The dedicated
+  `409` returns `currentVersion` and requires GET reload; it never returns content or a
+  content-derived hash. Foreign and missing exact-base PUT remain the same `404`.
 
 ## Surprises, failures and verification receipts
 
@@ -369,12 +416,71 @@ do not count.
   6 PostgreSQL adapter, 13 API and 2 packaged-process tests. The full run printed
   `firstPid=69640`, `restartedPid=69651`, `otherPrincipalPid=69652`,
   `restart=200`, `replay=200`, `conflict=409`, `foreign=404`, `missing=404`.
+- 2026-07-28 16:08 +08:00 · S2 Acceptance Red:
+  `./mvnw --batch-mode --no-transfer-progress -pl apps/api -am verify
+  -Dit.test=ConflictSafeRevisionHttpIT -Dfailsafe.failIfNoSpecifiedTests=false` packaged the
+  application, started `postgres:18.4-alpine`, brought two independent application JVMs configured
+  as `revision-owner` to health, and created the S1 source Capture with `201`. The first Artifact
+  request then failed solely at the intended missing behavior:
+  `POST /api/v1/artifacts` expected `201` but received `404`. No S2 production type, migration,
+  adapter or controller existed when this Red was recorded.
+- 2026-07-28 16:13 +08:00 · S2 Focused Red:
+  `./mvnw --batch-mode --no-transfer-progress -pl modules/core -am
+  -Dtest=ArtifactLineageServiceTest -Dsurefire.failIfNoSpecifiedTests=false test` reached
+  Core test compilation and failed because `ArtifactLineage`, its immutable entries, the
+  owner-scoped store port, create/revise commands, dedicated conflict and service did not exist.
+  The focused contract fixes server-owned Capture provenance, v1 hashing, exact expected
+  version/hash forwarding, continuous base links and distinct owner-missing versus stale-base
+  outcomes without introducing a framework type.
+- 2026-07-28 16:18 +08:00 · S2 database/fault Green:
+  the selected Core/PostgreSQL/HTTP command passed 6 Core, 5 real PostgreSQL and 4 HTTP tests.
+  Two adapters racing v1/hash1 produced one v2 and one dedicated conflict. A test-only PostgreSQL
+  trigger then forced the v2 insert to fail after the head UPDATE; the transaction left head v1,
+  hash1 and one immutable row. A separate direct insert proved that v2 with a NULL base pair is
+  rejected. The explicit NULL assertions were added after read-only architecture review identified
+  PostgreSQL CHECK/foreign-key three-valued logic as a P1 loophole.
+- 2026-07-28 16:20 +08:00 · integration fixture failure:
+  the first full API path stopped before Failsafe because `CaptureHttpTest` still truncated
+  `captures` alone after V2 added an Artifact foreign key. Persistent HTTP test cleanup now truncates
+  `artifact_versions`, `artifacts` and `captures` together; the rerun reached the packaged S2 test.
+- 2026-07-28 16:23 +08:00 · preliminary S2 packaged-process Receipt:
+  `ConflictSafeRevisionHttpIT` passed against one real PostgreSQL with
+  `firstPid=98600`, `secondPid=98615`, `restartedPid=98625`,
+  `otherPrincipalPid=98636`, `winner=200`, `conflict=409`, `artifactRows=1`,
+  `versionRows=2`, `currentVersion=2`, `baseLinked=true`, `foreignGet=404`,
+  `missingGet=404`, `foreignPut=404`, `missingPut=404`. Both race processes were killed
+  before the third JVM returned byte-for-byte identical lineage; v1 was unchanged and the losing
+  content had zero database rows. This is preliminary until independent review and a post-review run.
+- 2026-07-28 16:23 +08:00 · S1 regression before review:
+  `RestartSafeCaptureHttpIT` passed with `firstPid=98878`, `restartedPid=98891`,
+  `otherPrincipalPid=98895`, `restart=200`, `replay=200`, `conflict=409`,
+  `foreign=404`, `missing=404`; its packaged wildcard-bind rejection also remained green.
+- 2026-07-28 · S2 independent production review:
+  the read-only reviewer found `P0=0`, `P1=0`. One P2 showed that a failed second application
+  startup or first cleanup could leave a sibling packaged JVM/log behind; the process group now
+  cleans every resource best-effort and preserves suppressed failures. The second P2 is an evidence
+  gap, not a hidden pass: V2 is additive and fresh-install tested, but a V1 database populated with
+  S1 data has not yet been migrated to V2 in a dedicated rehearsal. That remains open for the Stage 1
+  operating/upgrade Gate.
+- 2026-07-28 16:33 +08:00 · post-review S2 process Receipt:
+  the targeted Failsafe command passed after the cleanup correction with
+  `firstPid=4515`, `secondPid=4529`, `restartedPid=4539`,
+  `otherPrincipalPid=4540`, `winner=200`, `conflict=409`, `artifactRows=1`,
+  `versionRows=2`, `currentVersion=2`, `baseLinked=true`, and equivalent
+  foreign/missing GET/PUT `404` responses.
+- 2026-07-28 16:34 +08:00 · required final S2 verification:
+  `./scripts/verify-contracts.sh` passed 4 schemas, 8 fixtures and 1 synthetic task pack;
+  `./scripts/verify-doc-links.sh` passed local links in 54 Markdown files; and
+  `./mvnw --batch-mode --no-transfer-progress verify` passed 18 Core, 6 in-memory adapter,
+  11 PostgreSQL adapter, 17 API and 3 packaged-process tests. The full run printed the S2 Receipt
+  with PIDs `5136/5142/5152/5162` and the S1 regression Receipt with PIDs
+  `5177/5187/5188`.
 
 ## Outcome and next hypothesis
 
-S1 engineering is complete. Stage 1 remains active: S2–S4, the owner-led Teach-back/transfer exercises
-and Lane B market evidence are still open. The next engineering hypothesis is that PostgreSQL
-compare-and-swap can make two separately configured application instances produce exactly one Artifact
-revision winner without silent overwrite. Stage 2 begins only when the full engineering, market and
-human-learning Gates are decided; a failed market hypothesis leads to a new vertical product result,
-not automatic runtime expansion.
+S1 and S2 engineering are complete. Stage 1 remains active: S3–S4, the owner-led
+Teach-back/transfer exercises and Lane B market evidence are still open. The next engineering
+hypothesis is that a durable local ActionAttempt plus reconciliation can survive an application crash
+without duplicate observable work or a false completion Receipt. Stage 2 begins only when the full
+engineering, market and human-learning Gates are decided; a failed market hypothesis leads to a new
+vertical product result, not automatic runtime expansion.

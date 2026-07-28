@@ -67,16 +67,37 @@ GET  /api/v1/captures/{captureId}
 - 未认证原型只允许 loopback 绑定，持久化边界只接收 `PUBLIC` 或 `PERSONAL`；
 - 验收必须杀死打包应用并启动不同 JVM，不能用同 JVM 重建对象代替。
 
-Manifestation、Revision、Action、Reflection 仍是 Stage 0 内存实现；Capture 不会触发模型或外部动作。
+Manifestation、Action、Reflection 仍是 Stage 0 内存实现；Capture 不会触发模型或外部动作。
+
+## Stage 1 · Conflict-safe Revision
+
+第二个持久化切片从一个已归属的 S1 Capture 建立独立 Artifact lineage：
+
+```text
+POST /api/v1/artifacts
+GET  /api/v1/artifacts/{artifactId}
+PUT  /api/v1/artifacts/{artifactId}
+```
+
+- v1 引用 owner-scoped Capture，内容 Hash 只由 Core 计算；
+- 修订请求必须提供 `expectedBaseVersion + expectedBaseHash`；
+- PostgreSQL head 的单条 `UPDATE` 同时匹配主体、Artifact、版本和 Hash，成功后才在同一事务
+  追加 immutable version；
+- 两个独立应用实例竞争同一 base 时恰好一个返回 `200`，另一个返回专用 `409`；
+- `409` 只返回安全的 `currentVersion` 并要求重新加载，不回显正文或内容 Hash；
+- foreign 与 missing Artifact 的 GET/精确-base PUT 都使用相同 `404` 形态；
+- 验收必须终止两个竞争 JVM，再由第三个 JVM 返回完全相同的有序 lineage。
+
+这条边界不持久化旧的 Stage 0 `Manifestation`、Working Self、ActionPlan 或 Reflection，也不
+引入认证、模型、Temporal、Connector 或通用 outbox。
 
 ## 后续切片
 
 依次替换：
 
-1. Revision → PostgreSQL compare-and-swap；
-2. ActionAttempt / Receipt → PostgreSQL 与独立 Fake Provider；
-3. Template Generator → AgentKernel Fake / real adapter；
-4. 同步用例 → Temporal Workflow；
-5. Local Draft Stub → 可撤销真实平台草稿。
+1. ActionAttempt / Receipt → PostgreSQL 与独立 Fake Provider；
+2. Template Generator → AgentKernel Fake / real adapter；
+3. 同步用例 → Temporal Workflow；
+4. Local Draft Stub → 可撤销真实平台草稿。
 
 每次只替换一个变量，并保留上一实现作对照。

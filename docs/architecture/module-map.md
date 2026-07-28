@@ -15,7 +15,7 @@ adapters/inmemory
   内存 Ledger、确定性草稿生成、Policy、Action Stub
 
 adapters/postgres
-  S1 Capture 的 JdbcClient 适配器与单表 Flyway migration
+  S1 Capture、S2 Artifact lineage 的 JdbcClient 适配器与前向 Flyway migrations
 
 apps/api
   HTTP DTO、Controller、异常映射、loopback 启动保护、依赖装配
@@ -66,7 +66,7 @@ flowchart RL
 ## 当前与后续 Adapter
 
 ```text
-adapters/postgres            # 已实现：仅 S1 Capture
+adapters/postgres            # 已实现：S1 Capture、S2 Artifact lineage
 adapters/object-storage
 adapters/agent-agentscope
 adapters/agent-pi
@@ -74,4 +74,4 @@ adapters/temporal
 adapters/connectors/*
 ```
 
-除已标记的 PostgreSQL Capture 适配器外，其余都是计划，不应在存在真实实现前创建空目录。
+除已标记的 PostgreSQL Capture/Artifact 适配器外，其余都是计划，不应在存在真实实现前创建空目录。

@@ -20,11 +20,13 @@ Stage 0 只有在项目所有者能白板解释状态机、真相边界和失败
 
 ## Stage 1 · Durable Correctness and Problem Discovery
 
-状态：**Now — S1 工程回执已完成；S2–S4、人类 Teach-back 与市场 Gate 仍未完成。**
+状态：**Now — S1/S2 工程回执已完成；S3–S4、人类 Teach-back 与市场 Gate 仍未完成。**
 
 执行计划：[Stage 1 Durable Correctness](./docs/plans/2026-07-28-stage-1-durable-correctness.md)
 
 S1 回执：[Restart-safe Capture Build Note](./docs/operations/build-notes/2026-07-28-s1-restart-safe-capture.md)
+
+S2 回执：[Conflict-safe Revision Build Note](./docs/operations/build-notes/2026-07-28-s2-conflict-safe-revision.md)
 
 产品/工程：
 

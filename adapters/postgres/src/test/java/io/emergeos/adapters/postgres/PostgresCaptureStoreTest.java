@@ -59,7 +59,7 @@ class PostgresCaptureStoreTest {
 
   @BeforeEach
   void clearCaptures() {
-    jdbc.sql("TRUNCATE TABLE captures").update();
+    jdbc.sql("TRUNCATE TABLE artifact_versions, artifacts, captures").update();
   }
 
   @AfterAll

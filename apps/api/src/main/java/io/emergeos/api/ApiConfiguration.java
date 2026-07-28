@@ -7,7 +7,9 @@ import io.emergeos.adapters.inmemory.LocalDraftActionExecutor;
 import io.emergeos.adapters.inmemory.LocalWorkingSelfProjector;
 import io.emergeos.adapters.inmemory.TemplateArtifactGenerator;
 import io.emergeos.adapters.inmemory.UuidIdGenerator;
+import io.emergeos.adapters.postgres.PostgresArtifactLineageStore;
 import io.emergeos.adapters.postgres.PostgresCaptureStore;
+import io.emergeos.core.application.ArtifactLineageService;
 import io.emergeos.core.application.CaptureService;
 import io.emergeos.core.application.ManifestationService;
 import io.emergeos.core.port.IdGenerator;
@@ -40,6 +42,22 @@ class ApiConfiguration {
   CaptureService captureService(
       PostgresCaptureStore captureStore, IdGenerator idGenerator, Clock clock) {
     return new CaptureService(captureStore, idGenerator, clock);
+  }
+
+  @Bean
+  PostgresArtifactLineageStore artifactLineageStore(
+      DataSource dataSource, PlatformTransactionManager transactionManager) {
+    return new PostgresArtifactLineageStore(dataSource, transactionManager);
+  }
+
+  @Bean
+  ArtifactLineageService artifactLineageService(
+      PostgresArtifactLineageStore artifactLineageStore,
+      PostgresCaptureStore captureStore,
+      IdGenerator idGenerator,
+      Clock clock) {
+    return new ArtifactLineageService(
+        artifactLineageStore, captureStore, idGenerator, clock);
   }
 
   @Bean

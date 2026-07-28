@@ -1,6 +1,7 @@
 package io.emergeos.api;
 
 import io.emergeos.core.application.CaptureNonceConflictException;
+import io.emergeos.core.application.ArtifactRevisionConflictException;
 import java.net.URI;
 import java.util.NoSuchElementException;
 import org.springframework.http.HttpStatus;
@@ -10,6 +11,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 class ApiExceptionHandler {
+
+  @ExceptionHandler(ArtifactRevisionConflictException.class)
+  ProblemDetail artifactRevisionConflict(ArtifactRevisionConflictException exception) {
+    var problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+    problem.setTitle("Artifact revision conflict");
+    problem.setType(URI.create("urn:emergeos:problem:artifact-revision-conflict"));
+    problem.setProperty("currentVersion", exception.currentVersion());
+    return problem;
+  }
 
   @ExceptionHandler(CaptureNonceConflictException.class)
   ProblemDetail captureNonceConflict(CaptureNonceConflictException exception) {

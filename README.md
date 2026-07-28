@@ -7,13 +7,15 @@ EmergeOS 不是聊天机器人、笔记 App 或自动化工具箱。它要解决
 > **把一个人刚刚看到、想到、想要的东西，在几分钟内变成有证据、可编辑、可执行、可复盘的作品或行动。**
 
 当前阶段是 `0.1 / research prototype`。仓库已经建立第一条无外部副作用的纵向闭环，并完成
-第一个 PostgreSQL 纵向切片：Capture 可在真实应用进程重启后取回。真实模型、Temporal、
+前两个 PostgreSQL 纵向切片：Capture 可在真实应用进程重启后取回；两个独立应用实例并发
+修订同一 Artifact base 时，数据库 compare-and-swap 只允许一个新版本。真实模型、Temporal、
 生产认证、加密存储和平台连接器尚未接入，不应将演示结果理解为生产能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
 中的单用户 `local-user`，没有实现登录或多租户身份验证。主体不接受 Header 或请求体覆盖，
 读取也按该主体查询，但这仍不是认证。不要把它暴露到局域网或公网；在加密持久化与
-Secret Broker 落地前，持久化 Capture 会拒绝 `SENSITIVE` 和 `SECRET` 输入。
+Secret Broker 落地前，持久化 Capture 会拒绝 `SENSITIVE` 和 `SECRET` 输入。Artifact 原型
+没有独立的数据分类或加密边界，只能使用合成、非敏感内容。
 
 ## 系统原则
 
@@ -37,8 +39,8 @@ Secret Broker 落地前，持久化 Capture 会拒绝 `SENSITIVE` 和 `SECRET` �
   → ReflectionCandidate
 ```
 
-Stage 0 Manifestation 闭环仍刻意使用内存存储和确定性 Stub。Stage 1 只把独立的 Capture
-边界替换为 PostgreSQL；Revision、Action 和 Operations 将继续按纵向切片逐个验证。
+Stage 0 Manifestation 闭环仍刻意使用内存存储和确定性 Stub。Stage 1 已把独立的 Capture
+和 Artifact lineage 边界替换为 PostgreSQL；Action 和 Operations 将继续按纵向切片逐个验证。
 
 ## 快速开始
 
@@ -79,6 +81,26 @@ curl -s \
   }' \
   http://localhost:8080/api/v1/captures
 
+# 用上一步的 captureId 创建 Artifact v1
+curl -s \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "captureId": "{captureId from the latest response}",
+    "content": "把这个想法整理成一篇有证据的文章"
+  }' \
+  http://localhost:8080/api/v1/artifacts
+
+# 修订必须绑定当前版本和服务端返回的 currentHash
+curl -s \
+  -X PUT \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "content": "Artifact v2",
+    "expectedBaseVersion": 1,
+    "expectedBaseHash": "{currentHash from the latest Artifact response}"
+  }' \
+  http://localhost:8080/api/v1/artifacts/{artifactId}
+
 curl -s \
   -H 'Content-Type: application/json' \
   -d '{
@@ -102,8 +124,8 @@ curl -s \
   http://localhost:8080/api/v1/manifestations/{manifestationId}/approve
 ```
 
-Capture 写入本机 PostgreSQL；Manifestation 仍只写入应用进程内存中的草稿回执。两者都不会
-访问或发布到任何外部平台。
+Capture 与独立 Artifact lineage 写入本机 PostgreSQL；Manifestation 仍只写入应用进程内存
+中的草稿回执。它们都不会访问或发布到任何外部平台。
 
 ## 仓库地图
 
@@ -112,7 +134,7 @@ apps/api/                 HTTP 入口与依赖装配
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例与端口
 adapters/inmemory/        本地开发与测试适配器
-adapters/postgres/        S1 Capture 的薄 PostgreSQL 适配器与 Flyway migration
+adapters/postgres/        S1 Capture、S2 Artifact lineage 的薄 PostgreSQL 适配器与 migrations
 contracts/                跨语言 JSON Schema
 evals/                    合成任务与回归证据
 docs/                     产品、架构、研究、运营和共同治理
