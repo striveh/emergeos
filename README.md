@@ -113,6 +113,17 @@ api ───────────→ core
 
 共同进化的对象是代码、协议、评测和方法，绝不是任何用户的真实人格与生活数据。禁止在 Issue、PR、测试样例或 Trace 中提交真实用户数据、凭据或可识别个人的信息。
 
+## 为什么做，以及怎样不偏航
+
+项目同时追求 AI Coding 能力、Agent Engineering 能力、生产级产品、可信职业作品与商业结果。
+每个任务留下相关证据，每个 Roadmap Stage/Release Gate 同时检查这五项结果。具体见：
+
+- [Five-Outcome Charter](./docs/strategy/five-outcome-charter.md)
+- [Product-driven Curriculum](./docs/learning/curriculum.md)
+- [Development Method](./docs/engineering/development-method.md)
+- [Codex Playbook](./docs/engineering/codex-playbook.md)
+- [Business Validation Roadmap](./docs/business/validation-roadmap.md)
+
 ## 许可证状态
 
 仓库尚未公开发布，许可证仍是待决 ADR。在许可证被明确接受前，代码不应被视为已授予开源使用权。原因与候选方案见 [开放源码准备清单](./docs/community/open-source-readiness.md)。

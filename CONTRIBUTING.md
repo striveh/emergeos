@@ -13,8 +13,16 @@
 ## 开始前
 
 1. 阅读 [README.md](./README.md) 和 [docs/README.md](./docs/README.md)。
-2. 小修复可直接提交；涉及核心协议、权限、Self Model、数据结构、主要依赖或公开行动的变化，先提交 RFC。
-3. 不确定是否需要 RFC 时，先开 Discussion 或 Issue 描述问题、证据和最小验证。
+2. 阅读 [研发方法](./docs/engineering/development-method.md) 与
+   [Codex 协作手册](./docs/engineering/codex-playbook.md)。
+3. 将工作分类为 `S` 小改、`V` 纵向能力、`R` 高风险边界或 `X` 限时 Spike。
+4. `S` 只需 PR/简短 Receipt；未达到长计划门槛的 `V/R` 使用
+   [Task Brief](./docs/engineering/task-brief-template.md)；跨模块、基础设施、公开契约/安全边界、
+   超过一天或含重大未知的 `V/R` 按 [PLANS.md](./PLANS.md) 使用 ExecPlan **替代** Task Brief；
+   `X` 只写限时 Spike 记录。
+5. 小修复可直接提交；涉及核心协议、权限、Self Model、公开或跨模块数据契约、主要依赖或
+   公开行动的变化，先提交 RFC。
+6. 不确定是否需要 RFC 时，先开 Discussion 或 Issue 描述问题、证据和最小验证。
 
 ## 本地验证
 
@@ -24,7 +32,7 @@
 npm ci
 ```
 
-然后运行完整验证：
+开发时先运行受影响的快速检查；提交 V/R 变化前运行完整确定性验证：
 
 ```bash
 ./mvnw verify
@@ -34,11 +42,15 @@ npm ci
 
 提交前至少证明：
 
+- 行为变化先出现了预期失败的测试、Eval 或用户实验基线；
 - 新行为有测试或可复现验收步骤；
 - 没有跨越模块依赖方向；
 - 外部副作用具有授权、幂等键和 Receipt；
 - 不记录或展示隐藏思维链；
 - 文档与行为同步更新。
+
+探索性 Spike 可以先实现最小探针，但必须有时间盒、结论与限制，且不能直接作为生产能力合入。
+模型/Prompt/Harness 变化使用固定 Task Pack 重复评测，不对自然语言逐字断言。
 
 ## 数据安全
 
@@ -50,6 +62,8 @@ npm ci
 - 任何其他个人信息或秘密。
 
 ## 决策路径
+
+以下路径只适用于需要 RFC 的变化；其余工作直接按 `S/V/R/X` 路由：
 
 ```text
 Problem / Evidence

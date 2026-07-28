@@ -24,7 +24,8 @@ flowchart LR
 
 ### 工程回路
 
-Issue → 最小变更 → 测试与 HarnessRunBundle → Review → Release → Regression。
+Task Brief / ExecPlan slice delta → Red → 最小变更 → Refactor → 故障证据 → 独立 Review
+→ Release → Regression。
 
 ### 研究回路
 
@@ -51,12 +52,19 @@ Discussion → RFC → Spike → ADR → 实现。社区共同演进的是代码
 
 ## 节奏
 
-- 每日：内部 Build Note，可为空，不虚构进展。
-- 每周：公开真实完成、失败、证据和下一假设。
+- 每个有意义切片：相关 Outcome Receipt；不强行凑齐五项目标。
+- 每日：形成私有三行证据日志和一份待审内容草稿；可发布愿景/假设，但必须明确标签，产品
+  完成声明只能来自已验证证据。
+- 每周：汇总公开真实完成、失败、证据和下一假设。以有效回复、访谈、试用、留资或付款等
+  获客信号评估内容，不把发帖数量当结果。
 - 双周：一个可运行版本或一个明确的实验结论。
 - 每月：Roadmap、成本、质量和社区贡献回顾。
 - 重要事故：脱敏 Postmortem 与回归用例。
 - 每季度：越权、重复行动、数据事件、回滚和模型更换透明度报告。
+
+每周还要检查五个结果轴：AI Coding、Agent Engineering、Product/Production、Career 和
+Business。连续 7 天没有用户接触，或连续两个基础设施切片没有用户/市场证据时，冻结新增
+基础设施；每周 Pulse、每月填写 [Five-Outcome Scorecard](./five-outcome-scorecard.md)。
 
 ## 工作流状态
 
@@ -81,3 +89,9 @@ IDEA → EVIDENCE_NEEDED → READY
 
 早期一个人可以承担多个领域，但每项工作仍要标注领域和验收人，避免责任隐形。
 
+## Codex 研发分工
+
+主 Agent 维护问题、约束、架构建议、验证执行和证据汇总；人类所有者承担风险并决定里程碑
+go/no-go。Subagent 优先承担 read-oriented 探索、官方文档核验、测试/故障矩阵和独立 Review；
+一个工作树只有一个代码写入者。详细协议见
+[Codex Development Playbook](../engineering/codex-playbook.md)。

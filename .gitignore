@@ -1,6 +1,8 @@
 .DS_Store
 .idea/
 .vscode/
+.codex-log/
+.private-research/
 *.iml
 
 target/

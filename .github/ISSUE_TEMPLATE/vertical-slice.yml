@@ -1,0 +1,71 @@
+name: Vertical outcome
+description: Plan a user-visible, learning-bearing and verifiable product slice
+title: "[Outcome] "
+labels: ["outcome", "needs-triage"]
+body:
+  - type: dropdown
+    id: change-class
+    attributes:
+      label: Change class
+      options:
+        - V - vertical behavior
+        - R - risky boundary
+        - X - time-boxed spike
+    validations:
+      required: true
+  - type: textarea
+    id: product
+    attributes:
+      label: User outcome and evidence
+      description: What observable result improves, and what says the problem is real?
+    validations:
+      required: true
+  - type: textarea
+    id: ai_coding
+    attributes:
+      label: AI Coding receipt
+      description: Which framing, TDD, delegation, review or debugging capability will be practiced? Use N/A if unrelated.
+    validations:
+      required: true
+  - type: textarea
+    id: agent_engineering
+    attributes:
+      label: Agent Engineering receipt
+      description: Which mechanism should reach which mastery level, and how will it be built, broken and taught back? Use N/A if unrelated.
+    validations:
+      required: true
+  - type: textarea
+    id: production
+    attributes:
+      label: Production risk and failure boundary
+      description: Identity, data, concurrency, recovery, side effects, cost or rollback.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance examples and first Red evidence
+      description: Give observable success/rejection/retry cases and the first test/eval expected to fail.
+    validations:
+      required: true
+  - type: textarea
+    id: career
+    attributes:
+      label: Career receipt
+      description: Demo, Case Card, evidence-backed interview claim, or N/A.
+    validations:
+      required: true
+  - type: textarea
+    id: business
+    attributes:
+      label: Business receipt
+      description: User test, repeat use, price/payment or rejection evidence, or N/A.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Data safety
+      options:
+        - label: This issue contains only synthetic or appropriately aggregated evidence.
+          required: true

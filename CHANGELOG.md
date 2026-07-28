@@ -15,3 +15,7 @@ All notable changes will be documented here. Dates describe repository history, 
 - Capability binding to an exact plan, executor audience, account and idempotency key.
 - Architecture, research, governance, privacy and operating documentation.
 - Executable JSON Schema fixtures, module-boundary enforcement and CI foundation.
+- Five-outcome AI Coding/Agent Engineering/product/career/business development system.
+- Risk-proportional TDD, Task Brief, ExecPlan and Codex/Subagent collaboration rules.
+- Product-driven curriculum, capability matrix, business validation and interview evidence paths.
+- Project-scoped read-oriented architecture, test-design and production-review agents.
