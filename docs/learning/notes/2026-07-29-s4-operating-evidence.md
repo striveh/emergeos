@@ -63,16 +63,16 @@ independent diagnosis.
   it does not by itself bind the screenshot to the expected account, content
   fingerprint and original Action; timezone, delayed display and duplicate
   content can still make the observation ambiguous.
-- Second follow-up prompt: 除了时间，最关键的证据是什么？
-- Owner's exact answer: `不知道了`
-- Teaching supplied: evidence must bind the observation to the original Action.
-  The minimum useful binding is platform/account, content fingerprint, observed
-  publish time, original Action identity, confirmer and confirmation time.
-  A platform object ID or canonical URL is stronger when available.
+- Owner's scope correction:
+  `这个问题似乎跟agent开发主技术栈没有啥关系吧`
+- Assessment: correct. Screenshot field-level evidence is a Connector/product
+  operations detail, not the next core Agent Runtime or Harness learning target.
+  Further questioning on this branch stops here.
 - Receipt rule: a screenshot plus authorized owner confirmation may support
   `human-confirmed success`; it must not be represented as
   `platform-verified success`, and missing platform IDs must remain missing.
-- Checkpoint remains partial; no level change is claimed.
+- Checkpoint remains a partial product-operations example and is excluded from
+  Agent loop/Harness mastery scoring. No level change is claimed.
 
 ### Level decision
 
