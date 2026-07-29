@@ -459,6 +459,10 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
 - [x] 2026-07-29 17:21 +08:00: S4 final Diff/scope checks passed and one focused
   commit was prepared; its Git ID and clean-worktree status are the post-commit task Receipt.
 - [ ] Stage gate and `continue / narrow / pivot` decision.
+- [x] 2026-07-29: owner rejected further screenshot-evidence questioning as
+  off the core Agent learning path and selected strict Gate path A: personally
+  diagnose one undisclosed Stage 1 fault and complete one real
+  Seed/Concierge/price experiment before Stage 2 code begins.
 
 ## Decisions
 
@@ -512,6 +516,10 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   from a slow live provider call. PostgreSQL-canonical ownership/fencing is a future vertical
   runtime slice, so S4 corrects ADR-0004 to Proposed and exposes the unresolved state without
   inventing a recovery path.
+- 2026-07-29, Stage Gate: follow strict path A. Stage 2 planning may continue,
+  but production AgentKernel code remains frozen until the owner-led unknown
+  fault diagnosis and one consented real Seed/Concierge/price experiment are
+  recorded. Neither activity may be replaced by Codex self-assessment.
 
 ## Surprises, failures and verification receipts
 

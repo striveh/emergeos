@@ -223,7 +223,9 @@ baseline.
 - [x] 2026-07-29: independent plan review found and closed missing proof of
   ref-only initial model context, unowned cancellation semantics and a dangling
   S1 Trace-reference ambiguity; post-review `P0=0`, `P1=0`.
-- [ ] Owner records the Stage 1 gate/go-no-go decision.
+- [x] 2026-07-29: owner selected strict Gate path A—complete one owner-led
+  undisclosed-fault diagnosis plus one real Seed/Concierge/price experiment
+  before Stage 2 implementation.
 - [ ] S1 delta and Acceptance Red are recorded before production code.
 
 ## Decisions
@@ -237,6 +239,8 @@ baseline.
   model final response is a proposal, not product truth.
 - 2026-07-29: do not use screenshot-evidence details as Agent loop/Harness
   mastery evidence.
+- 2026-07-29: keep Stage 2 production code frozen until the selected Stage 1
+  learning and market checks have real evidence; planning is not Gate passage.
 
 ## Surprises and failures
 
@@ -281,6 +285,6 @@ planning. Those Stage 1 facts remain open.
 
 The proposed first Agent slice is small enough to test without a framework:
 one Fake Model, one read tool, one structured draft and zero external effects.
-The next decision is whether to satisfy Stage 1's remaining gate first or record
-an explicit Roadmap exception for a time-boxed Stage 2 technical lane. Only then
-does S1 begin with its Acceptance Red.
+The owner chose to satisfy the remaining Stage 1 learning and market checks
+first. S1 begins with its Acceptance Red only after both checks have evidence;
+planning alone does not unlock implementation.
