@@ -56,8 +56,14 @@ independent diagnosis.
   account, observed time and content fingerprint; preserve the confirmer,
   confirmation time, evidence reference and reason. Never invent a platform
   object ID or URL that the evidence does not contain.
-- Follow-up pending: distinguish a current matching post from an old or
-  same-title post using the evidence captured with the confirmation.
+- Follow-up prompt: 如果存在同标题、同封面的旧帖，至少还应记录什么来证明
+  截图对应本次发布？
+- Owner's exact follow-up answer: `时间`
+- Follow-up assessment: correct but incomplete. Time is necessary evidence, but
+  it does not by itself bind the screenshot to the expected account, content
+  fingerprint and original Action; timezone, delayed display and duplicate
+  content can still make the observation ambiguous.
+- Still pending: identify the account and content binding needed alongside time.
 
 ### Level decision
 
