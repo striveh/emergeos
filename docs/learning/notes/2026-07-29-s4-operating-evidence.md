@@ -3,11 +3,58 @@
 - Date: 2026-07-29
 - Related task / commit: Stage 1 S4, this focused commit
 - Target mastery level: `L3`
-- Current result: `L0 / unassessed` — automated engineering evidence exists; human Teach-back has not run
+- Current result: `L1` — checkpoints 1–3 demonstrate the concepts of ambiguous
+  external success and readiness versus liveness; hands-on transfer and
+  independent diagnosis have not run
 
 This is a rehearsal draft and evidence index. It does not claim that the project
-owner completed the pre-test, no-notes replay, changed-constraint exercise or
+owner completed a hands-on no-notes replay, migration/restore exercise or
 independent diagnosis.
+
+## Owner Teach-back · 2026-07-29
+
+### Checkpoint 1 · ambiguous external outcome
+
+- Prompt: 平台返回超时或没有帖子 ID 时，为什么不能直接再发一次？
+- Owner's exact answer: `可能已经发出了，只是没有结果而已`
+- Assessment: pass. The answer correctly recognizes that the external action may
+  already have succeeded even though the local system did not receive its
+  result, so retrying immediately could duplicate the action.
+- Still unassessed: the holding state and the safe next recovery action. No
+  mastery-level change yet.
+
+### Checkpoint 2 · honest holding state and recovery
+
+- Prompt: 既然不能直接重发，系统应该先把它记成什么状态，接下来做什么？
+- Owner's exact answer: `待确认状态，接下来去尝试获取状态`
+- Assessment: pass. `待确认` is the plain-language form of `UNKNOWN`; the next
+  step is reconciliation—querying the platform with the original Action's
+  identity and evidence instead of creating a new Action.
+- Safety boundary: if the platform cannot provide an authoritative answer, keep
+  the Action unresolved, block duplicate execution and request human review.
+- Still unassessed: readiness versus liveness under this changed operating
+  condition. No mastery-level change yet.
+
+### Checkpoint 3 · readiness versus liveness
+
+- Prompt: 系统重启后能正常运行，但还有一条“待确认”的发布：是否允许系统
+  启动、是否继续接收新发布任务，为什么？
+- Owner's exact answer:
+  `允许，不应该继续接收新的发布任务，系统启动才能确定问题，问题处理前不该再处理新发布任务`
+- Assessment: pass. The process must remain live so it can inspect and repair
+  the unresolved Action, while readiness must fail so no new work increases the
+  ambiguity or causes duplicate effects.
+
+### Level decision
+
+- `L1` is supported for the ambiguous-success portion of SQL/distributed
+  correctness, durable workflow, and the readiness portion of production
+  operations.
+- `L2` is not claimed: the owner has not yet performed the recovery against a
+  running system, changed the implementation or interpreted the resulting
+  Trace/Receipt.
+- `L3` is not claimed: no independent changed-constraint debugging or transfer
+  has been demonstrated.
 
 ## Pre-test
 

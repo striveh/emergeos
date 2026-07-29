@@ -8,14 +8,14 @@ exercise.
 |---|---|---|---|
 | AI Coding | Slice a task, design Red evidence, reject a bad Agent change, debug and verify | S1–S4 Red → fault → process/restore Receipts; owner review/transfer pending | Unassessed |
 | Java domain design | Rebuild and defend state/invariant boundaries | Core, ADRs, domain tests | Unassessed |
-| SQL/distributed correctness | Resolve CAS, duplicate delivery and ambiguous external success | S1 uniqueness, S2 four-field CAS, S3 atomic budget/idempotency uniqueness, rollback injection and multi-process recovery; Teach-back pending | L0/unassessed |
+| SQL/distributed correctness | Resolve CAS, duplicate delivery and ambiguous external success | S1 uniqueness, S2 four-field CAS, S3 atomic budget/idempotency uniqueness, rollback injection and multi-process recovery; [initial ambiguous-success Teach-back passed](notes/2026-07-29-s4-operating-evidence.md), hands-on transfer/debugging pending | L1 |
 | Agent loop/harness | Build Fake/real AgentKernel and explain runtime boundaries | Contracts/design only | L0/unassessed |
 | Context/memory/Self | Reject unsupported inference; correct/delete with provenance | Architecture only | L0/unassessed |
 | Agent evaluation | Run fixed `model × harness` repetitions and attribute failures | Plan/task pack only | L0/unassessed |
 | Capability/security | Threat-model identity, approval, tools, secrets and injection | S1–S3 configured authority, owner-scoped access, exact Capability mutation matrix, unknown-field rejection and loopback tests; human defense pending | Unassessed |
-| Durable workflow | Recover waiting/action state after kill/replay | S3 ActionAttempt survives forced app kill after durable `UNKNOWN`; new JVM reconciles one simulated object into one Receipt; provider-success-before-local-outcome crash can remain `DISPATCHING`, and no lease/fencing or Temporal/waiting proof exists; Teach-back pending | L0/unassessed |
+| Durable workflow | Recover waiting/action state after kill/replay | S3 ActionAttempt survives forced app kill after durable `UNKNOWN`; new JVM reconciles one simulated object into one Receipt; provider-success-before-local-outcome crash can remain `DISPATCHING`, and no lease/fencing or Temporal/waiting proof exists; [initial recovery Teach-back passed](notes/2026-07-29-s4-operating-evidence.md), hands-on transfer/debugging pending | L1 |
 | Voice/dynamic UI | Measure interruption/latency and enforce safe UI Schema | Product design only | L0/unassessed |
-| Production operations | Diagnose from alert to Trace/Receipt; restore backup | S4 owner-scoped readiness, populated V1/V2/V3/fresh migration, packaged checksum fail-fast, real new-database backup restore, runbook and sanitized trace; no alert routing/capacity proof, owner replay pending | L0/unassessed |
+| Production operations | Diagnose from alert to Trace/Receipt; restore backup | S4 owner-scoped readiness, populated V1/V2/V3/fresh migration, packaged checksum fail-fast, real new-database backup restore, runbook and sanitized trace; [readiness/liveness Teach-back passed](notes/2026-07-29-s4-operating-evidence.md), migration/restore replay pending | L1 (readiness only) |
 | Open source collaboration | An unfamiliar contributor can run and improve safely | Docs/CI foundation | Unassessed |
 | Product/business | Identify ICP, prove repeated outcome and real payment | Hypothesis only | L0/unassessed |
 | Interview communication | Defend decisions through changed constraints and failure questions | Evidence template only | Unassessed |
