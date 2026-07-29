@@ -70,6 +70,11 @@ Gate：
 
 ## Stage 2 · AgentKernel and Eval-Driven Development
 
+Proposed execution plan:
+[Stage 2 AgentKernel and Eval-Driven Development](./docs/plans/2026-07-29-stage-2-agent-kernel-evaluation.md).
+Implementation remains blocked until the Stage 1 gate is decided or an explicit
+Roadmap exception is recorded.
+
 产品/工程：
 
 - Provider-neutral `AgentKernel` SPI，先 Fake 后 real adapter；
