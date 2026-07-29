@@ -3,9 +3,8 @@
 - Date: 2026-07-29
 - Related task / commit: Stage 1 S4, this focused commit
 - Target mastery level: `L3`
-- Current result: `L1` — checkpoints 1–3 demonstrate the concepts of ambiguous
-  external success and readiness versus liveness; hands-on transfer and
-  independent diagnosis have not run
+- Current result: `L1` — checkpoints 1–3 passed and checkpoint 4 is in progress;
+  hands-on transfer and independent diagnosis have not run
 
 This is a rehearsal draft and evidence index. It does not claim that the project
 owner completed a hands-on no-notes replay, migration/restore exercise or
@@ -44,6 +43,21 @@ independent diagnosis.
 - Assessment: pass. The process must remain live so it can inspect and repair
   the unresolved Action, while readiness must fail so no new work increases the
   ambiguity or causes duplicate effects.
+
+### Checkpoint 4 · human-confirmed evidence
+
+- Prompt: 平台接口仍查不到结果，但个人主页出现标题和封面匹配的帖子。
+  系统能否只凭截图自动判定成功；如果不能，应由谁确认并保存什么证据？
+- Owner's exact answer: `可以凭人工确认只凭截图判定`
+- Assessment: partial pass. An authorized human may use a screenshot to confirm
+  the outcome when policy permits, but the system must label the result
+  `human-confirmed`, not `platform-verified`.
+- Evidence boundary: bind the screenshot to the original Action, expected
+  account, observed time and content fingerprint; preserve the confirmer,
+  confirmation time, evidence reference and reason. Never invent a platform
+  object ID or URL that the evidence does not contain.
+- Follow-up pending: distinguish a current matching post from an old or
+  same-title post using the evidence captured with the confirmation.
 
 ### Level decision
 
