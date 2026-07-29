@@ -463,6 +463,16 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   off the core Agent learning path and selected strict Gate path A: personally
   diagnose one undisclosed Stage 1 fault and complete one real
   Seed/Concierge/price experiment before Stage 2 code begins.
+- [x] 2026-07-29: isolated
+  [UNKNOWN reconciliation diagnosis exercise](../learning/exercises/2026-07-29-stage1-unknown-fault.md)
+  seeded outside `main`; the focused PostgreSQL test reproducibly fails with
+  expected `Claimed`, actual `Rejected`.
+- [ ] Owner diagnoses and fixes the isolated fault without inspecting the seeded
+  Git Diff first, then records focused Green evidence.
+- [x] 2026-07-29: private P-001 invitation, consent/interview/price worksheet and
+  Concierge workspace template prepared; this is preparation only.
+- [ ] Owner selects one eligible participant and authorizes/sends the invitation;
+  consent, Seed, delivery, price response and payment remain unclaimed.
 
 ## Decisions
 
