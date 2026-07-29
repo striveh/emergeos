@@ -63,6 +63,11 @@ class RecoverableLocalActionHttpIT {
       RunningApplication second = contenders.get(1);
       long firstPid = first.process().pid();
       long secondPid = second.process().pid();
+      assertReadiness(
+          first,
+          200,
+          "UP",
+          new ActionCounts(0, 0, 0, 0, 0, 0));
       String artifactId;
       int artifactVersion;
       String artifactHash;
@@ -135,6 +140,11 @@ class RecoverableLocalActionHttpIT {
         assertEquals("UNKNOWN", databaseStatus(noObjectAttemptId));
         assertEquals(2, databaseCapabilityUses(noObjectAttemptId));
         assertEquals(0, receiptRowCount(noObjectAttemptId));
+        assertReadiness(
+            first,
+            503,
+            "OUT_OF_SERVICE",
+            new ActionCounts(0, 0, 1, 0, 0, 0));
 
         String recoveryKey = "s3-response-loss-recovery-001";
         configureProvider(provider, recoveryKey, "BLOCK_CREATE_DROP_ONCE");
@@ -162,6 +172,11 @@ class RecoverableLocalActionHttpIT {
           ProviderObservation beforeRelease = observation(provider, recoveryKey);
           assertEquals(1, beforeRelease.requestCount());
           assertEquals(0, beforeRelease.objectCount());
+          assertReadiness(
+              first,
+              503,
+              "OUT_OF_SERVICE",
+              new ActionCounts(0, 1, 1, 0, 0, 0));
 
           releaseProvider(provider, recoveryKey);
           List<HttpResponse<String>> responses = requests.await();
@@ -184,6 +199,11 @@ class RecoverableLocalActionHttpIT {
         assertEquals(1, afterLoss.objectCount());
         assertEquals(1, afterLoss.totalObjectCount());
         assertEquals(1, providerStateRowCount(provider));
+        assertReadiness(
+            first,
+            503,
+            "OUT_OF_SERVICE",
+            new ActionCounts(0, 0, 2, 0, 0, 0));
       } finally {
         stopAll(first, second);
       }
@@ -278,6 +298,11 @@ class RecoverableLocalActionHttpIT {
       assertEquals(1, afterReconcile.objectCount());
       assertEquals(1, afterReconcile.totalObjectCount());
       assertEquals(1, providerStateRowCount(provider));
+      assertReadiness(
+          restarted,
+          503,
+          "OUT_OF_SERVICE",
+          new ActionCounts(0, 0, 1, 0, 1, 0));
 
       HttpResponse<String> replay =
           sendJson(
@@ -295,6 +320,11 @@ class RecoverableLocalActionHttpIT {
       RunningApplication otherPrincipal =
           startApplication("other-action-owner", provider.port());
       try {
+        assertReadiness(
+            otherPrincipal,
+            200,
+            "UP",
+            new ActionCounts(0, 0, 0, 0, 0, 0));
         HttpResponse<String> foreign =
             sendJson(otherPrincipal.port(), "GET", "/api/v1/actions/" + attemptId, null);
         HttpResponse<String> missing =
@@ -324,7 +354,8 @@ class RecoverableLocalActionHttpIT {
                 + "audienceMismatchPid=%d accountMismatchPid=%d "
                 + "audienceMismatch=409 accountMismatch=409 "
                 + "foreignGet=404 missingGet=404 foreignReconcile=404 missingReconcile=404 "
-                + "simulated=true%n",
+                + "initialReadiness=UP unresolvedReadiness=OUT_OF_SERVICE "
+                + "finalAction=SUCCEEDED remainingUnknown=1 simulated=true%n",
             provider.process().pid(),
             firstPid,
             secondPid,
@@ -351,6 +382,62 @@ class RecoverableLocalActionHttpIT {
         }
         """
         .formatted(artifactHash, idempotencyKey);
+  }
+
+  private static void assertReadiness(
+      RunningApplication application,
+      int expectedHttpStatus,
+      String expectedStatus,
+      ActionCounts expected)
+      throws Exception {
+    HttpResponse<String> readiness =
+        sendJson(application.port(), "GET", "/actuator/health/readiness", null);
+    assertEquals(expectedHttpStatus, readiness.statusCode(), readiness::body);
+    assertEquals(expectedStatus, JsonPath.read(readiness.body(), "$.status"));
+    assertEquals(
+        expectedStatus,
+        JsonPath.read(
+            readiness.body(), "$.components.stage1Durability.status"));
+    assertEquals(
+        "3",
+        JsonPath.read(
+            readiness.body(),
+            "$.components.stage1Durability.details.migration.current"));
+    assertEquals(
+        0,
+        number(
+            readiness.body(),
+            "$.components.stage1Durability.details.migration.pending"));
+    assertEquals(
+        true,
+        JsonPath.read(
+            readiness.body(),
+            "$.components.stage1Durability.details.migration.valid"));
+    assertEquals(
+        "SERVER_CONFIGURED",
+        JsonPath.read(
+            readiness.body(),
+            "$.components.stage1Durability.details.actions.principalScope"));
+    assertEquals(
+        expected.unresolved(),
+        number(
+            readiness.body(),
+            "$.components.stage1Durability.details.actions.unresolved"));
+    assertReadinessCount(readiness.body(), "PLANNED", expected.planned());
+    assertReadinessCount(readiness.body(), "DISPATCHING", expected.dispatching());
+    assertReadinessCount(readiness.body(), "UNKNOWN", expected.unknown());
+    assertReadinessCount(readiness.body(), "RECONCILING", expected.reconciling());
+    assertReadinessCount(readiness.body(), "SUCCEEDED", expected.succeeded());
+    assertReadinessCount(readiness.body(), "FAILED", expected.failed());
+  }
+
+  private static void assertReadinessCount(
+      String body, String status, int expected) {
+    assertEquals(
+        expected,
+        number(
+            body,
+            "$.components.stage1Durability.details.actions.statusCounts." + status));
   }
 
   private static ConcurrentRequests startConcurrentRequests(
@@ -479,7 +566,13 @@ class RecoverableLocalActionHttpIT {
                 + Files.readString(application.log()));
       }
       try {
-        if (sendJson(application.port(), "GET", "/actuator/health", null).statusCode() == 200) {
+        if (sendJson(
+                    application.port(),
+                    "GET",
+                    "/actuator/health/liveness",
+                    null)
+                .statusCode()
+            == 200) {
           return;
         }
       } catch (IOException ignored) {
@@ -904,6 +997,19 @@ class RecoverableLocalActionHttpIT {
 
   private record ProviderObservation(
       int requestCount, int objectCount, int totalObjectCount, boolean blocked) {}
+
+  private record ActionCounts(
+      int planned,
+      int dispatching,
+      int unknown,
+      int reconciling,
+      int succeeded,
+      int failed) {
+
+    private int unresolved() {
+      return planned + dispatching + unknown + reconciling;
+    }
+  }
 
   private static final class ProviderCleanupException extends RuntimeException {
     private ProviderCleanupException(IOException cause) {

@@ -56,6 +56,14 @@ Provider 调用发生在 claim 事务提交之后；`SUCCEEDED/FAILED`、最后�
 同事务提交。`UNKNOWN` 没有 Receipt，也不能显示为完成。测试用 Fake Provider 在独立 JVM 与
 独立文件中持有模拟对象；这不是 Temporal，也不是生产 Connector。
 
+S4 readiness 只读取 server-configured principal 的六种 Action 状态：
+`PLANNED/DISPATCHING/UNKNOWN/RECONCILING` 都使 durable readiness
+`OUT_OF_SERVICE`，但不改变 process liveness。`UNKNOWN` 有显式 reconcile 入口；
+`DISPATCHING` 与 `RECONCILING` 没有安全 stale-claim 接管。特别是 provider 已成功、但进程在
+本地 outcome/Receipt commit 前死亡时，数据库可能停在 `DISPATCHING`。当前没有
+PostgreSQL-canonical owner/lease/fencing 机制，不能用时间阈值重置；ADR-0004 保持 Proposed，
+真实 Connector Gate 保持关闭。
+
 ## Durable Runtime 边界
 
 Temporal 只承载粗粒度、需要可靠性的流程：

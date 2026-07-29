@@ -33,6 +33,7 @@ Remaining risk
 | 为什么 Capture 同时需要数据库唯一约束与 server-owned request hash | S1 工程回执完成且 owner Teach-back 通过 |
 | 为什么 Artifact CAS 同时匹配主体、版本和 Hash，并把 head/lineage 放在一个事务 | S2 工程回执完成且 owner Teach-back 通过 |
 | ActionAttempt、Receipt 与 reconciliation 如何处理模拟 Provider 成功/响应丢失 | S3 工程回执完成且 owner Teach-back 通过 |
+| 为什么 readiness 不能等于 liveness，以及迁移/恢复如何验证数据真相 | S4 工程回执完成且 owner Teach-back/独立故障诊断通过 |
 | 固定模型下 H0/H1 Harness 如何排除“换模型”干扰 | Stage 2 重复实验完成 |
 | Evidence-backed Self Model 如何避免把推断当人格事实 | Self Eval 与纠正/撤销流程完成 |
 | Codex 多 Agent 如何降低 Context noise 和写入冲突 | 至少两个切片有周期、返工和缺陷记录 |
@@ -83,11 +84,16 @@ Remaining risk
 > 唯一约束、两个配置主体和真实 JVM 重启证明持久化与隔离；第二个 Artifact 切片用两个独立
 > 应用进程竞争同一 base，证明四条件 CAS 只生成一个 v2，且 lineage 在新 JVM 中保持不变；
 > 第三个 local Action 切片先写 ActionAttempt，再让独立、持久化状态的 Fake Provider 创建
-> 一个模拟对象并丢失响应，强杀旧应用后由新 JVM 对账成一张 Receipt。Manifestation 其余状态
+> 一个模拟对象并丢失响应，强杀旧应用后由新 JVM 对账成一张 Receipt；第四个 operating
+> 切片用 owner-scoped readiness、populated V1/V2/V3 升级、packaged migration fail-fast 和
+> PostgreSQL new-database restore 验证了可操作边界。复核也推翻了一个过强结论：现有 crash
+> 发生在数据库已记录 `UNKNOWN` 之后，尚未证明 provider success 后、local commit 前遗留
+> `DISPATCHING` 的安全接管，所以 ADR 仍为 Proposed，真实 Connector Gate 保持关闭。
+> Manifestation 其余状态
 > 仍在内存，系统也没有生产认证、真实模型、Temporal 或真实平台 Connector。研发中我把 Codex
 > 当受监督的工程团队，主线程整合需求与验证证据，Subagent 做边界清楚的探索、测试设计和独立
-> 审查，但风险接受和里程碑 go/no-go 由我负责。下一步是备份恢复和 operating evidence
-> 证据；真实访谈、复用与价格实验仍需项目所有者开始记录。
+> 审查，但风险接受和里程碑 go/no-go 由我负责。真实访谈、复用与价格实验仍需项目所有者开始
+> 记录。
 
 这段是仓库提供的表达草稿；项目所有者完成无资料 Teach-back 前，不得把它当作个人能力已验证。
 

@@ -7,9 +7,13 @@ EmergeOS 不是聊天机器人、笔记 App 或自动化工具箱。它要解决
 > **把一个人刚刚看到、想到、想要的东西，在几分钟内变成有证据、可编辑、可执行、可复盘的作品或行动。**
 
 当前阶段是 `0.1 / research prototype`。仓库已经建立第一条无外部副作用的纵向闭环，并完成
-前三个 PostgreSQL 纵向切片：Capture 可在真实应用进程重启后取回；两个独立应用实例并发
+四个 Stage 1 PostgreSQL 工程切片：Capture 可在真实应用进程重启后取回；两个独立应用实例并发
 修订同一 Artifact base 时，数据库 compare-and-swap 只允许一个新版本；独立、持久化状态的
 Fake Provider 在响应丢失与真实应用 JVM 重启后，可把一个模拟对象对账成一张 Receipt。
+readiness、populated schema 升级、incompatible migration fail-fast 与 PostgreSQL
+backup/restore 已有可重放证据。但 provider success 后、local outcome 持久化前崩溃可能遗留
+`DISPATCHING`，当前没有安全 lease/fencing 接管；ADR-0004 仍为 Proposed，真实 Connector
+Gate 保持关闭。
 真实模型、Temporal、生产认证、加密存储和平台连接器尚未接入，不应将演示结果理解为生产
 能力或真实平台结果。
 
@@ -43,7 +47,8 @@ Secret Broker 落地前，持久化 Capture 会拒绝 `SENSITIVE` 和 `SECRET` �
 
 Stage 0 Manifestation 闭环仍刻意使用内存存储和确定性 Stub。Stage 1 已把独立的 Capture、
 Artifact lineage 和 local ActionAttempt/Receipt 边界替换为 PostgreSQL；S3 Action 只连接
-loopback-only 模拟 Provider，Operations 将继续作为 S4 单独验证。
+loopback-only 模拟 Provider；S4 只增加薄 operations/readiness 边界和迁移/恢复证据，没有
+增加新的领域状态、V4 schema 或通用运维平台。
 
 ## 快速开始
 
@@ -54,6 +59,9 @@ loopback-only 模拟 Provider，Operations 将继续作为 S4 单独验证。
 npm ci
 ./scripts/verify-contracts.sh
 ./mvnw --batch-mode --no-transfer-progress verify
+
+# clean-checkout、packaged JVM、独立 Fake Provider 的 Stage 1 operating demo
+./scripts/run-stage1-operating-demo.sh
 
 docker run --detach --rm --name emerge-postgres \
   -e POSTGRES_DB=emerge \
@@ -73,10 +81,12 @@ S3 Action API 还要求另行启动测试用的 loopback Fake Provider。默认�
 `UNKNOWN`，不会伪造成功 Receipt。完整外部进程与故障恢复证据由 packaged-process 验收测试
 提供，不把 test fixture 包装成可用 Connector。
 
-另开终端：
+另开终端。liveness 表示进程可服务；readiness 还会检查 PostgreSQL、Flyway 与当前
+server-configured principal 的 unresolved Action：
 
 ```bash
-curl -s http://localhost:8080/actuator/health
+curl -s http://localhost:8080/actuator/health/liveness
+curl -s http://localhost:8080/actuator/health/readiness
 
 curl -s \
   -H 'Content-Type: application/json' \
@@ -135,6 +145,9 @@ curl -s \
 Capture 与独立 Artifact lineage 写入本机 PostgreSQL；Manifestation 仍只写入应用进程内存
 中的草稿回执。独立 local ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问
 loopback Fake Provider 并产生模拟对象。它们都不会访问或发布到任何真实外部平台。
+
+状态含义、`UNKNOWN` 恢复入口、迁移/备份演练和明确限制见
+[Stage 1 Operating Runbook](./docs/operations/stage1-operating-runbook.md)。
 
 ## 仓库地图
 

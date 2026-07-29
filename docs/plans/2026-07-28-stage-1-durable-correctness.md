@@ -233,6 +233,59 @@ User result: another developer can run the durable flow and distinguish readines
 
 Receipt: repeatable demo, deterministic verification, migration/recovery evidence, Case Card and Build Note.
 
+#### S4 slice delta · 2026-07-29
+
+- Baseline and user result: start from clean
+  `main@b64f90316ffe15d4b4c166df18ed0c41e5ad878f`. A developer starting from a clean
+  checkout must be able to run one loopback-only, synthetic HTTP demo and tell apart a serving
+  application (`READY`), an unresolved Action (`UNKNOWN`) and a reconciled Action
+  (`SUCCEEDED`). The demo and runbook must name the exact recovery entry and must not imply a real
+  Connector, provider-call exactly-once or production readiness.
+- Evidence correction and scope decision: two independent read-only audits reproduced that
+  `RecoverableLocalActionHttpIT` releases the provider, waits for both requests and durable
+  `UNKNOWN`, and only then kills the application JVMs. It therefore does not satisfy ADR-0004's
+  provider-success-before-local-outcome crash window. Safe stale-`DISPATCHING` takeover would
+  require PostgreSQL-canonical ownership/fencing, database time, expiry/heartbeat semantics,
+  recovery authority, atomic budget rules and false-takeover/concurrency tests. That is a new
+  runtime slice, not S4 operating evidence. S4 will not add it; ADR-0004 returns to `Proposed`,
+  and the real-Connector Gate remains closed.
+- State/operating model: the S3 state machine remains
+  `PLANNED → DISPATCHING → SUCCEEDED | FAILED | UNKNOWN` and
+  `UNKNOWN → RECONCILING → SUCCEEDED | FAILED | UNKNOWN`.
+  S4 adds no transition. Operational readiness reports database and migration truth plus
+  owner-scoped unresolved counts. `UNKNOWN` has the existing explicit reconcile entry;
+  `DISPATCHING` and `RECONCILING` are visible but S4 does not pretend they have a safe stale
+  takeover entry.
+- First Acceptance Red: extend the packaged-process
+  `RecoverableLocalActionHttpIT`, which already owns real PostgreSQL, an independent file-backed
+  Fake Provider JVM and separately packaged application JVMs. Spring Boot 4.1 already exposes
+  `GET /actuator/health/readiness`; before production implementation the request must return the
+  built-in response but fail the test because the owner-scoped `stage1Durability` component and
+  its database/migration/Action truth are absent. After Green the same outside-in scenario must
+  observe initial `UP`, `OUT_OF_SERVICE` while `DISPATCHING`/`UNKNOWN`, and an exact
+  `SUCCEEDED` Action after reconciliation. The earlier no-object `UNKNOWN` intentionally keeps
+  final operational readiness out of service; S4 must not hide it merely to print a green ending.
+- Predicted failures: a readiness endpoint that only mirrors process liveness hides database or
+  migration failure; treating `UNKNOWN` as application-down makes its recovery API unusable;
+  ignoring `DISPATCHING` repeats the ADR evidence gap; a global count leaks another configured
+  principal; querying tables before Flyway completion creates startup races; a migration rehearsal
+  that checks only table existence misses content/hash/lineage/attempt/Receipt drift; a same-cluster
+  object reconstruction is not backup restore; a static trace with real paths, credentials or
+  process-specific identifiers is not a sanitized clean-checkout demo.
+- Migration and recovery evidence: rehearse populated V1 → current, populated V2 → current,
+  populated V3 → current and fresh current install against PostgreSQL 18.4. Compare stable S1
+  request/content hashes, S2 head and complete lineage, and S3 plan/artifact hashes,
+  transitions/budget/Receipt before and after. Corrupt an applied migration checksum and prove the
+  packaged application fails before readiness. Run a real PostgreSQL logical backup, inject
+  destructive synthetic data loss, restore into a clean database/schema, measure the observed
+  recovery interval and re-run the stable-data assertions. No universal down migration is promised.
+- File ownership: the main thread is the only writer. S4 owns one thin PostgreSQL operations probe,
+  one loopback HTTP readiness boundary, targeted PostgreSQL/package-process tests, one replay
+  script/runbook and S4 evidence documents. Existing V1–V3 schema and S1–S3 behavior change only
+  for demonstrated test/evidence correction. S4 owns no lease runtime, Temporal, real Connector,
+  AgentKernel, model, UI, authentication, LAN/public listener, generic outbox/metrics platform or
+  real user data. Read-only subagents own only audit, test design and final production review.
+
 ## Lane B · Product and commercial discovery
 
 This lane starts on Day 1 and does not wait for PostgreSQL.
@@ -299,7 +352,8 @@ Before each slice begins, its short inline delta in this ExecPlan or linked Issu
 | duplicate Capture, different hash | conflict | new nonce or explicit user decision |
 | two writers, stale base | one winner, one conflict | reload latest Artifact |
 | provider timeout, outcome unknown | `UNKNOWN` | reconcile by idempotency key |
-| independent provider success, app response lost/JVM killed | `UNKNOWN`, then `SUCCEEDED` | provider lookup + Receipt commit after app restart |
+| independent provider success, response lost and local `UNKNOWN` committed | `UNKNOWN`, then `SUCCEEDED` | provider lookup + Receipt commit after app restart |
+| independent provider success, app killed before any local outcome commit | unresolved `DISPATCHING`; real Connector Gate blocked | future fenced stale-claim design; no S4 auto-recovery |
 | incompatible migration | application not ready | backup restore or forward-fix |
 
 No Gate may use “explainable” without mapping the observed condition to one of these states and a recovery
@@ -387,11 +441,23 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   exact-Capability tests and preliminary multi-process fault Receipt green.
 - [x] 2026-07-28 18:43 +08:00: independent review's four P1 findings fixed; focused
   regressions and the packaged response-loss/kill/reconcile scenario rerun green.
-- [x] 2026-07-28 18:47 +08:00: independent post-fix review closed with `P0=0`,
-  `P1=0`; ADR-0004 Required evidence accepted.
+- [x] 2026-07-28 18:47 +08:00: independent post-fix review closed the then-known
+  implementation findings with `P0=0`, `P1=0`; its ADR-0004 Required-evidence conclusion is
+  superseded by the 2026-07-29 S4 crash-window re-audit.
 - [x] 2026-07-28 18:47 +08:00: S3 required final verification passed; engineering
   Receipt and focused commit prepared.
-- [ ] S4 operating and interview evidence.
+- [x] 2026-07-29: S4 baseline and independent ADR-0004 evidence-gap audit recorded;
+  stale-`DISPATCHING` runtime expansion rejected and ADR returned to Proposed.
+- [x] 2026-07-29 16:49 +08:00: S4 readiness Acceptance/Focused Red and
+  owner-scoped packaged-process Green recorded.
+- [x] 2026-07-29 17:02 +08:00: populated V1/V2/V3/fresh migration,
+  new-database backup restore and incompatible packaged migration fail-fast evidence passed.
+- [x] 2026-07-29 17:18 +08:00: S4 clean replay/evidence documents and independent
+  post-implementation review complete with post-fix `P0=0`, `P1=0`, `P2=0`.
+- [x] 2026-07-29 17:19 +08:00: S4 required contracts, doc links and full Maven
+  verification passed.
+- [x] 2026-07-29 17:21 +08:00: S4 final Diff/scope checks passed and one focused
+  commit was prepared; its Git ID and clean-worktree status are the post-commit task Receipt.
 - [ ] Stage gate and `continue / narrow / pivot` decision.
 
 ## Decisions
@@ -441,6 +507,11 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   echo matches the request. Missing, malformed or substituted echoes remain `UNKNOWN`. S3
   canonicalizes generated ActionPlan time to microseconds before hashing so PostgreSQL
   `TIMESTAMPTZ` round-trip cannot change the plan identity.
+- 2026-07-29, S4: do not infer safe stale-`DISPATCHING` recovery from a later
+  `UNKNOWN`-state restart. A timeout threshold or startup reset cannot distinguish a dead owner
+  from a slow live provider call. PostgreSQL-canonical ownership/fencing is a future vertical
+  runtime slice, so S4 corrects ADR-0004 to Proposed and exposes the unresolved state without
+  inventing a recovery path.
 
 ## Surprises, failures and verification receipts
 
@@ -598,14 +669,111 @@ do not count.
   wrong-audience/account `409`, equivalent foreign/missing GET/reconcile `404`, and
   `simulated=true`.
 - 2026-07-28 18:47 +08:00 · independent post-fix production review:
-  the same read-only reviewer verified all four P1 corrections, found no new P0/P1, and independently
-  reran 7 PostgreSQL Action-store plus 2 provider-adapter tests successfully. ADR-0004's five
-  Required evidence items are now all mapped to executable evidence, so its status changed from
-  Proposed to Accepted. The acceptance is limited to this simulated local boundary and does not
-  claim a real Connector or exactly-once provider calls. Remaining P2s are documented rather than
-  hidden: startup failure before `ProcessBuilder.start` returns can leave a test temp path, provider
-  file reload is not separately proven by restarting the provider itself, and a crash left in
-  `DISPATCHING` needs a later stale-claim operating policy.
+  the same read-only reviewer verified all four then-known P1 corrections, found no new
+  implementation P0/P1, and independently reran 7 PostgreSQL Action-store plus 2
+  provider-adapter tests successfully. It concluded that ADR-0004's five Required evidence items
+  were mapped and changed the ADR from Proposed to Accepted. The 2026-07-29 S4 re-audit below
+  supersedes that evidence conclusion because the crash was after durable `UNKNOWN`, not while
+  still `DISPATCHING`. Other recorded P2s were startup temp-path cleanup and provider file reload.
+- 2026-07-29 · S4 independent ADR-0004 evidence-gap audit and scope decision:
+  two read-only reviewers traced the exact process test and production path. The provider is held
+  before object creation with PostgreSQL at `DISPATCHING`; the test releases it, waits for both
+  HTTP calls and durable `UNKNOWN`, confirms one object/no Receipt, and only then force-kills both
+  application JVMs. Core and V3 expose reconciliation only from `UNKNOWN`; no owner, lease,
+  fencing epoch, database-time staleness or `DISPATCHING` takeover exists. Audit result was
+  `P0=0`; P1 findings were the unrecoverable crash window, overstrong ADR/ExecPlan claims and the
+  false-takeover risk of an `updated_at` threshold. S4 chose no runtime expansion, corrected
+  ADR-0004 to Proposed and kept real Connectors blocked. This is a documentation/Gate correction,
+  not a claim that the missing fault has been fixed.
+- 2026-07-29 16:42 +08:00 · S4 Acceptance Red:
+  `./mvnw --batch-mode --no-transfer-progress -pl apps/api -am verify
+  -Dit.test=RecoverableLocalActionHttpIT -Dfailsafe.failIfNoSpecifiedTests=false`
+  built the packaged jar, started PostgreSQL 18.4, an independent Fake Provider JVM and two
+  packaged application JVMs, and reached Boot's existing
+  `/actuator/health/readiness` with `200/UP`. It then failed only at the new outside-in
+  expectation with `PathNotFoundException: Missing property in path $['components']`;
+  the owner-scoped database/migration/Action durability component did not yet exist. Core,
+  in-memory, PostgreSQL and API unit suites were green before the intended Failsafe Red.
+- 2026-07-29 16:43 +08:00 · S4 Focused Red:
+  `./mvnw --batch-mode --no-transfer-progress -pl adapters/postgres -am
+  -Dtest=PostgresStage1OperationsProbeTest -Dsurefire.failIfNoSpecifiedTests=false test`
+  failed at test compilation because `PostgresStage1OperationsProbe` did not exist. The
+  test already fixed the required owner-scoped counts for all six Action states, the four-state
+  unresolved total and the read-only no-transition/no-Receipt-mutation boundary before the
+  adapter implementation.
+- 2026-07-29 16:49 +08:00 · S4 readiness/fault Green:
+  the focused PostgreSQL probe test passed with one row in every Action state for the configured
+  principal, one foreign `UNKNOWN`, an unresolved total of four and no transition/Receipt
+  mutation. The packaged scenario then passed with distinct PIDs
+  `provider=96920`, competing apps `96921/96935`, restarted app `96988` and
+  foreign-principal app `97004`. Readiness was initially `UP`, became
+  `OUT_OF_SERVICE` for owner-scoped `DISPATCHING`/`UNKNOWN`, exposed the exact V3
+  migration and recovery boundaries, and remained out of service after one Action reached
+  `SUCCEEDED` because the no-object attempt was still honestly `UNKNOWN`. The foreign
+  principal's readiness stayed `UP`. An intermediate run revealed that recovery-process startup
+  must wait on liveness rather than global health; otherwise the truthful unresolved state
+  prevents the very JVM needed for reconciliation from being recognized as started.
+- 2026-07-29 16:59 +08:00 · S4 populated upgrade and backup/restore game day:
+  `./mvnw --batch-mode --no-transfer-progress -pl adapters/postgres -am
+  -Dtest=Stage1MigrationAndRecoveryTest
+  -Dsurefire.failIfNoSpecifiedTests=false test` passed two PostgreSQL 18.4 tests.
+  Independent populated V1, V2 and V3 schemas upgraded to current V3 without changing any
+  stable S1 Capture/hash, S2 Artifact head/version/lineage or S3
+  ActionAttempt/transition/budget/Receipt value; a fresh install produced V3 and six business
+  tables. The recovery game day ran real `pg_dump -Fc --no-owner --no-privileges`, injected
+  `TRUNCATE captures CASCADE`, created a new database, ran
+  `pg_restore --single-transaction --exit-on-error`, revalidated Flyway and matched the complete
+  six-table snapshot. The observed interval from recovery start through comparison was 229 ms in
+  this one local run; it is not an RTO, RPO, capacity result or SLA.
+- 2026-07-29 17:02 +08:00 · S4 incompatible migration packaged fail-fast:
+  `./mvnw --batch-mode --no-transfer-progress -pl apps/api -am verify
+  -Dit.test=IncompatibleMigrationFailsFastHttpIT
+  -Dfailsafe.failIfNoSpecifiedTests=false` applied V1–V3 to real PostgreSQL, deliberately
+  changed the applied V3 checksum, and launched the packaged jar. Flyway reported the exact V3
+  checksum mismatch, the process exited non-zero, readiness was never `UP`, and the captured log
+  did not contain the synthetic database password. This proves failure-stop for one incompatible
+  history; it does not promise a universal down migration.
+- 2026-07-29 17:13 +08:00 · S4 live-process/database-loss boundary:
+  `./mvnw --batch-mode --no-transfer-progress -pl apps/api -am verify
+  -Dit.test=DatabaseUnavailableReadinessHttpIT
+  -Dfailsafe.failIfNoSpecifiedTests=false` started a packaged ready application and then stopped
+  its PostgreSQL container. Readiness became `503/DOWN` with the fixed
+  `DATABASE_OR_MIGRATION_UNAVAILABLE` code while process liveness remained `200/UP`.
+  The response contained no database password, JDBC URL, mapped port or driver exception. The
+  readiness group intentionally uses the bounded `stage1Durability` contributor rather than
+  exposing Boot's raw database contributor under `show-details: always`.
+- 2026-07-29 17:10 +08:00 · S4 clean-checkout replay command:
+  `./scripts/run-stage1-operating-demo.sh` passed from the repository root. It rebuilt the
+  packaged jar, started real PostgreSQL, an independent file-backed Fake Provider JVM and
+  separately packaged application JVMs, and printed one simulated object, one Receipt, two calls,
+  `PLANNED → DISPATCHING → UNKNOWN → RECONCILING → SUCCEEDED`, initial readiness `UP`,
+  unresolved readiness `OUT_OF_SERVICE` and one remaining honest no-object `UNKNOWN`. The
+  committed trace removes credentials, URLs/ports, PIDs, paths, content, principals and object
+  identifiers; the runbook explicitly says this is not a real Connector or provider-call
+  exactly-once.
+- 2026-07-29 17:18 +08:00 · S4 independent post-implementation production review:
+  the read-only reviewer inspected the complete production/test/documentation Diff and
+  independently reran the PostgreSQL probe/migration/restore tests, packaged checksum fail-fast,
+  packaged restart/reconcile, database-loss readiness, doc links and `git diff --check`.
+  It found `P0=0`, `P1=2`: the outcome still called S4 open, then used “real Connector Gate
+  open” in a way that could imply enablement. Both were corrected. The post-fix review reported
+  `P0=0`, `P1=0`, `P2=0`, with ADR-0004 `Proposed`, the real Connector Gate explicitly
+  `blocked`, no stale-`DISPATCHING` recovery claim and no fabricated human or business evidence.
+- 2026-07-29 17:19 +08:00 · S4 required final repository verification:
+  `./scripts/verify-contracts.sh` compiled 4 JSON Schema 2020-12 contracts and validated
+  8 fixtures plus 1 uniquely keyed synthetic evaluation task pack;
+  `./scripts/verify-doc-links.sh` validated local links in 60 Markdown files; and
+  `./mvnw --batch-mode --no-transfer-progress verify` passed 23 Core, 6 in-memory adapter,
+  22 PostgreSQL adapter, 20 API and 6 packaged-process tests. The full run repeated the S1
+  restart, S2 two-process CAS, S3 independent-provider restart/reconcile, S4 populated
+  migration/restore, incompatible-checksum fail-fast and database-loss readiness Receipts.
+- 2026-07-29 17:21 +08:00 · S4 pre-commit integrity Receipt:
+  after the final evidence update, contracts and doc links reran green; `git diff --check`,
+  `bash -n scripts/run-stage1-operating-demo.sh` and `jq empty` on the sanitized trace all
+  passed. The file list contains no Core or migration change and no forbidden runtime, Connector,
+  model, UI, authentication, public listener, generic outbox/metrics or real-data artifact. One
+  focused commit is the only remaining repository mutation; Git supplies its ID and clean-tree
+  status outside this self-referential plan snapshot.
 - 2026-07-28 18:47 +08:00 · required final S3 verification:
   `./scripts/verify-contracts.sh` passed 4 schemas, 8 fixtures and 1 synthetic task pack;
   `./scripts/verify-doc-links.sh` passed local links in 56 Markdown files; and
@@ -619,8 +787,10 @@ do not count.
 
 ## Outcome and next hypothesis
 
-S1–S3 engineering Receipts are complete. Stage 1 remains active because S4, owner-led
-Teach-back/transfer exercises and Lane B market evidence are still open. The S3 result is exactly one
-recoverable simulated local object; it is not a real Connector or exactly-once provider-call claim.
-Stage 2 begins only when the full engineering, market and human-learning Gates are decided; a failed market
-hypothesis leads to a new vertical product result, not automatic runtime expansion.
+S1–S4 engineering slice Receipts are complete. Stage 1 remains active because ADR-0004 remains Proposed,
+the real Connector Gate remains blocked, and owner-led Teach-back/transfer/unknown-fault exercises plus
+Lane B market evidence are still incomplete. The S3/S4 result is exactly one recoverable simulated local
+object after durable `UNKNOWN`; it is not a real Connector, an exactly-once provider-call claim or a safe
+stale-`DISPATCHING` takeover. Stage 2 begins only when the full engineering, market and human-learning Gates are
+decided; a failed market hypothesis leads to a new vertical product result, not automatic runtime
+expansion.

@@ -20,7 +20,8 @@ Stage 0 只有在项目所有者能白板解释状态机、真相边界和失败
 
 ## Stage 1 · Durable Correctness and Problem Discovery
 
-状态：**Now — S1–S3 工程回执已完成；S4、人类 Teach-back 与市场 Gate 仍未完成。**
+状态：**Now — S1–S4 工程切片回执已完成；真实 Connector Gate、人类 Teach-back 与市场 Gate
+仍未完成。**
 
 执行计划：[Stage 1 Durable Correctness](./docs/plans/2026-07-28-stage-1-durable-correctness.md)
 
@@ -29,6 +30,8 @@ S1 回执：[Restart-safe Capture Build Note](./docs/operations/build-notes/2026
 S2 回执：[Conflict-safe Revision Build Note](./docs/operations/build-notes/2026-07-28-s2-conflict-safe-revision.md)
 
 S3 回执：[Recoverable local Action Build Note](./docs/operations/build-notes/2026-07-28-s3-recoverable-local-action.md)
+
+S4 回执：[Operating and Gate-Closure Build Note](./docs/operations/build-notes/2026-07-29-s4-operating-gate-closure.md)
 
 产品/工程：
 
@@ -61,6 +64,7 @@ Gate：
 - 独立进程且持久化状态的 Fake Provider 只有一个可观察模拟对象，真实终止/重启应用后可对账
   为一张 Receipt；
 - fresh install、上一版升级、失败停止及备份恢复/forward-fix 有证据；
+- provider success 后、local outcome/Receipt commit 前进程死亡不会造成无权接管或双活提交；
 - 完成 14 天记录、10 次访谈、3 位真实 Seed、一次价格请求和明确商业决策；
 - 完成故障恢复 Demo、Case Card、无资料 Teach-back 和延迟变体题。
 
@@ -180,6 +184,8 @@ Gate：
 - 跨进程、双实例下同一幂等键只产生一个外部对象；
 - `UNKNOWN → RECONCILING → Receipt` 可解释恢复；
 - Capability 精确绑定 ActionPlan、连接器 audience、账号与幂等键。
+- provider success 后、local outcome/Receipt commit 前进程死亡有 PostgreSQL-canonical
+  owner/lease/fencing 与误接管证据；当前没有这条证据，ADR-0004 为 `Proposed`，Gate 保持关闭。
 
 ## 防止架构黑洞
 

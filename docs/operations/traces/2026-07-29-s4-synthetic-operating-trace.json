@@ -1,0 +1,90 @@
+{
+  "schema": "emergeos.stage1-operating-trace.v1",
+  "recordedAt": "2026-07-29",
+  "synthetic": true,
+  "networkBoundary": "loopback-only",
+  "application": {
+    "kind": "packaged-application-jvm",
+    "restartWasNewProcess": true
+  },
+  "provider": {
+    "kind": "independent-fake-provider-jvm",
+    "state": "independent-file",
+    "simulatedObjects": 1,
+    "callsForRecoveredAttempt": 2,
+    "providerCallExactlyOnce": false
+  },
+  "readiness": [
+    {
+      "phase": "before-action",
+      "status": "UP",
+      "unresolved": 0
+    },
+    {
+      "phase": "dispatch-or-unknown",
+      "status": "OUT_OF_SERVICE",
+      "unresolved": 2
+    },
+    {
+      "phase": "after-reconciliation",
+      "status": "OUT_OF_SERVICE",
+      "unresolved": 1
+    }
+  ],
+  "recoveredAttempt": {
+    "states": [
+      "PLANNED",
+      "DISPATCHING",
+      "UNKNOWN",
+      "RECONCILING",
+      "SUCCEEDED"
+    ],
+    "finalState": "SUCCEEDED",
+    "receipts": 1,
+    "simulatedObjects": 1
+  },
+  "remainingUnresolved": {
+    "state": "UNKNOWN",
+    "reasonClass": "no-provider-identifier",
+    "receipts": 0,
+    "recoveryEntry": "POST /api/v1/actions/{attemptId}/reconcile"
+  },
+  "migrationEvidence": {
+    "populatedUpgradeSources": [
+      "V1",
+      "V2",
+      "V3"
+    ],
+    "freshInstall": "V3",
+    "stableBusinessTables": 6,
+    "incompatibleChecksumReachedReadiness": false
+  },
+  "databaseFaultEvidence": {
+    "database": "unavailable",
+    "readiness": "DOWN",
+    "liveness": "UP",
+    "faultCode": "DATABASE_OR_MIGRATION_UNAVAILABLE",
+    "connectionDetailsExposed": false
+  },
+  "backupRestoreEvidence": {
+    "format": "PostgreSQL custom archive",
+    "failureInjection": "synthetic truncate",
+    "destination": "new database",
+    "truthComparison": "stable",
+    "observedRecoveryMillis": 229,
+    "isRtoOrSla": false
+  },
+  "gate": {
+    "adr0004": "Proposed",
+    "realConnector": "blocked",
+    "missingBoundary": "safe stale DISPATCHING takeover after provider success"
+  },
+  "redactions": [
+    "database credentials",
+    "database URLs and ports",
+    "process IDs",
+    "temporary paths",
+    "capture and artifact content",
+    "principal and object identifiers"
+  ]
+}

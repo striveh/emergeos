@@ -1,7 +1,8 @@
 # ADR-0004: Persist action attempts before enabling real connectors
 
-- Status: Accepted
+- Status: Proposed
 - Date: 2026-07-28
+- Evidence correction: 2026-07-29
 
 ## Context
 
@@ -34,9 +35,9 @@ Before the first real connector is enabled:
 - A provider with no external identifier after timeout remains `UNKNOWN`, not `SUCCEEDED`.
 - Capability audience/account/plan mismatches are rejected deterministically.
 
-## Acceptance evidence
+## Implemented partial evidence
 
-Accepted on 2026-07-28 for the S3 simulated local Action boundary:
+S3 implemented and verified the following simulated local Action boundary:
 
 - [`RecoverableLocalActionHttpIT`](../../../apps/api/src/test/java/io/emergeos/api/RecoverableLocalActionHttpIT.java)
   runs one file-backed Fake Provider JVM and two packaged application JVMs against PostgreSQL. The provider
@@ -56,8 +57,17 @@ Accepted on 2026-07-28 for the S3 simulated local Action boundary:
 - The dated [S3 Build Note](../../operations/build-notes/2026-07-28-s3-recoverable-local-action.md) records
   Red, process IDs, database/provider counts, independent review and limitations.
 
-Acceptance applies only to the design decision and simulated object evidence. It does not accept a real
-Connector, a real-platform exactly-once claim, production authentication, Temporal or public access.
+That evidence kills the application only after the dropped provider response has already been recorded as
+`UNKNOWN`. It does not kill the process while PostgreSQL is still `DISPATCHING`, between provider success
+and the first durable local outcome. The current state machine has no safe stale-`DISPATCHING` ownership,
+fencing or takeover policy. A 2026-07-29 independent read-only re-audit therefore corrected the earlier
+overstatement that all Required evidence had been met.
+
+The implemented `UNKNOWN → RECONCILING` boundary remains valid, but this ADR stays Proposed and blocks any
+real Connector until the missing crash window has PostgreSQL-canonical ownership/fencing, database-time
+expiry semantics, atomic budget handling, false-takeover/concurrency evidence and a real process-kill
+acceptance test. `updated_at` thresholds, startup resets and sleep-based tests are explicitly insufficient.
+Nothing here claims real-platform exactly-once calls, production authentication, Temporal or public access.
 
 ## Consequences
 

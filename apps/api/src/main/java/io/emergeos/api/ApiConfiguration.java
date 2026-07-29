@@ -10,6 +10,7 @@ import io.emergeos.adapters.inmemory.UuidIdGenerator;
 import io.emergeos.adapters.postgres.PostgresActionAttemptStore;
 import io.emergeos.adapters.postgres.PostgresArtifactLineageStore;
 import io.emergeos.adapters.postgres.PostgresCaptureStore;
+import io.emergeos.adapters.postgres.PostgresStage1OperationsProbe;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.application.ArtifactLineageService;
 import io.emergeos.core.application.CaptureService;
@@ -21,6 +22,8 @@ import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
 import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
+import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -71,6 +74,20 @@ class ApiConfiguration {
   PostgresActionAttemptStore actionAttemptStore(
       DataSource dataSource, PlatformTransactionManager transactionManager) {
     return new PostgresActionAttemptStore(dataSource, transactionManager);
+  }
+
+  @Bean
+  PostgresStage1OperationsProbe stage1OperationsProbe(DataSource dataSource) {
+    return new PostgresStage1OperationsProbe(dataSource);
+  }
+
+  @Bean(name = "stage1Durability")
+  HealthIndicator stage1DurabilityHealthIndicator(
+      Flyway flyway,
+      PostgresStage1OperationsProbe stage1OperationsProbe,
+      @Value("${emerge.prototype.principal-id}") String principalId) {
+    return new Stage1DurabilityHealthIndicator(
+        flyway, stage1OperationsProbe, principalId);
   }
 
   @Bean

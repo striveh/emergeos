@@ -18,6 +18,8 @@ node_modules/
 data/
 artifacts/
 traces/
+!docs/operations/traces/
+!docs/operations/traces/*.json
 secrets/
 
 *.log

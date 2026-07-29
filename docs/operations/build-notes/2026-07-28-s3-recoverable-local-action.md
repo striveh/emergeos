@@ -111,7 +111,7 @@ can recover without guessing.
   unresolved attempts remain `UNKNOWN` for explicit later operating/human handling; S3 does not add a retry
   scheduler.
 - A process killed while still `DISPATCHING`, before it can record `UNKNOWN`, needs a later stale-claim
-  recovery policy. The accepted S3 fault occurs after the provider object exists and the dropped response
+  recovery policy. The implemented S3 fault occurs after the provider object exists and the dropped response
   has made the database outcome `UNKNOWN`; no broader lease/runtime mechanism is claimed.
 - Provider administration endpoints and file persistence exist only in the test process. The application
   adapter refuses non-loopback provider origins, but this is not a production Connector security design.
@@ -119,7 +119,8 @@ can recover without guessing.
   AgentKernel, an outbox, a model, UI, login, LAN/public binding, secrets or real user data.
 - The evidence proves one provider-observable simulated object, not one network call. The recovery scenario
   intentionally makes two provider calls: initial execute and reconciliation.
-- No backup restore/forward-fix game day, alerting or full S4 operating receipt is claimed.
+- This S3 Receipt did not claim backup restore/forward-fix, alerting or S4 operating evidence;
+  the later S4 Build Note records its separate migration/restore scope.
 - No human Teach-back, transfer/debugging exercise, Founder Seed, interview, reuse, quote, price request or
   payment is claimed.
 
