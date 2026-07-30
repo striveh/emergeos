@@ -70,6 +70,13 @@ attestation 或产品 Receipt。完整回执见
 [Stage 2 S4 Verified Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)，
 durable 增量见
 [Stage 2 S4 Durable Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+commit `33d1b9f` 又完成 S4 的第一个 Tool fault：OpenAI/其他 Model adapter 只传递有界、
+不可变且 redacted 的 raw arguments；`capture.read` 必须在 Tool-owned strict
+validation 中得到 typed arguments，registry 与 Task authority 都通过后才可 dispatch。
+Pack 005 证明 extra-property fault 保留一次可归因 Model step 与
+`RUNNING → FAILED` truth，但 Tool execute、Tool-backed Capture read 和 Artifact 均为
+0。完整回执见
+[Stage 2 S4 Tool Arguments Fault Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-tool-argument-fault.md)。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置

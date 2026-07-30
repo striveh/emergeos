@@ -12,7 +12,9 @@ modules/core
   port         对外能力端口，包括 provider-neutral AgentKernel
 
 adapters/agent-loop
-  framework-free 有限工具循环、provider-neutral Model/Tool SPI、固定工具注册表
+  framework-free 有限工具循环、provider-neutral Model/Tool SPI、版本化固定工具注册表
+  Model 只交付 bounded/immutable/redacted raw arguments；Tool 先做纯 validation，
+  生成 typed arguments 后才允许一次性 execute
   不依赖具体模型 SDK、Spring、数据库、Temporal 或其他 Agent Runtime
 
 adapters/inmemory
@@ -87,6 +89,10 @@ flowchart RL
 - `core` 不依赖 Spring、数据库、Temporal、AgentScope 或模型 SDK。
 - `contracts` 不依赖任何实现模块。
 - `agent-loop` 不依赖具体模型 SDK、Spring、数据库、Temporal 或上层 Agent Runtime。
+- 当前 `agent-tools-v2` manifest 精确绑定
+  `capture.read → urn:emergeos:tool:capture-read-arguments:v1`；缺失、额外 Tool 或
+  schema drift 都在打开 Model session 前 fail fast。Task 的 server-owned allowlist
+  仍是第二层权限，manifest 不能替代 Task authority。
 - `openai` 不依赖 API、Spring、数据库、Temporal 或其他 Agent Runtime；SDK 类型不得
   越过 adapter boundary。
 - `eval-runner` 不依赖 API、PostgreSQL、in-memory 产品 Adapter、Spring、Temporal
@@ -102,6 +108,26 @@ flowchart RL
 - Adapter 只能实现 Core Port，不能让 SDK 类型进入 Core。
 - API 负责传输协议，不能包含领域状态转移。
 - 跨模块只交换显式类型与引用，不共享可变聊天上下文。
+
+### Tool arguments 与 dispatch 边界
+
+Provider adapter 不再替具体 Tool 解释 arguments。它只保留最多 65,536 UTF-8 bytes 的
+opaque raw arguments；载体 immutable，`toString()` 永远 redacted。`capture.read`
+在 Tool-owned validation 阶段使用 Jackson 3.1.4 strict parser，额外收紧到 1,024 bytes，
+拒绝 duplicate keys、trailing tokens、unknown/missing/wrong-type 字段与非 canonical
+Capture ref。只有 validation 返回 immutable typed arguments，registry 又确认该 ref
+属于 Task inputs 后，才生成一次性 `PreparedToolExecution`。
+
+未注册或未被 Task 声明的 Tool 会在 validation 前直接 `BLOCKED`。只有同时
+registered 且被 `requiredTools` 声明的 call 才进入 Tool-owned validation；registry
+完成 input-ref authority 检查后，Kernel 会在接受 rejection 或写入
+`TOOL_REQUEST` 前重新检查 cancellation/deadline。这个 cooperative check 不是与后续
+同步 `execute` 原子化的强制中断。schema-invalid 路径只形成安全的
+`TOOL_REJECTED`，不会把 raw arguments 或字段名写入 Result、Trace 或 Bundle。当前
+Tool implementation 属于 Trusted TCB：接口约定 `validate` 无副作用，manifest 只绑定
+name/schema，尚未绑定实现制品身份。引入第三方 Tool 前必须增加 implementation
+identity、信任策略与验证参数不可变约束。当前 Tool limit 在 validation 之后判定，
+`invalid + over-limit` 的 precedence 尚未作为独立 fault pack 冻结。
 
 ### Offline Harness Runner 的 durable report 边界
 

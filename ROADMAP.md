@@ -78,7 +78,8 @@ Eval Runner、本地 attempt durability 与 terminal record create-only repair
 工程切片已通过。Live-provider smoke 尚未执行；
 S4 已完成首个 deterministic Verifier comparison、12 个 shared candidates /
 24 次 VerifierEvaluation、independent replay，以及 canonical durable report 的
-packaged multi-writer/process-kill/fresh-JVM 工程切片。完整 fault suite、typed
+packaged multi-writer/process-kill/fresh-JVM 工程切片；首个 Tool arguments
+pre-dispatch fault 也已完成。完整 fault suite、typed
 read-only Worker handoff、stochastic Harness 与真实 Seed Gate 尚未完成。**
 这条技术主线来自项目所有者 2026-07-30 的 Roadmap
 顺序例外；它不代表 Stage 1 的学习、市场或真实 Connector Gate 已完成。
@@ -110,6 +111,9 @@ S4 comparison 回执：
 S4 durable report 回执：
 [Durable Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)。
 
+S4 Tool arguments fault 回执：
+[Tool Arguments Fault Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-tool-argument-fault.md)。
+
 产品/工程：
 
 - Provider-neutral `AgentKernel` SPI，先 Fake 后 real adapter；
@@ -121,7 +125,8 @@ S4 durable report 回执：
   hard-link create-only terminal run record；
 - production read-only journal verifier 与 8-point fat-JAR process-kill/restart matrix；
 - 固定模型与 Task Pack 的 H0/H1 Harness 对照；
-- 错误工具结果、限流、Context Drift 和 Prompt Injection 故障集。
+- 已完成 schema-invalid Tool arguments 的 pre-dispatch fault；Tool timeout/执行失败、
+  限流、Context Drift 和 Prompt Injection 故障集仍开放。
 
 当前已经完成 synthetic Fake success 的 deterministic baseline、OpenAI Responses
 protocol 的 loopback evidence、bounded runner engineering Gate，以及 8 个选定
@@ -135,7 +140,11 @@ VerifierEvaluation，并由 independent verifier replay 得到 `VERIFIED_PASSED`
 相同 28,343-byte canonical report 已通过 packaged hard-link create-only commit、
 双 writer、7-point process-kill 与 fresh-JVM read-only verification。这个小型
 deterministic synthetic comparison 不是正式 60-run stochastic quality 结论；
-真实任务、人工盲评、完整 fault injection 与用户价值证据仍未执行。
+Pack 005 另以完全相同的 control/fault Task 证明 schema-invalid raw arguments 在
+Tool execute 前被拒绝：fault 的 Tool execute、Tool-backed read、Artifact 均为 0，
+并保留 typed failure 与 safe Trace。它是 deterministic Fake safety regression，
+不是 live model 或系统级“什么都没发生”。真实任务、人工盲评、其余 fault injection
+与用户价值证据仍未执行。
 `billingStatus=UNKNOWN` 表示 provider 费用未知，不能解释成免费；reservation 是调用前的
 authorization ceiling，provider 已返回的 observed usage 即使超过 reservation 也必须如实保留。
 

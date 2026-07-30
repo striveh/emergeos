@@ -81,6 +81,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [Stage 2 S4 Offline Comparison Loader Build Note](./operations/build-notes/2026-07-30-s2-s4-offline-comparison-loader.md)
 - [Stage 2 S4 Verified Offline Comparison Build Note](./operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)
 - [Stage 2 S4 Durable Offline Comparison Build Note](./operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)
+- [Stage 2 S4 Tool Arguments Fault Build Note](./operations/build-notes/2026-07-31-s2-s4-tool-argument-fault.md)
 - [Stage 1 Operating Runbook](./operations/stage1-operating-runbook.md)
 - [S4 Durable Operations Case Card](./interview/case-cards/2026-07-29-stage1-durable-operations.md)
 - [商业验证路线](./business/validation-roadmap.md)

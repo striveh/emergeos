@@ -4,7 +4,8 @@
 本地 attempt durability 与 terminal record create-only repair 工程切片已通过；
 live-provider smoke 尚未执行。S4 已完成
 首个 deterministic Verifier comparison、canonical durable report、packaged
-multi-writer/process-kill 与 fresh-JVM independent replay 工程切片；完整 fault suite、
+multi-writer/process-kill 与 fresh-JVM independent replay 工程切片，并完成首个
+Tool arguments pre-dispatch fault；完整 fault suite、
 bounded read-only Worker handoff、stochastic Harness、真实 Seed 与用户价值 Gate 尚未完成
 
 Owner：项目所有者 + main Codex agent
@@ -45,6 +46,10 @@ deterministic replay。Packaged writer 使用 create-only hard-link logical comm
 两个 fresh JVM 可从相同 report bytes 再次得到 `VERIFIED_PASSED`，选定
 process-kill windows 的 pre-link incomplete evidence 保持 `UNKNOWN`，committed
 residue 保持 `FINAL`；另有冲突/不可信 authoritative evidence 固定为 `INVALID`。
+Pack 005 又冻结了 schema-invalid Tool arguments 的第一组单变量 control/fault，
+并通过 production Agent draft vertical path 证明 fault 在 Tool dispatch 前结束：
+Fake Model step 和 `RUNNING → FAILED` truth 仍被如实记录，但 Tool execute、
+Tool-backed Capture read 与 Artifact 都为 0。
 当前仍没有 live-provider smoke、real model result、billing receipt 或 stochastic
 Harness comparison。较早的
 `TemplateArtifactGenerator` 仍是确定性的 Stage 0 scaffolding。
@@ -79,6 +84,11 @@ checkpointing or production autonomy.
   commits the Artifact. The model never writes PostgreSQL directly.
 - Tool registration, Task allowlist and principal-scoped access are separate
   checks. A model request cannot expand any of them.
+- Model adapter 只保留 bounded、immutable、redacted raw Tool arguments；具体 schema
+  由 Tool 在无副作用 validation phase 解释，typed arguments 形成后才允许一次性
+  dispatch。
+- `agent-tools-v2` 是 exact manifest，不是标签：缺失、额外 Tool 或 schema drift 都
+  fail fast；当前只绑定 `capture.read` argument schema v1。
 - Trace contains typed decisions, tool names, statuses, usage and references;
   it never stores hidden chain-of-thought.
 - S1 uses fixed model-step/tool-call limits, deadline checks and cooperative
@@ -475,6 +485,56 @@ then locate it from the Trace.
   authorization、`dirfd/openat` path anchoring、signature、producer attestation、
   WORM 或 product `AgentRun/HarnessRunBundle`。
 
+#### S4 F1 Tool arguments pre-dispatch fault delta · 2026-07-31
+
+- commit `33d1b9f` 将 `AgentModel.ToolCall` 改为携带最多 65,536 UTF-8 bytes 的
+  opaque `ToolArguments`；对象 defensive-copy、value-equality、`toString()` redacted，
+  malformed/duplicate/unknown JSON 不再被 provider adapter 预先归一化。
+- `AgentTool` 现在显式分成 pure `validate` 与 typed `execute`。
+  `CaptureReadTool` 使用项目实际解析版本 Jackson 3.1.4，将该 Tool 的 argument 上限
+  收紧到 1,024 bytes，并拒绝 duplicate keys、trailing tokens、unknown/missing/
+  wrong-type 字段和非 canonical
+  `capture://[A-Za-z0-9][A-Za-z0-9._~-]{0,199}` reference。
+- `AgentToolRegistry` 的 `agent-tools-v2` exact manifest 固定
+  `capture.read → urn:emergeos:tool:capture-read-arguments:v1`。Task registry version
+  在打开 Model session 前核对；Tool name/schema/完整集合、Task allowlist 与 Task input
+  reference 分层核验。只有全部通过才产生 one-shot `PreparedToolExecution`。
+- 未注册或未被 Task 声明的 Tool 在 validation 前直接 `BLOCKED`；对 registered +
+  declared call，registry 完成 validation 与 input-ref authority 检查后，Kernel 会在
+  接受 rejection 或写入 `TOOL_REQUEST` 前再次检查 cancellation/deadline。该
+  cooperative check 不是与同步 `execute` 原子化的强制中断。schema-invalid 路径形成
+  `FAILED / TOOL_ARGUMENTS_INVALID` 和
+  `MODEL_STEP → TOOL_REJECTED`；Trace 的 Tool name 只来自 declared Tool，
+  reference 为 null，raw arguments、`unexpected` 字段和 synthetic sentinel 不进入
+  Result、Trace 或 Bundle。
+- Pack 005 的 control/fault 使用相同 Task、Capture、Fake Model path、预算、时钟和
+  component versions，只增加一个 `unexpected` PUBLIC synthetic argument。control
+  counters 是 Model 2、validation 1、Tool execute 1、Tool-backed read 1、Artifact 1；
+  fault 是 Model 1、validation 1、Tool execute 0、Tool-backed read 0、Artifact 0。
+  两个 case 分别在两个 fresh fixture 中得到 exact-equal terminal observation。
+- 两个 case 的 Task hash 都是
+  `aea6ef82d51c34b69e5ee81924b029bd460942502d2eee75fae99a9fdee3d3cf`。
+  control Trace/Bundle hashes 为
+  `2c69c3c5e347d0ad510ee45c62a06f3bc800178bccefeea91169c43310be1fde` /
+  `6efc58076a2914f6e2eb3d28c0b66e31ef98f0257d9cea49c897ef4a6692c3c4`；
+  fault 为
+  `d5157c4273548d58596335485437bb472e70459b3203a277912461dd073126c9` /
+  `1370f686ecd5cb3697b08f8774834d61ffbf327c8ea1dec02ece5210c09e7163`。
+  Pack raw SHA 是
+  `64b7cf77942e444ee871d766c4dbcd38fa45fa1cdf0d2bf6e96d87f7b1211ece`。
+- active execution profile、Pack 002 与 Eval Runner 已迁移到 `agent-tools-v2`。
+  `openai-responses-synthetic-v1.json` 保留原 bytes/raw SHA 作为历史 identity；
+  v2 是 active environment，validator 固定两份 path/hash/version，并证明两者只改变
+  `toolRegistryVersion`。冻结的 Pack 004 与 v1 contracts/golden/compatibility
+  fixtures 不执行当前 `AgentToolRegistry`，继续保留历史 identity。
+- “零副作用”只指 fault 后零 Tool dispatch、零 Tool-backed read、零 Artifact；
+  不抹掉已发生的 Fake Model step、AgentDraftService preflight 或进程内
+  `RUNNING → FAILED` terminal AgentRun/lifecycle truth。Pack 005 vertical 使用
+  `RecordingRunStore`，没有新增 PostgreSQL、process restart 或跨 JVM durability
+  receipt。该 vertical 本身没有网络访问；完整验证只使用本机 loopback HTTP 与本地
+  PostgreSQL/Testcontainers TCP，没有访问外网、live provider、Connector 或真实用户
+  数据，也不证明模型质量、账单、用户价值或任意第三方 Tool 安全。
+
 Stage gate:
 
 - another developer can replay the Fake and real-model experiments;
@@ -661,6 +721,17 @@ baseline.
   通过 362 tests，contract verifier 通过 5 Schemas / 33 fixtures / 2 golden vectors /
   4 Packs / 1 environment。完整回执见
   [Durable Offline Comparison Build Note](../operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+- [x] 2026-07-31：S4/F1 Acceptance Red 证明旧 Loop 会把 extra-property arguments
+  送入 Tool；补充 canonical-ref 与 empty-registry adversarial Red 后，分别观察到
+  expected `TOOL_EXECUTION_FAILED`/valid-tilde failure 与 v2 空 manifest 被接受。
+- [x] 2026-07-31：commit `33d1b9f` 完成 opaque raw arguments、Tool-owned strict
+  validation、typed one-shot dispatch、exact registry v2 manifest、safe typed failure
+  与 Pack 005 vertical evidence。canonical ref、registry completeness、cancel/deadline
+  precedence、duplicate JSON、privacy 与 frozen identity 的审查 P1 全部转为回归。
+- [x] 2026-07-31：focused Core/Agent Loop/In-memory checks 通过 65 tests；
+  contracts 通过 5 Schemas / 33 fixtures / 2 golden vectors / 5 Packs /
+  2 environments；全仓 `clean verify` 通过 390 tests，0 failure/error/skipped。
+  三路独立 final audit 对代码均为 `P0=0、P1=0`。
 
 ## Decisions
 
@@ -718,6 +789,12 @@ baseline.
   `createLink(target,pending)`，不再用 `ATOMIC_MOVE` 充当 no-replace。目录 `fsync`
   完成后才暴露 link-complete process phase；pending cleanup residue 只按 non-null
   file identity 解释，pending bytes 永不 authoritative。
+- 2026-07-31：Model adapter 不拥有具体 Tool schema。它必须把 bounded raw arguments
+  原样交给 Tool validation，避免 provider-specific normalization 隐藏 duplicate/
+  unknown/malformed 输入；Tool execute 只接受 typed validated arguments。
+- 2026-07-31：`toolRegistryVersion` 必须对应 exact server-owned manifest。当前
+  `agent-tools-v2` 只绑定 `capture.read` schema v1；缺失 Tool 的 runtime 不能继续自称
+  v2。第三方 Tool implementation 仍是 Trusted TCB，不能仅凭 name/schema 获得信任。
 
 ## Surprises and failures
 
@@ -791,6 +868,15 @@ baseline.
   状态机：这里没有 claim file，并且 terminal journal 是闭合条件。新增 Red 固定了
   pending-only 永不 authoritative、同 inode residue 可以前进、不同 inode不能因
   bytes 相同或随后消失而升级。
+- OpenAI adapter 原先提前把 function arguments 解析成 reference，并要求它等于
+  Task input。这样虽然能拒绝异常，却会把 Tool schema 藏在 provider adapter 中，
+  duplicate/unknown/malformed shape 也无法到达统一的 Tool validation 边界。现在
+  adapter 只保留 bounded raw arguments，schema authority 回到 Tool。
+- `toolRegistryVersion` 原先只是字符串标签；一个空 registry 也能自称
+  `agent-tools-v2`。新增 Red 证明版本必须对应 exact manifest，并保留 v1 environment
+  原 bytes 作为历史 identity，避免为修当前 runtime 改写旧执行环境。
+- `capture.read` 第一版 validation regex 与 durable ResourceBinding contract 漂移：
+  接受前导标点/colon，却拒绝合法 `~`。canonical-ref adversarial Red 将两层语法统一。
 
 ## Verification receipts
 
@@ -869,6 +955,27 @@ commit `a2cb02b` 在此基础上完成 canonical durable report：
 该 report 仍不是 historical process attestation、signature、power-loss evidence 或
 产品/商业结果。
 
+S4/F1 Tool arguments fault 当前已确认：
+
+- code commit `33d1b9f`；
+- Pack 005 raw SHA、Task/Trace/Bundle hashes、control/fault counters、ID 消耗与
+  fresh-fixture equality 均被 Java vertical test 和 repository validator 固定；
+- focused Core / Agent Loop / In-memory suite 通过 65 tests；Tool/OpenAI/Trace
+  扩展 focused evidence 共 77 tests；
+- `./scripts/verify-contracts.sh` 通过 5 Schemas、33 fixtures、2 golden vectors、
+  5 Packs 与 2 environments；strict parser 自检包含 1 个 valid control 与
+  7 类 negative regressions；
+- full `./mvnw --batch-mode --no-transfer-progress clean verify` 通过
+  390 tests、73 个 XML report files，0 failure/error/skipped；10 个 reactor modules
+  全部 `SUCCESS`，总耗时 `01:19 min`；
+- doc-link verifier 通过 75 个 Markdown files，`git diff --check` Green；
+- 三路独立 final audit 对代码均为 `P0=0、P1=0`。保留的 P2 是
+  invalid+over-limit precedence、第三方 Tool implementation identity/Trusted TCB，
+  以及后续 fault 扩展的通用 Trace provenance；
+- 没有读取 credential、访问外网、live provider 或 Connector；完整验证只使用本机
+  loopback HTTP 与本地 PostgreSQL/Testcontainers TCP。完整证据与边界见
+  [Tool Arguments Fault Build Note](../operations/build-notes/2026-07-31-s2-s4-tool-argument-fault.md)。
+
 ## AI Coding receipt
 
 本切片继续使用单 writer + 多个 read-only reviewer。流程是 packaged Acceptance
@@ -876,6 +983,9 @@ Red → focused Red → minimum Green → real-process Green → adversarial rev
 regression Green。审查不是“看代码觉得可以”，而是持续提交可复现 P1：ghost
 success、Trace 配对、SafeText parity、typed binding 和 DB numeric evidence，再由
 主线逐项转成测试与不变量。
+S4/F1 又把 reviewer 找到的 cancel/deadline precedence、canonical ref、exact
+manifest、duplicate JSON、raw-byte hash 和 privacy leakage 逐项变成 Red/Green；
+主线程保持唯一 writer，三名 subagent 只做边界化只读审查。
 
 ## Agent Engineering receipt
 
@@ -885,6 +995,9 @@ proposal、deterministic verification、atomic Artifact commit、Result、safe
 hash-chain Trace 与 HarnessRunBundle 可以跨 JVM verified read。S3 已形成 real-model
 protocol adapter 与受控 synthetic execution path，但尚无 live result；仍没有 durable
 checkpoint/resume 或 stochastic Harness experiment。
+S4/F1 新增统一 Tool boundary：Model 决策携带 opaque raw arguments，Tool 负责 pure
+validation，registry 负责版本化 schema/Task authority，execute 只接收 typed
+arguments。它证明了“模型已经调用”与“Tool 已 dispatch”必须分开记账。
 
 ## Career receipt
 
@@ -892,6 +1005,9 @@ checkpoint/resume 或 stochastic Harness experiment。
 allowlist 不是 Trace state machine、怎样防止 ghost success，以及怎样用 PostgreSQL
 transaction/FK/CAS 与跨语言 golden hash 形成可审计 Run。owner-led diagnosis、
 脱稿讲解和 framework trade-off defense 随暂停的学习计划继续延期，不虚报已掌握。
+新增案例可以解释为什么 Tool schema 不应散落在 provider adapter、为什么 registry
+version 必须是 exact manifest，以及为什么“零 Tool side effect”不能抹掉已发生的
+Model usage 与 Run truth。
 
 ## Business receipt
 
@@ -907,14 +1023,29 @@ Verifier comparison 与 canonical durable report 已独立重放验证：hard-li
 create-only commit、真实 process-kill 与 fresh JVM 能保持同一 verdict，incomplete
 pre-link evidence 保持 `UNKNOWN`，committed residue 保持 `FINAL`；冲突或不可信
 authoritative evidence 才是 `INVALID`。
+S4/F1 也已验证 schema-invalid raw Tool arguments 在 dispatch 前以 typed failure
+结束，且不会产生 Tool-backed read 或 Artifact。
 
-`apps/eval-runner` 的 local run-record no-overwrite 与 visible-ACL cross-cutting
-truth repair 已由 commit `2b50c66` 关闭。下一条自动执行的最小
-可证伪假设进入 S4 fault suite：当 Model 发出 schema-invalid tool arguments 时，
-Agent Loop 必须在任何 Tool side effect 前返回 typed failure，Trace 明确记录拒绝，
-Artifact/terminal success 都不能产生；这一切先用 deterministic Fake Model、现有
-Tool SPI 与 offline Harness 证明，不调用付费 provider。随后再扩展 timeout/rate
-limit、Context Drift、Prompt Injection 与第一个 typed read-only Worker handoff。
+下一条自动执行的最小可证伪假设继续进入 S4 fault suite，但要先承认并冻结现状：
+同步 Tool 在执行中越过 deadline 后，Kernel 目前会先记录
+`TOOL_RESULT / SUCCEEDED`，到下一轮才检查 deadline；而
+`AgentDraftService`、`AgentRun`、`HarnessRunBundle` 又分别拒绝
+`latencyMs > task.deadlineMs()`，会 mask 掉真实 over-deadline outcome，使它无法进入
+一致的 product/durable aggregate。
+
+因此 Pack 006 的 Acceptance Red 先覆盖并修正这三层 latency invariant，再要求一个已经
+dispatch 的 read-only Tool 越过 deadline 后：
+
+- Agent Loop 不再调用 Model，也不提交 Artifact；
+- Trace 区分 pre-dispatch rejection 与 post-dispatch timeout；
+- 终态承认 Tool 已 dispatch，但没有可信成功结果；
+- Result、terminal AgentRun 与 HarnessRunBundle 能保存同一 truth，而不是被改写为
+  `UNSAFE_AGENT_OUTCOME` 或拒绝构造。
+
+先用 cooperative clock-advancing Fake Tool 冻结状态、计数器和 uncertainty 语义，再
+决定是否引入异步执行/中断机制。未来 write-capable Tool timeout 必须进入
+`UNKNOWN + reconciliation`，不能照搬 read-only Tool 语义。随后再扩展 Context Drift、
+Prompt Injection 与第一个 typed read-only Worker handoff。
 唯一一次 bounded
 live-provider smoke 仍由 owner 另行批准。没有 live receipt 时不得声称已有 real-model
 fixed baseline；即使执行 smoke，也不能由一次结果证明模型质量、账单准确性或产品价值。

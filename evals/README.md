@@ -57,9 +57,16 @@ success 的确定性，不证明真实模型质量或 H0/H1 指标。
 S3 只允许独立 `apps/eval-runner` 处理：
 
 - `task-packs/synthetic/003-openai-public-draft-smoke.json`；
-- `environments/openai-responses-synthetic-v1.json`；
+- 当前 active environment
+  `environments/openai-responses-synthetic-v2.json`；
 - compiled catalog 中冻结的 pack、environment、Capture request、Task、execution
   profile、pricing profile 与 attempt hashes。
+
+`openai-responses-synthetic-v1.json` 保留原始 bytes 与 raw SHA，作为
+`agent-tools-v1` 的历史冻结 identity；它不再是当前 runner 的 executable
+environment。v2 与 v1 只允许 `toolRegistryVersion` 从 `agent-tools-v1` 变为
+`agent-tools-v2`，repository validator 同时冻结两份文件的 path、raw SHA、registry
+version 和单变量关系。
 
 普通 `apps/api` 不依赖 OpenAI adapter，也没有 live provider route。默认 packaged
 command 只执行 zero-egress preflight：
@@ -159,3 +166,27 @@ attestation、用户价值或 live-provider 证据。完整回执见
 [Verified Offline Comparison](../docs/operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)
 与
 [Durable Offline Comparison Report](../docs/operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+
+## Stage 2 S4 F1 · Tool arguments pre-dispatch fault
+
+`task-packs/synthetic/005-offline-tool-arguments-schema-fault.json` 冻结一组单变量
+control/fault：
+
+- control 只传合法 `reference`；
+- fault 保持相同 Task、Capture、Fake Model、预算、时钟和组件版本，仅增加一个
+  `unexpected` PUBLIC synthetic argument。
+
+两组 case 都经过 production
+`AgentDraftService → AgentLoopKernel → AgentToolRegistry → CaptureReadTool`。control
+发生 2 次 Model step、1 次 Tool validation、1 次 Tool execute、1 次 Tool-backed
+Capture read，并提交 1 个 Artifact；fault 发生 1 次 Model step、1 次 validation，
+但 Tool execute、Tool-backed read 与 Artifact 均为 0，以
+`FAILED / TOOL_ARGUMENTS_INVALID` 和
+`MODEL_STEP → TOOL_REJECTED` 结束。
+
+这项证据中的“零副作用”特指 schema fault 后零 Tool dispatch、零 Tool-backed read、
+零 Artifact；不表示 Fake Model 没有执行，也不表示 product service 没有写入
+`RUNNING → FAILED` truth。Pack raw SHA、Task/Trace/Bundle hashes、计数器、ID 消耗和
+两次 fresh-fixture equivalence 都已冻结。它没有调用真实模型、网络或 Connector，
+不能解释成模型质量、live-provider 或用户价值证据。完整回执见
+[Tool Arguments Fault Build Note](../docs/operations/build-notes/2026-07-31-s2-s4-tool-argument-fault.md)。
