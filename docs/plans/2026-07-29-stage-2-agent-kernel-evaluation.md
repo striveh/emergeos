@@ -1,8 +1,8 @@
 # ExecPlan: Stage 2 AgentKernel and Eval-Driven Development
 
-状态：进行中；S1、S2 工程完成，S3 protocol adapter 与 isolated synthetic Eval Runner
-engineering Gate 已通过；live-provider smoke 尚未执行，S3 durability hardening
-正在继续，S4 Harness comparison 尚未开始
+状态：进行中；S1、S2 工程完成，S3 protocol adapter、isolated synthetic Eval Runner
+与本地 attempt durability 工程切片已通过；live-provider smoke 尚未执行。S4 已冻结
+首个 Verifier comparison foundation，24-run comparison 尚未执行
 
 Owner：项目所有者 + main Codex agent
 
@@ -32,9 +32,11 @@ stale-`DISPATCHING` 证据改写成已完成 Gate。
 tool loop、Agent Trace 或 Eval runner。S1 增加 bounded Fake Agent product loop；S2
 增加 durable AgentRun/Trace/Bundle truth 与 offline golden runner；S3 已加入隔离的
 OpenAI Responses protocol adapter，并形成只接受 frozen PUBLIC synthetic Task 的独立
-Eval Runner。当前仍没有 live-provider smoke、real model result、billing receipt 或
-stochastic Harness comparison。较早的 `TemplateArtifactGenerator` 仍是确定性的
-Stage 0 scaffolding。
+Eval Runner。S3 现在另有 production read-only journal verifier 与 7-point fat-JAR
+process-kill/restart evidence。S4 Task Pack 004 已冻结 reference-grounding Verifier
+对照的输入和 expected matrix，但还没有 comparison runner 或 24-run result。当前仍没有
+live-provider smoke、real model result、billing receipt 或 stochastic Harness
+comparison。较早的 `TemplateArtifactGenerator` 仍是确定性的 Stage 0 scaffolding。
 
 S2 已补齐 durable AgentRun、Safe Trace、HarnessRunBundle integrity binding 与
 deterministic Offline golden runner；仍没有 real model、mid-run checkpoint/resume
@@ -314,6 +316,29 @@ then locate it from the Trace.
 - 独立回执见
   [Bounded Synthetic Eval Runner Build Note](../operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)。
 
+#### S3 durable attempt evidence delta · 2026-07-30
+
+- `PosixAttemptJournalVerifier` 只读验证 marker、bounded journal、hash chain、事件状态机、
+  billing prefix、pending/final record state，以及 terminal event 引用的完整 Run record；
+  输出 `VERIFIED / UNKNOWN / INVALID`，不会把 incomplete snapshot 改写成 success。
+- `trustedPrefix=true` 只认证本次读取到的完整 journal prefix；它不是 closed billing
+  ledger，也不能把仍可能追加的 `UNKNOWN` attempt 解释成终止或免费。
+- 一个 test-only crash harness 通过 `PropertiesLauncher` 加载 shipping fat JAR 与
+  `target/test-classes`，分别在 Gate、credential read、provider intent、provider
+  attribution、record pending、record final、terminal journal 这 7 个 durable phase
+  阻塞；parent 强制终止 child 后，新 JVM 两次核验结果一致且不改写证据。
+- 每个 crash case 的 replay 都被既有 marker 拒绝，loopback HTTP request count 不增加；
+  shipping CLI 拒绝 crash injection 参数，crash harness class 不在 shipping fat JAR。
+- exact commit `23e1773` 的 isolated clean verify 通过 Contracts 26、Core 65、
+  Agent Loop 8、OpenAI 19、Eval Surefire 45、Failsafe 2，共 165 tests；7 个 crash
+  cases 位于一个 Failsafe method 内，总耗时 `26.531 s`，0 failure/error/skipped。
+- 独立审查为 `P0=0、P1=0`。保留的 P2 包括 pathname/owner check 的 TOCTOU、marker
+  只作 locator、`trustedPrefix` 只作 snapshot、observer 只覆盖选定 phase，以及尚未逐个
+  断言 production class CodeSource。没有物理断电、NFS、packet capture 或真实 provider
+  证据。
+- 完整回执见
+  [Durable Eval Attempt Evidence Build Note](../operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
+
 ### S4 · Harness comparison, faults and bounded handoff
 
 - Compare a minimal H0 loop with one H1 Harness variable at a time.
@@ -324,6 +349,17 @@ then locate it from the Trace.
 - Compare verified outcome, edit time, cost and latency across repeated runs.
 - Evaluate AgentScope, Pi or another candidate only as a replaceable adapter;
   retain it only if the fixed Harness evidence justifies the added surface.
+
+#### S4 O1 comparison foundation delta · 2026-07-30
+
+- Task Pack 004 冻结第一项单变量对照：H0 `schema-only-eval-v1` 与 H1
+  `agent-draft-verifier-v1` 的 reference-grounding discrimination。
+- 4 个 deterministic Fake cases、2 个 arms、3 次 repetitions 定义了 24 runs /
+  12 paired candidates；pack 中的 H0/H1 totals 是 expected matrix，不是 observed
+  result。
+- Repository validator 已固定 literal synthetic provenance、zero network/real
+  model/Connector、arms/cases/repetitions 与 totals；comparison runner、24-run report、
+  report verifier 与正式结果尚未实现。
 
 Stage gate:
 
@@ -477,6 +513,14 @@ baseline.
 - [x] 2026-07-30：runner focused/package/full verification、contracts、doc links
   与 diff check 全部通过，engineering Gate 关闭。该 Gate 没有触发或冒充
   live-provider smoke。
+- [x] 2026-07-30：production read-only journal verifier 完成 `VERIFIED / UNKNOWN /
+  INVALID`、billing prefix 与 record-state 联合核验；invalid evidence fail closed，
+  incomplete crash evidence 保持 `UNKNOWN`。
+- [x] 2026-07-30：7-point fat-JAR process-kill/restart matrix 通过。新 JVM 两次只读
+  核验不改写 evidence，marker 阻断 replay 且 loopback HTTP count 不增加；独立审查
+  `P0=0、P1=0`。
+- [x] 2026-07-30：Task Pack 004 与 repository validator 冻结首个
+  reference-grounding Verifier comparison foundation；24-run experiment 未执行。
 
 ## Decisions
 
@@ -511,6 +555,11 @@ baseline.
   截断上限。Billing/对账读取 terminal record 顶层
   `observedCostUsd/observedTokenCount`；Run/Bundle usage 只表达经过 product sanitizer
   的 execution projection。
+- 2026-07-30：durable attempt verification 必须同时解释 `Verdict`、billing prefix 与
+  record state；`trustedPrefix=true` 只描述当前 snapshot，不能关闭一个
+  `UNKNOWN` attempt。
+- 2026-07-30：S4 第一项 Harness 对照只改变 reference-grounding Verifier。H0 只能存在于
+  isolated Eval path；冻结 expected matrix 不等于执行过 experiment。
 
 ## Surprises and failures
 
@@ -555,6 +604,12 @@ baseline.
   `runCostUsd/runTokenCount`，并用 `meteringMatchesRun=false` 显式暴露差异。
 - Provider SDK create intent 与 provider acceptance 之间没有原子边界。进程在其间死亡
   时不能证明是否计费；journal 必须保留保守证据，后续状态为 `UNKNOWN`，不能当成免费。
+- Process-kill matrix 使用 observer 在 7 个选定 durable operation 后停住进程，因此能
+  精确验证这些 boundary，却不是 arbitrary-instruction 或物理断电测试。Path 安全检查仍有
+  same-UID TOCTOU；marker body 不参与验证；test launcher 也尚未逐个检查 production
+  class 的 CodeSource。
+- Task Pack 004 的 24-run totals 是执行前冻结的 expected matrix。没有 run artifact 与
+  report verifier 时，不能把“validator Green”写成 Harness comparison 已通过。
 
 ## Verification receipts
 
@@ -582,14 +637,23 @@ S2 当前已确认：
 S3 bounded runner 当前状态：
 
 - 实现、frozen assets、one-shot POSIX Gate、attempt journal、atomic local run record
-  与 loopback fault tests 已形成；
+  与 loopback fault tests 已形成；read-only journal verifier 与 7-point
+  process-kill/restart matrix 也已形成；
 - 独立安全审查为 `P0=0、P1=0`；
 - exact commit `e90c704` 的隔离 full `clean verify` 共通过 `246` tests；focused
   Eval reactor、contracts、doc links 与 diff check 同时为 Green；
+- exact commit `23e1773` 的 isolated `clean verify` 通过 165 tests：Contracts 26、
+  Core 65、Agent Loop 8、OpenAI 19、Eval Surefire 45、Failsafe 2；7 个 crash cases
+  全部通过，总耗时 `26.531 s`；
 - live-provider smoke 未执行；没有 real key read、real provider result、real token
   receipt 或 billing receipt；
 - 完整边界与验证结果见
-  [S3 Runner Build Note](../operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)。
+  [S3 Runner Build Note](../operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)
+  与
+  [S3 Durable Attempt Build Note](../operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
+
+S4 当前只完成 Task Pack 004 与严格 repository validator。2 arms × 4 cases × 3
+repetitions 的 24-run comparison 尚未执行，expected totals 不能充当 experiment receipt。
 
 ## AI Coding receipt
 
@@ -624,9 +688,10 @@ transaction/FK/CAS 与跨语言 golden hash 形成可审计 Run。owner-led diag
 
 S2 的工程假设已在 focused evidence 中成立：不引入 Runtime framework、real model
 或外部动作，也能形成持久、完整性绑定、可离线重执行的 AgentRun truth。S3 adapter 与
-bounded runner 的 engineering Gate 已通过。下一条自动执行的安全假设是 production
-read-only journal verifier 与真实 fat-JAR crash/restart evidence；它不读取 credential、
-不访问 live provider。唯一一次 bounded live-provider smoke 仍由 owner 另行批准。
-没有 live receipt 时不得声称已有 real-model fixed baseline；即使执行 smoke，也不能由
-一次结果证明模型质量、账单准确性或产品价值。S4 的 offline Harness/fault infrastructure
-可以继续研发，但任何 live experiment 仍保持 Gate closed。学习与市场工作仍暂停且未完成。
+bounded runner 与本地 durability engineering slice 已通过。下一条自动执行的安全假设是：
+以 Task Pack 004 实现最小 Verifier seam 与 isolated comparison runner，真实执行并重新
+验证 24 个 deterministic runs；它仍不读取 credential、不访问 live provider。唯一一次
+bounded live-provider smoke 仍由 owner 另行批准。没有 live receipt 时不得声称已有
+real-model fixed baseline；即使执行 smoke，也不能由一次结果证明模型质量、账单准确性或
+产品价值。S4 的 offline Harness/fault infrastructure 可以继续研发，但任何 live experiment
+仍保持 Gate closed。学习与市场工作仍暂停且未完成。

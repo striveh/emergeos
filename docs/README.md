@@ -76,6 +76,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [Stage 2 S2 持久 AgentRun Build Note](./operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)
 - [Stage 2 S3 OpenAI Responses Adapter Build Note](./operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)
 - [Stage 2 S3 Bounded Synthetic Eval Runner Build Note](./operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)
+- [Stage 2 S3 Durable Eval Attempt Evidence Build Note](./operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)
 - [Stage 1 Operating Runbook](./operations/stage1-operating-runbook.md)
 - [S4 Durable Operations Case Card](./interview/case-cards/2026-07-29-stage1-durable-operations.md)
 - [商业验证路线](./business/validation-roadmap.md)

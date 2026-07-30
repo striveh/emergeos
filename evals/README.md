@@ -117,8 +117,26 @@ signature、WORM 或 invoice reconciliation。同 UID 恶意进程、owner/root 
 ### 当前证据边界
 
 Runner engineering Gate 已通过：独立安全审查为 `P0=0、P1=0`，focused/package/full
-verification、contracts、doc links 与最终 Diff 检查全部为 Green。当前执行证据仍来自 zero-egress packaged
-preflight 与 loopback provider；没有读取 real key、执行 live-provider smoke、产生 real
-model result、real token receipt 或 billing receipt，也没有开始 S4。`evals/reports/`
-当前没有 live report。Preflight receipt、loopback receipt 或 engineering-complete
-状态都不能冒充 live-provider receipt。
+verification、contracts、doc links 与最终 Diff 检查全部为 Green。Production
+read-only journal verifier 与 7-point fat-JAR process-kill/restart matrix 进一步证明：
+incomplete snapshot 保持 `UNKNOWN`，只有 terminal journal 与 immutable record 完整绑定
+才是 `VERIFIED`，而 marker 仍会阻断 replay。
+
+当前执行证据仍来自 zero-egress packaged preflight 与 loopback provider；没有读取 real
+key、执行 live-provider smoke、产生 real model result、real token receipt 或 billing
+receipt，也没有物理断电、NFS 或 packet capture 证据。完整 durability 边界见
+[Stage 2 S3 Durable Attempt Build Note](../docs/operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
+Preflight receipt、loopback receipt 或 engineering-complete 状态都不能冒充
+live-provider receipt。
+
+## Stage 2 S4 O1 · Verifier comparison foundation
+
+`task-packs/synthetic/004-offline-reference-verifier-comparison.json` 已冻结 H0
+`schema-only-eval-v1` 与 H1 `agent-draft-verifier-v1` 的单变量
+reference-grounding 对照。4 cases × 2 arms × 3 repetitions 定义了 24 runs / 12 paired
+candidates，以及执行前 expected matrix。
+
+Repository validator Green 只证明 pack 的 synthetic provenance、zero-network
+约束、arms/cases/repetitions 与 totals 一致。Comparison runner、24-run artifacts、
+aggregate report 与 report verifier 尚未形成；`evals/reports/` 当前没有该实验的
+result，更没有 live report。不得把 expected matrix 宣称为 observed Harness result。

@@ -34,6 +34,15 @@ base URL、`Proxy.NO_PROXY`、`maxRetries(0)`、日志关闭和 30 秒 deadline�
 [Stage 2 S3 Adapter Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)，
 runner 工程回执见
 [Stage 2 S3 Eval Runner Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)。
+在此基础上，production read-only journal verifier 已能把本地尝试证据区分为
+`VERIFIED / UNKNOWN / INVALID`，并把 billing evidence 与 run record state 分栏解释。
+一个只存在于 `target/test-classes` 的 crash harness 已在 7 个 durable boundary 启动真实
+fat JAR production classes、强制终止进程，再由新 JVM 只读核验 journal/record 并证明
+one-shot replay 继续被 marker 拒绝；shipping CLI 不接受 crash injection 参数。该证据
+只覆盖本机 POSIX filesystem 与 loopback provider，不是断电、NFS、真实 provider 或真实
+账单证明。S4 的 Task Pack 004 已冻结第一组 reference-grounding Verifier 对照设计，但
+24-run experiment 尚未执行。完整回执见
+[Stage 2 S3 Durable Attempt Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
