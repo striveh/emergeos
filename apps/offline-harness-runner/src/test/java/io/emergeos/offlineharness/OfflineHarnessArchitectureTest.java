@@ -71,6 +71,43 @@ class OfflineHarnessArchitectureTest {
   }
 
   @Test
+  void independentVerifierDoesNotReferenceRunnerOrGenerator()
+      throws IOException {
+    Path productionClasses =
+        Path.of(System.getProperty("emerge.offline.classes"))
+            .toAbsolutePath()
+            .normalize();
+    Path verifierPackage =
+        productionClasses.resolve(
+            Path.of("io", "emergeos", "offlineharness"));
+    List<String> constants = new ArrayList<>();
+    try (var paths = Files.list(verifierPackage)) {
+      for (Path classFile :
+          paths
+              .filter(
+                  path ->
+                      path.getFileName()
+                              .toString()
+                              .startsWith(
+                                  "Pack004ComparisonReportVerifier")
+                          && path.toString().endsWith(".class"))
+              .toList()) {
+        constants.addAll(
+            classUtf8Constants(Files.readAllBytes(classFile)));
+      }
+    }
+
+    assertFalse(
+        constants.stream()
+            .anyMatch(
+                reference ->
+                    reference.contains("Pack004ComparisonRunner")
+                        || reference.contains(
+                            "LiteralReferenceCandidateGenerator")),
+        () -> "verifier common-mode refs: " + constants);
+  }
+
+  @Test
   void productRuntimeClassifierDetectsDescriptorsAndReflectiveNames()
       throws IOException {
     Path testClasses =
