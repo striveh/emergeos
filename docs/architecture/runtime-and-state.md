@@ -14,6 +14,32 @@ Stage 2 S2 中持久化的 `RUNNING` AgentRun 只证明一次运行已经开始�
 事实；它不是 durable checkpoint，也不承诺从中间步骤 resume。安全恢复策略必须在
 后续 Runtime 切片中以新契约实现。
 
+### Agent Loop 的 cooperative deadline truth
+
+当前 `AgentLoopKernel` 在 process 内同步执行 trusted read-only Tool，不使用 hard
+preemption。deadline 是 success acceptance boundary，而不是 non-success
+observation 的截断器：
+
+```text
+pre-operation:
+  remaining <= 0 → 不启动下一步，DEADLINE_EXHAUSTED
+
+post-execute:
+  elapsed > deadline → TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH
+  elapsed == deadline → 可接受合法 Tool Result，下一 boundary 再 exhausted
+```
+
+post-execute 同时观察到 late completion 与 cancellation 时，typed deadline 是
+canonical attribution；这不否认 cancellation 发生。若结果 within deadline 且只有
+cancellation，则保留已经验证的 Tool Result/Evidence，并在下一 Model 前
+`CANCELLED`。该 post-result boundary 在最后一个允许的 Model step 后仍然存在，必须
+先于 loop exhaustion 判定。两种 terminal 路径都不能再产生 Model、Tool 或 Artifact。
+
+terminal Result、AgentRun、safe Trace 与 HarnessRunBundle 使用同一 shared policy；
+PostgreSQL 持久化 actual latency，不做 clamp。该 truth 只覆盖当前 read-only registry，
+不提供 mid-step resume 或 write-side exactly-once。write-capable Tool timeout 仍必须
+进入 durable `UNKNOWN + reconciliation`，再由 Runtime 编排对账。
+
 ## 关键不变量
 
 1. 没有 Evidence，不能生成 Artifact。

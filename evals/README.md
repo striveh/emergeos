@@ -190,3 +190,29 @@ Capture read，并提交 1 个 Artifact；fault 发生 1 次 Model step、1 次 
 两次 fresh-fixture equivalence 都已冻结。它没有调用真实模型、网络或 Connector，
 不能解释成模型质量、live-provider 或用户价值证据。完整回执见
 [Tool Arguments Fault Build Note](../docs/operations/build-notes/2026-07-31-s2-s4-tool-argument-fault.md)。
+
+## Stage 2 S4 F2 · read-only Tool post-dispatch deadline fault
+
+`task-packs/synthetic/006-offline-read-only-tool-post-dispatch-deadline.json`
+冻结相同 production vertical 的下一条单变量 control/fault。Task deadline 为 5ms：
+
+- control 在 4ms 内返回合法 `capture.read` result，继续完成 draft；
+- fault 已实际 dispatch/read 一次，但到 7ms 才返回，固定为
+  `FAILED / TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH`。
+
+fault 的 safe Trace 是
+`MODEL_STEP → TOOL_REQUEST → TOOL_REJECTED(DEADLINE_EXCEEDED)`；late value、exception、
+null 或 wrong-reference 都不能形成 Tool Result、Evidence、binding 或 Artifact。
+actual latency、Model attribution 与 usage 必须保留，不能被
+`UNSAFE_AGENT_OUTCOME`、clamp 或 zeroing 掩盖。
+
+同一切片另以 Java adversarial tests 固定 `elapsed == deadline`、
+simultaneous late+cancellation、cancellation-only 及 final-model-step boundary 的
+strict `>` 与 canonical precedence；这些 case 不属于 Pack JSON 的 control/fault。
+PostgreSQL round-trip/fresh-store read 证明 terminal status、failure、7ms latency、
+三步 Trace 和零 Artifact/Evidence 在持久化后保持一致；本次无需 schema migration。
+
+这是 cooperative、trusted、read-only Tool truth，不是 hard timeout、线程抢占或
+write-capable action guarantee。它没有调用真实模型、网络或 Connector，也不证明用户
+价值。完整回执见
+[Post-dispatch Deadline Build Note](../docs/operations/build-notes/2026-07-31-s2-s4-post-dispatch-deadline.md)。

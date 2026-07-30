@@ -535,6 +535,57 @@ then locate it from the Trace.
   PostgreSQL/Testcontainers TCP，没有访问外网、live provider、Connector 或真实用户
   数据，也不证明模型质量、账单、用户价值或任意第三方 Tool 安全。
 
+#### S4 F2 post-dispatch read-only Tool deadline start · 2026-07-31
+
+- 系统结果：`capture.read` 已 dispatch 后才观察到 deadline 越界时，系统保留真实
+  dispatch/read 与 elapsed time，但不接受 late result、不再调用 Model、不提交
+  Artifact，并让 Result、terminal AgentRun、Trace 与 Bundle 表达同一 truth。
+- 起始风险：当时 Kernel 先写 `TOOL_RESULT / SUCCEEDED`，三层 aggregate 又以
+  `latencyMs > deadlineMs` 拒绝真实 outcome，最终把 deadline attribution mask 成
+  `UNSAFE_AGENT_OUTCOME`。
+- 本次原理：deadline 是 success acceptance boundary；cooperative failure 的实际
+  observed latency 可以超过 deadline，不能 clamp 或清零。
+- Contract decision：
+  [RFC-0003](../rfcs/0003-post-dispatch-read-only-tool-deadline-truth.md) 与
+  [ADR-0007](../architecture/decisions/0007-observed-latency-and-post-dispatch-tool-deadline.md)
+  已接受，冻结 `TOOL_REJECTED / DEADLINE_EXCEEDED`、typed failure、strict `>`、
+  cancellation precedence 与 write-capable non-goal。
+- 第一条 Red：相同 synthetic Task 下，Fake `capture.read` 在 execute 中实际完成一次
+  read 并推进 frozen monotonic clock。旧路径应暴露 Model 1、validation 1、
+  execute/read 1、Artifact 0，但错误 Trace/Result attribution。
+- 完成条件：Pack 006 两个 fresh fixture exact-equal；三层 latency masking、Trace
+  pairing、null/malformed/throwing late completion 与 success-over-deadline 均有
+  adversarial test；focused/full/contracts/doc links 与独立 review Green。
+- 非目标：异步抢占、线程 interrupt、write-capable Tool、`UNKNOWN` reconciliation、
+  live provider、真实用户数据或外部动作。
+
+#### S4 F2 post-dispatch deadline closure · 2026-07-31
+
+- Acceptance Red 确认旧 Kernel 先接受 late `TOOL_RESULT`，随后三层 aggregate 把真实
+  over-deadline failure 改写成 `UNSAFE_AGENT_OUTCOME`。
+- `ObservedExecutionLimits` 现在成为 Result/AgentRun/Bundle/Trace 的 shared Java
+  policy；Node semantic validator 镜像同一规则：
+  success latency 必须 `<= deadline`，typed post-dispatch deadline failure 必须
+  `FAILED && latency > deadline`。
+- Kernel 在 Tool 返回或抛错后、接受任何 result 前重新观察 clock。late
+  valid/throw/null/wrong-reference adversarial paths 全部形成一次 dispatch/execute、
+  零 accepted Tool Result、零 Evidence/binding/Artifact、零后续 Model；Pack 中的
+  valid fault 另以 production vertical 证明一次 Tool-backed Capture read。
+- exact `5ms / 5ms` 不冒充 exceeded：合法 Tool Result/Evidence 保留，下一 boundary
+  以 `DEADLINE_EXHAUSTED` 结束。late+cancellation 采用 deadline canonical
+  attribution；cancellation-only control 保留 within-deadline result，再于下一 Model
+  前 `CANCELLED`。该 boundary 在最后一个允许的 Model step 后也必须执行，不能被
+  `MODEL_STEP_LIMIT_EXHAUSTED` 覆盖。
+- Pack 006 的 4ms control 与 7ms fault 在两个 fresh fixture 中 exact-equal；
+  PostgreSQL terminal round-trip 与 fresh store read 保留 FAILED、typed failure、
+  actual 7ms latency、三步 Trace 和零 Artifact/Evidence。
+- Eval Runner 的旧 `UNSAFE_AGENT_OUTCOME + zero usage` regression 已迁移：Model
+  response 已被 provider attribution 后才耗尽 deadline 时，保留
+  `DEADLINE_EXHAUSTED`、resolved Model、actual latency 与 run/observed usage，
+  `meteringMatchesRun=true`。
+- 完整命令、计数器、hash、验证总数、独立审查与 non-claims 见
+  [Pack 006 Build Note](../operations/build-notes/2026-07-31-s2-s4-post-dispatch-deadline.md)。
+
 Stage gate:
 
 - another developer can replay the Fake and real-model experiments;
@@ -1025,27 +1076,42 @@ pre-link evidence 保持 `UNKNOWN`，committed residue 保持 `FINAL`；冲突�
 authoritative evidence 才是 `INVALID`。
 S4/F1 也已验证 schema-invalid raw Tool arguments 在 dispatch 前以 typed failure
 结束，且不会产生 Tool-backed read 或 Artifact。
+S4/F2 已进一步验证 read-only Tool 在 dispatch 后严格越过 deadline 时，实际
+dispatch/read、Model attribution、usage 和 latency 被保留，但 late result 不进入
+Evidence/Artifact；exact boundary 与 cancellation precedence 也已冻结。
 
-下一条自动执行的最小可证伪假设继续进入 S4 fault suite，但要先承认并冻结现状：
-同步 Tool 在执行中越过 deadline 后，Kernel 目前会先记录
-`TOOL_RESULT / SUCCEEDED`，到下一轮才检查 deadline；而
-`AgentDraftService`、`AgentRun`、`HarnessRunBundle` 又分别拒绝
-`latencyMs > task.deadlineMs()`，会 mask 掉真实 over-deadline outcome，使它无法进入
-一致的 product/durable aggregate。
+下一条自动执行的最小可证伪假设是 Pack 007：
+**typed read-only Worker handoff + child context-policy drift fail-closed**。它直接推进
+One Self, Many Workers，而不是把 dormant `parentId/delegationChain`、`handoffRefs`
+和 `HANDOFF` binding 继续只留在 schema 中。
 
-因此 Pack 006 的 Acceptance Red 先覆盖并修正这三层 latency invariant，再要求一个已经
-dispatch 的 read-only Tool 越过 deadline 后：
+Pack 007 先以 RFC-0004 冻结：
 
-- Agent Loop 不再调用 Model，也不提交 Artifact；
-- Trace 区分 pre-dispatch rejection 与 post-dispatch timeout；
-- 终态承认 Tool 已 dispatch，但没有可信成功结果；
-- Result、terminal AgentRun 与 HarnessRunBundle 能保存同一 truth，而不是被改写为
-  `UNSAFE_AGENT_OUTCOME` 或拒绝构造。
+- 一个 server-owned Conductor 只委派一个
+  `PROPOSE_ARTICLE_DRAFT` read-only Worker，depth=1、禁止 parallel；
+- Worker 与 parent 同 principal，并 exact inherit policy/state/context/tool
+  registry/environment；capability、risk、budget、deadline 与 limits 只能缩小；
+- Worker 可通过 `capture.read` 产生 typed proposal/Evidence，但不能提交
+  Artifact、Receipt、Action 或二次 handoff；
+- parent 只消费 terminal、verified、hash-bound child Run，并保持唯一 Artifact
+  writer；
+- child `contextPolicyVersion` drift 必须在 child Run、Model 与 Tool dispatch 前
+  `BLOCKED / HANDOFF_CONTEXT_POLICY_DRIFT`；
+- parent Bundle 使用 typed `agent-run://{childRunId}` 与 child Bundle hash 绑定；
+  PostgreSQL/fresh JVM 必须验证 parent→child ownership、terminal truth、
+  delegation、authority inheritance 和 child no-write。
 
-先用 cooperative clock-advancing Fake Tool 冻结状态、计数器和 uncertainty 语义，再
-决定是否引入异步执行/中断机制。未来 write-capable Tool timeout 必须进入
-`UNKNOWN + reconciliation`，不能照搬 read-only Tool 语义。随后再扩展 Context Drift、
-Prompt Injection 与第一个 typed read-only Worker handoff。
+Acceptance Red 先证明当前系统只能把 handoff 冒充未注册 Tool，parent 会
+`BLOCKED / TOOL_NOT_ALLOWED`，child Run/Model/read、HANDOFF binding 与 Artifact 均为
+0。minimum Green 不引入 AgentScope、Pi 或 Temporal；先完成 provider-neutral typed
+handoff、exact worker registry、safe Trace、V6 forward migration、process-kill gap
+和两个 fresh JVM verified read。
+
+Pack 007 不声明通用多 Agent、并行 Worker、shared mutable context/Artifact、
+checkpoint/resume、lease/fencing、live provider、write-capable Worker、Self Model
+学习或用户/商业价值。write-capable Tool timeout 仍必须进入
+`UNKNOWN + reconciliation`，不能照搬 Pack 006。
+
 唯一一次 bounded
 live-provider smoke 仍由 owner 另行批准。没有 live receipt 时不得声称已有 real-model
 fixed baseline；即使执行 smoke，也不能由一次结果证明模型质量、账单准确性或产品价值。

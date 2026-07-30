@@ -3,6 +3,12 @@
 - Status: Accepted
 - Date: 2026-07-30
 - Supersedes: none
+- Superseded in part by:
+  [ADR-0007](0007-observed-latency-and-post-dispatch-tool-deadline.md)
+
+> Historical note：Decision 11 中“所有 Result latency 不得超过 Task deadline”的
+> 部分已被 ADR-0007 取代。`SUCCEEDED` 仍受 deadline 约束；cooperative non-success
+> 必须保留实际 observed latency。
 
 ## Context
 

@@ -129,6 +129,34 @@ name/schema，尚未绑定实现制品身份。引入第三方 Tool 前必须增
 identity、信任策略与验证参数不可变约束。当前 Tool limit 在 validation 之后判定，
 `invalid + over-limit` 的 precedence 尚未作为独立 fault pack 冻结。
 
+### Tool dispatch 后的 observed deadline
+
+当前 exact `agent-tools-v2` registry 只包含 trusted、read-only `capture.read`。
+一旦 typed execution 已 dispatch，synchronous Kernel 只能在 `execute` 返回或抛错后
+cooperatively 重新观察 deadline：
+
+- `elapsed > deadline` 固定为
+  `FAILED / TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH` 与
+  `TOOL_REJECTED / DEADLINE_EXCEEDED`；
+- late result、exception、null 或 wrong-reference 都不成为 Tool Result、Evidence、
+  binding 或 Artifact，但实际 dispatch/execute 与 observed latency 必须保留；
+  production `capture.read` vertical 另行保留实际 Tool-backed read counter；
+- `elapsed == deadline` 仍可接受合法 Tool Result；下一 boundary 因 remaining=0
+  以 `DEADLINE_EXHAUSTED` 结束；
+- late 与 cancellation 同时可见时，deadline 是 canonical attribution；只有
+  cancellation 且结果 within deadline 时，先保留 Result/Evidence，再在下一 Model
+  前 `CANCELLED`；
+- `SUCCEEDED` latency 不能越过 deadline，non-success 可以保留真实 over-deadline
+  latency；Java contracts/Core/Kernel 与 Node validator 固定同一 strict `>` policy。
+
+这次 post-result boundary 必须在 `continue` 或 loop exhaustion 前执行，即使 Tool call
+已经占用了最后一个允许的 Model step，也不能让 `MODEL_STEP_LIMIT_EXHAUSTED` 覆盖
+cancellation 或 exact-deadline truth。
+
+这不是 hard timeout、thread interruption 或 async preemption。write-capable Tool
+dispatch 后失去确定结果时必须使用 durable `UNKNOWN + reconciliation`、idempotency、
+lease/fencing 与 Receipt contract，不能复用 read-only failure。
+
 ### Offline Harness Runner 的 durable report 边界
 
 `offline-harness-runner` 的 storage 只承载 frozen PUBLIC synthetic Pack 004 report：

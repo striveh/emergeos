@@ -19,3 +19,7 @@ RFC 被接受并落地后，由 ADR 记录最终采用的决定；RFC 历史不�
 - [RFC-0002：真实模型只经 synthetic Eval egress，并绑定身份与计量](0002-real-model-synthetic-egress-and-metering.md)
   — `Accepted`，adapter、packaged preflight、bounded runner 与本地工程验证已完成；
   live-provider smoke 仍未批准或执行。
+- [RFC-0003：post-dispatch read-only Tool deadline truth](0003-post-dispatch-read-only-tool-deadline-truth.md)
+  — `Accepted`，由 Stage 2 S4/F2 Pack 006 冻结 cooperative late-result、
+  exact-boundary、cancellation precedence 与 observed-latency contract；实现决策见
+  [ADR-0007](../architecture/decisions/0007-observed-latency-and-post-dispatch-tool-deadline.md)。

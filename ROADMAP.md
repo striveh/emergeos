@@ -114,6 +114,9 @@ S4 durable report 回执：
 S4 Tool arguments fault 回执：
 [Tool Arguments Fault Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-tool-argument-fault.md)。
 
+S4 post-dispatch deadline 回执：
+[Post-dispatch Deadline Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-post-dispatch-deadline.md)。
+
 产品/工程：
 
 - Provider-neutral `AgentKernel` SPI，先 Fake 后 real adapter；
@@ -125,8 +128,9 @@ S4 Tool arguments fault 回执：
   hard-link create-only terminal run record；
 - production read-only journal verifier 与 8-point fat-JAR process-kill/restart matrix；
 - 固定模型与 Task Pack 的 H0/H1 Harness 对照；
-- 已完成 schema-invalid Tool arguments 的 pre-dispatch fault；Tool timeout/执行失败、
-  限流、Context Drift 和 Prompt Injection 故障集仍开放。
+- 已完成 schema-invalid Tool arguments 的 pre-dispatch fault，以及 trusted
+  read-only Tool 的 post-dispatch cooperative deadline fault；Tool 执行失败、限流、
+  Context Drift、Prompt Injection 与 write-side timeout/reconciliation 故障集仍开放。
 
 当前已经完成 synthetic Fake success 的 deterministic baseline、OpenAI Responses
 protocol 的 loopback evidence、bounded runner engineering Gate，以及 8 个选定
@@ -143,8 +147,11 @@ deterministic synthetic comparison 不是正式 60-run stochastic quality 结论
 Pack 005 另以完全相同的 control/fault Task 证明 schema-invalid raw arguments 在
 Tool execute 前被拒绝：fault 的 Tool execute、Tool-backed read、Artifact 均为 0，
 并保留 typed failure 与 safe Trace。它是 deterministic Fake safety regression，
-不是 live model 或系统级“什么都没发生”。真实任务、人工盲评、其余 fault injection
-与用户价值证据仍未执行。
+不是 live model 或系统级“什么都没发生”。Pack 006 进一步证明 read-only Tool
+已 dispatch 后越过 deadline 时，actual read/latency 保留，但 late result 不进入
+Evidence/Artifact；exact boundary 与 cancellation precedence 也被固定。它仍不是 hard
+timeout、write-side exactly-once 或 live model evidence。真实任务、人工盲评、其余
+fault injection 与用户价值证据仍未执行。
 `billingStatus=UNKNOWN` 表示 provider 费用未知，不能解释成免费；reservation 是调用前的
 authorization ceiling，provider 已返回的 observed usage 即使超过 reservation 也必须如实保留。
 

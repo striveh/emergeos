@@ -48,8 +48,10 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [ActionAttempt 与对账决策](./architecture/decisions/0004-action-attempt-reconciliation.md)
 - [五结果研发制度 ADR](./architecture/decisions/0005-five-outcome-development-system.md)
 - [持久 AgentRun 真相 ADR](./architecture/decisions/0006-persistent-agent-run-truth.md)
+- [Observed latency 与 post-dispatch deadline ADR](./architecture/decisions/0007-observed-latency-and-post-dispatch-tool-deadline.md)
 - [RFC-0001：持久 AgentRun、Safe Trace 与 HarnessRunBundle](./rfcs/0001-persistent-agent-run-trace-and-bundle.md)
 - [RFC-0002：真实模型 synthetic egress 与计量边界](./rfcs/0002-real-model-synthetic-egress-and-metering.md)
+- [RFC-0003：read-only Tool post-dispatch deadline truth](./rfcs/0003-post-dispatch-read-only-tool-deadline-truth.md)
 - [Eval Task Packs、Offline baseline 与 bounded provider runner](../evals/README.md)
 
 ### 想参与研究与共同进化
@@ -82,6 +84,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [Stage 2 S4 Verified Offline Comparison Build Note](./operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)
 - [Stage 2 S4 Durable Offline Comparison Build Note](./operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)
 - [Stage 2 S4 Tool Arguments Fault Build Note](./operations/build-notes/2026-07-31-s2-s4-tool-argument-fault.md)
+- [Stage 2 S4 Post-dispatch Deadline Build Note](./operations/build-notes/2026-07-31-s2-s4-post-dispatch-deadline.md)
 - [Stage 1 Operating Runbook](./operations/stage1-operating-runbook.md)
 - [S4 Durable Operations Case Card](./interview/case-cards/2026-07-29-stage1-durable-operations.md)
 - [商业验证路线](./business/validation-roadmap.md)

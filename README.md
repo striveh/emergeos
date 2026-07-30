@@ -77,6 +77,15 @@ Pack 005 证明 extra-property fault 保留一次可归因 Model step 与
 `RUNNING → FAILED` truth，但 Tool execute、Tool-backed Capture read 和 Artifact 均为
 0。完整回执见
 [Stage 2 S4 Tool Arguments Fault Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-tool-argument-fault.md)。
+Pack 006 又固定 read-only Tool 的 post-dispatch deadline truth：5ms deadline 下，
+4ms control 正常完成；7ms fault 虽已 dispatch/read，却不接受 late result、不形成
+Evidence/Artifact，并以
+`FAILED / TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH` 和
+`MODEL_STEP → TOOL_REQUEST → TOOL_REJECTED(DEADLINE_EXCEEDED)` 结束。actual latency、
+Trace 与 terminal truth 可以跨 PostgreSQL fresh-store read 保持一致；Model
+attribution/usage 则由 product aggregate 与 Eval Runner regression 保真。exact boundary
+与 cancellation precedence 也有 adversarial regression。完整回执见
+[Stage 2 S4 Post-dispatch Deadline Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-post-dispatch-deadline.md)。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
