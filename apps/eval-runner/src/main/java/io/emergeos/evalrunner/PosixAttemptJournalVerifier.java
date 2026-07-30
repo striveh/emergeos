@@ -761,6 +761,15 @@ final class PosixAttemptJournalVerifier {
     UNASSESSED
   }
 
+  /**
+   * Billing observed in the complete, hash-verified journal prefix.
+   *
+   * <p>{@code trustedPrefix=true} authenticates only the durable snapshot
+   * parsed by this verifier. It does not close an {@link Verdict#UNKNOWN}
+   * attempt: a still-running process may append another intent or
+   * attribution later. Consumers must evaluate verdict, billing, and record
+   * state together.
+   */
   record BillingEvidence(
       BillingStatus status,
       boolean trustedPrefix,

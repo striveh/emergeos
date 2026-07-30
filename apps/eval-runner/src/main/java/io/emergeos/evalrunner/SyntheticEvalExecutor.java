@@ -73,6 +73,10 @@ final class SyntheticEvalExecutor {
           failure.code(),
           gateFailureReceipt("markerBurned=true"));
     }
+    dependencies
+        .observer()
+        .observed(
+            EvalExecutionObserver.Phase.GATE_APPROVED_DURABLE);
 
     String apiKey;
     try {
@@ -185,6 +189,11 @@ final class SyntheticEvalExecutor {
               int ordinal =
                   effects.providerSdkCreateInvocations.get() + 1;
               journal.providerInvocationIntent(ordinal);
+              dependencies
+                  .observer()
+                  .observed(
+                      EvalExecutionObserver.Phase
+                          .PROVIDER_SDK_CREATE_INTENT_DURABLE);
               effects.providerSdkCreateInvocations.incrementAndGet();
               dependencies
                   .observer()
@@ -199,6 +208,11 @@ final class SyntheticEvalExecutor {
                   resolvedModel,
                   usage.costUsd(),
                   usage.tokenCount());
+              dependencies
+                  .observer()
+                  .observed(
+                      EvalExecutionObserver.Phase
+                          .PROVIDER_ATTRIBUTED_DURABLE);
               effects.recordAttribution(usage);
             });
     dependencies
@@ -272,7 +286,12 @@ final class SyntheticEvalExecutor {
     Effects observed = effects.snapshot();
     verifyOutcome(outcome, ids, observed);
     PosixEvalRunRecordStore.Stored stored =
-        new PosixEvalRunRecordStore().save(marker, outcome, observed);
+        new PosixEvalRunRecordStore()
+            .save(
+                marker,
+                outcome,
+                observed,
+                dependencies.observer());
     journal.terminalRecordPersisted(
         outcome.result().status(),
         outcome.run().bundle().integrityHash(),
@@ -283,6 +302,10 @@ final class SyntheticEvalExecutor {
         observed.providerSdkCreateInvocations(),
         observed.providerAttributedInvocations(),
         stored);
+    dependencies
+        .observer()
+        .observed(
+            EvalExecutionObserver.Phase.TERMINAL_JOURNAL_DURABLE);
     return new ExecutionResult(
         outcome,
         receipt(outcome, observed, stored, journal),

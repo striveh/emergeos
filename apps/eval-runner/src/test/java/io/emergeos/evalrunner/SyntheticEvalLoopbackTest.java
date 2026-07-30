@@ -99,14 +99,24 @@ class SyntheticEvalLoopbackTest {
               EvalExecutionObserver.Phase.CHALLENGE_VERIFIED,
               EvalExecutionObserver.Phase.PERMIT_ARMED,
               EvalExecutionObserver.Phase.TASK_AUTHORIZED,
+              EvalExecutionObserver.Phase.GATE_APPROVED_DURABLE,
               EvalExecutionObserver.Phase.CREDENTIAL_READ_STARTED,
               EvalExecutionObserver.Phase.CLIENT_CREATED,
               EvalExecutionObserver.Phase.MODEL_CREATED,
               EvalExecutionObserver.Phase.TASK_AUTHORIZED,
               EvalExecutionObserver.Phase.RUN_STARTED,
               EvalExecutionObserver.Phase.PERMIT_CONSUMED,
+              EvalExecutionObserver.Phase
+                  .PROVIDER_SDK_CREATE_INTENT_DURABLE,
               EvalExecutionObserver.Phase.PROVIDER_SDK_CREATE,
-              EvalExecutionObserver.Phase.PROVIDER_SDK_CREATE),
+              EvalExecutionObserver.Phase.PROVIDER_ATTRIBUTED_DURABLE,
+              EvalExecutionObserver.Phase
+                  .PROVIDER_SDK_CREATE_INTENT_DURABLE,
+              EvalExecutionObserver.Phase.PROVIDER_SDK_CREATE,
+              EvalExecutionObserver.Phase.PROVIDER_ATTRIBUTED_DURABLE,
+              EvalExecutionObserver.Phase.RUN_RECORD_PENDING_DURABLE,
+              EvalExecutionObserver.Phase.RUN_RECORD_FINAL_DURABLE,
+              EvalExecutionObserver.Phase.TERMINAL_JOURNAL_DURABLE),
           phases);
       assertEquals(RunStatus.SUCCEEDED, result.outcome().result().status());
       assertEquals(

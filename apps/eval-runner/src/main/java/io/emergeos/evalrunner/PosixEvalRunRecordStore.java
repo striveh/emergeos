@@ -46,9 +46,22 @@ final class PosixEvalRunRecordStore {
       Path marker,
       AgentDraftOutcome outcome,
       SyntheticEvalExecutor.Effects effects) {
+    return save(
+        marker,
+        outcome,
+        effects,
+        EvalExecutionObserver.noop());
+  }
+
+  Stored save(
+      Path marker,
+      AgentDraftOutcome outcome,
+      SyntheticEvalExecutor.Effects effects,
+      EvalExecutionObserver observer) {
     Objects.requireNonNull(marker, "marker");
     Objects.requireNonNull(outcome, "outcome");
     Objects.requireNonNull(effects, "effects");
+    Objects.requireNonNull(observer, "observer");
     try {
       Path canonicalMarker =
           marker.toAbsolutePath().normalize();
@@ -106,11 +119,11 @@ final class PosixEvalRunRecordStore {
               pending, bytes, record)) {
         throw rejected("RUN_RECORD_FILE_UNSAFE");
       }
+      forceDirectory(directory);
+      observer.observed(
+          EvalExecutionObserver.Phase.RUN_RECORD_PENDING_DURABLE);
       Files.move(pending, target, StandardCopyOption.ATOMIC_MOVE);
-      try (FileChannel channel =
-          FileChannel.open(directory, StandardOpenOption.READ)) {
-        channel.force(true);
-      }
+      forceDirectory(directory);
       if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
           || Files.isSymbolicLink(target)
           || !Files.getPosixFilePermissions(
@@ -123,6 +136,8 @@ final class PosixEvalRunRecordStore {
               .equals(sha256(bytes))) {
         throw rejected("RUN_RECORD_FILE_UNSAFE");
       }
+      observer.observed(
+          EvalExecutionObserver.Phase.RUN_RECORD_FINAL_DURABLE);
       return new Stored(fileName, sha256(bytes));
     } catch (Rejected failure) {
       throw failure;
@@ -149,6 +164,14 @@ final class PosixEvalRunRecordStore {
       channel.force(true);
     } catch (FileAlreadyExistsException duplicate) {
       throw rejected("RUN_RECORD_PENDING_EXISTS");
+    }
+  }
+
+  private static void forceDirectory(Path directory)
+      throws IOException {
+    try (FileChannel channel =
+        FileChannel.open(directory, StandardOpenOption.READ)) {
+      channel.force(true);
     }
   }
 
