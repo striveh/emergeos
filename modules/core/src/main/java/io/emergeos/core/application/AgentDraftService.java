@@ -32,12 +32,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public final class AgentDraftService {
 
   private static final String RESULT_SCHEMA_VERSION = "1.0";
   private static final String TRACE_SCHEMA_VERSION = "1.0";
+  private static final String AGENT_VERIFIER_FAILED = "AGENT_VERIFIER_FAILED";
 
   private final AgentKernel kernel;
   private final AgentRunStore runs;
@@ -46,6 +48,9 @@ public final class AgentDraftService {
   private final Clock clock;
   private final AgentExecutionProfile executionProfile;
   private final AgentTaskAuthorizer taskAuthorizer;
+  private final AgentDraftVerifier verifier;
+  private final String verifierVersion;
+  private final Map<String, String> componentVersions;
 
   public AgentDraftService(
       AgentKernel kernel,
@@ -61,7 +66,8 @@ public final class AgentDraftService {
         ids,
         clock,
         executionProfile,
-        legacyOfflineAuthorizer(executionProfile));
+        legacyOfflineAuthorizer(executionProfile),
+        ReferenceGroundingAgentDraftVerifier.INSTANCE);
   }
 
   public AgentDraftService(
@@ -72,6 +78,26 @@ public final class AgentDraftService {
       Clock clock,
       AgentExecutionProfile executionProfile,
       AgentTaskAuthorizer taskAuthorizer) {
+    this(
+        kernel,
+        runs,
+        captures,
+        ids,
+        clock,
+        executionProfile,
+        taskAuthorizer,
+        ReferenceGroundingAgentDraftVerifier.INSTANCE);
+  }
+
+  AgentDraftService(
+      AgentKernel kernel,
+      AgentRunStore runs,
+      CaptureStore captures,
+      IdGenerator ids,
+      Clock clock,
+      AgentExecutionProfile executionProfile,
+      AgentTaskAuthorizer taskAuthorizer,
+      AgentDraftVerifier verifier) {
     this.kernel = Objects.requireNonNull(kernel, "kernel");
     this.runs = Objects.requireNonNull(runs, "runs");
     this.captures = Objects.requireNonNull(captures, "captures");
@@ -81,6 +107,15 @@ public final class AgentDraftService {
         Objects.requireNonNull(executionProfile, "executionProfile");
     this.taskAuthorizer =
         Objects.requireNonNull(taskAuthorizer, "taskAuthorizer");
+    this.verifier = Objects.requireNonNull(verifier, "verifier");
+    this.verifierVersion =
+        Objects.requireNonNull(verifier.version(), "verifier version");
+    this.componentVersions = executionProfile.componentVersions();
+    if (!executionProfile.verifierVersion().equals(verifierVersion)
+        || !verifierVersion.equals(componentVersions.get("verifier"))) {
+      throw new IllegalArgumentException(
+          "execution profile and AgentDraftVerifier identity disagree");
+    }
     if (executionProfile.modelBound()
         && taskAuthorizer == AgentTaskAuthorizer.allowAll()) {
       throw new IllegalArgumentException(
@@ -137,48 +172,38 @@ public final class AgentDraftService {
           null,
           evidenceBindings);
     }
+    AgentDraftReferenceGrounding.Verification verification;
+    try {
+      verification =
+          Objects.requireNonNull(
+              verifier.verify(
+                  new AgentDraftReferenceGrounding.Candidate(
+                      kernelRun.proposal(),
+                      kernelRun.obtainedEvidenceRefs(),
+                      captureRef,
+                      ownedCapture != null)),
+              "verifier result");
+    } catch (RuntimeException unexpectedVerifierFailure) {
+      return rejected(
+          command,
+          runId,
+          task,
+          startedAt,
+          kernelRun,
+          AGENT_VERIFIER_FAILED,
+          evidenceBindings);
+    }
+    if (!verification.accepted()) {
+      return rejected(
+          command,
+          runId,
+          task,
+          startedAt,
+          kernelRun,
+          verification.failureCode(),
+          evidenceBindings);
+    }
     AgentDraftProposal proposal = kernelRun.proposal();
-    if (proposal == null || !isValidArtifactContent(proposal.content())) {
-      return rejected(
-          command,
-          runId,
-          task,
-          startedAt,
-          kernelRun,
-          "INVALID_STRUCTURED_FINAL",
-          evidenceBindings);
-    }
-    if (!kernelRun.obtainedEvidenceRefs().contains(captureRef)) {
-      return rejected(
-          command,
-          runId,
-          task,
-          startedAt,
-          kernelRun,
-          "MISSING_REQUIRED_EVIDENCE",
-          evidenceBindings);
-    }
-    if (!proposal.evidenceRefs().equals(List.of(captureRef))) {
-      return rejected(
-          command,
-          runId,
-          task,
-          startedAt,
-          kernelRun,
-          "INVALID_EVIDENCE_CLAIM",
-          evidenceBindings);
-    }
-
-    if (ownedCapture == null) {
-      return rejected(
-          command,
-          runId,
-          task,
-          startedAt,
-          kernelRun,
-          "REQUIRED_EVIDENCE_NOT_FOUND",
-          evidenceBindings);
-    }
 
     String artifactId = ids.next("art");
     Instant completedAt = clock.instant();
@@ -272,7 +297,7 @@ public final class AgentDraftService {
             List.of(),
             kernelRun.resolvedModel(),
             executionProfile.agentVersion(),
-            executionProfile.verifierVersion(),
+            verifierVersion,
             kernelRun.costUsd(),
             kernelRun.tokenCount(),
             kernelRun.latencyMs(),
@@ -286,7 +311,7 @@ public final class AgentDraftService {
             executionProfile.experiment(),
             kernelRun.resolvedModel(),
             executionProfile.harnessVersion(),
-            executionProfile.componentVersions(),
+            componentVersions,
             task.environmentSnapshotRef(),
             task.toolRegistryVersion(),
             task,
@@ -446,12 +471,4 @@ public final class AgentDraftService {
     return List.copyOf(bindings);
   }
 
-  private static boolean isValidArtifactContent(String content) {
-    try {
-      ArtifactLineageEntry.requireContent(content);
-      return true;
-    } catch (IllegalArgumentException invalidContent) {
-      return false;
-    }
-  }
 }

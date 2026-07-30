@@ -30,6 +30,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -613,6 +614,187 @@ class AgentDraftServiceTest {
   }
 
   @Test
+  void publicServiceRejectsAProfileClaimingADifferentVerifierAtCompositionTime() {
+    AgentExecutionProfile mismatchedProfile =
+        copyWithVerifier(modelBoundProfile(), "schema-only-eval-v1");
+    AgentExecutionProfile mismatchedOfflineProfile =
+        copyWithVerifier(
+            AgentExecutionProfile.legacyFakeV1(),
+            "schema-only-eval-v1");
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            service(
+                new RecordingAgentRunStore(new RecordingArtifactStore()),
+                profileBoundKernel(
+                    mismatchedProfile,
+                    (task, cancellation) -> {
+                      throw new AssertionError("kernel must not run");
+                    }),
+                capture(DataClass.PUBLIC),
+                mismatchedProfile));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new AgentDraftService(
+                (task, cancellation) -> {
+                  throw new AssertionError("kernel must not run");
+                },
+                new RecordingAgentRunStore(new RecordingArtifactStore()),
+                new FixedCaptureStore(capture()),
+                prefix -> prefix + "-test",
+                Clock.fixed(
+                    Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
+                mismatchedOfflineProfile));
+  }
+
+  @Test
+  void publicConstructorsDoNotExposeVerifierSelection() {
+    assertFalse(
+        Arrays.stream(AgentDraftService.class.getConstructors())
+            .flatMap(constructor -> Arrays.stream(constructor.getParameterTypes()))
+            .anyMatch(AgentDraftVerifier.class::equals));
+  }
+
+  @Test
+  void resultAndBundleVersionsComeFromTheActuallyBoundInternalVerifier() {
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+    AgentExecutionProfile profile =
+        copyWithVerifier(modelBoundProfile(), "test-reference-verifier-v1");
+    AtomicInteger verifierCalls = new AtomicInteger();
+    AgentDraftVerifier verifier =
+        new AgentDraftVerifier() {
+          @Override
+          public String version() {
+            return "test-reference-verifier-v1";
+          }
+
+          @Override
+          public AgentDraftReferenceGrounding.Verification verify(
+              AgentDraftReferenceGrounding.Candidate candidate) {
+            verifierCalls.incrementAndGet();
+            return ReferenceGroundingAgentDraftVerifier.INSTANCE.verify(candidate);
+          }
+        };
+    AgentDraftService service =
+        service(
+            runs,
+            profileBoundKernel(
+                profile,
+                (task, cancellation) ->
+                    new AgentRunOutcome(
+                        RunStatus.SUCCEEDED,
+                        new AgentDraftProposal(
+                            "grounded synthetic draft",
+                            List.of("capture://" + CAPTURE_ID)),
+                        List.of("capture://" + CAPTURE_ID),
+                        successTrace(List.of("capture://" + CAPTURE_ID)),
+                        "test-reference-model",
+                        BigDecimal.ZERO,
+                        0,
+                        0,
+                        null)),
+            capture(DataClass.PUBLIC),
+            profile,
+            verifier);
+
+    AgentDraftOutcome outcome =
+        service.draft(
+            new AgentDraftCommand(
+                PRINCIPAL, CAPTURE_ID, "Create a synthetic public draft"));
+
+    assertEquals(RunStatus.SUCCEEDED, outcome.result().status());
+    assertEquals(1, verifierCalls.get());
+    assertEquals(
+        "test-reference-verifier-v1", outcome.result().verifierVersion());
+    assertEquals(
+        "test-reference-verifier-v1",
+        outcome.run().bundle().componentVersions().get("verifier"));
+    assertEquals(1, artifacts.createCalls);
+  }
+
+  @Test
+  void unexpectedOrNullInternalVerifierResultTerminalizesWithoutArtifactOrDetailLeak() {
+    List<AgentDraftVerifier> brokenVerifiers =
+        List.of(
+            new AgentDraftVerifier() {
+              @Override
+              public String version() {
+                return "test-throwing-verifier-v1";
+              }
+
+              @Override
+              public AgentDraftReferenceGrounding.Verification verify(
+                  AgentDraftReferenceGrounding.Candidate candidate) {
+                throw new IllegalStateException(
+                    "SECRET_VERIFIER_DETAIL");
+              }
+            },
+            new AgentDraftVerifier() {
+              @Override
+              public String version() {
+                return "test-null-verifier-v1";
+              }
+
+              @Override
+              public AgentDraftReferenceGrounding.Verification verify(
+                  AgentDraftReferenceGrounding.Candidate candidate) {
+                return null;
+              }
+            });
+
+    for (AgentDraftVerifier verifier : brokenVerifiers) {
+      RecordingArtifactStore artifacts =
+          new RecordingArtifactStore();
+      RecordingAgentRunStore runs =
+          new RecordingAgentRunStore(artifacts);
+      AgentExecutionProfile profile =
+          copyWithVerifier(modelBoundProfile(), verifier.version());
+      AgentDraftService service =
+          service(
+              runs,
+              profileBoundKernel(
+                  profile,
+                  (task, cancellation) ->
+                      new AgentRunOutcome(
+                          RunStatus.SUCCEEDED,
+                          new AgentDraftProposal(
+                              "synthetic candidate",
+                              List.of("capture://" + CAPTURE_ID)),
+                          List.of("capture://" + CAPTURE_ID),
+                          successTrace(
+                              List.of("capture://" + CAPTURE_ID)),
+                          "test-reference-model",
+                          BigDecimal.ZERO,
+                          0,
+                          0,
+                          null)),
+              capture(DataClass.PUBLIC),
+              profile,
+              verifier);
+
+      AgentDraftOutcome outcome =
+          service.draft(
+              new AgentDraftCommand(
+                  PRINCIPAL,
+                  CAPTURE_ID,
+                  "Create a synthetic public draft"));
+
+      assertEquals(RunStatus.FAILED, outcome.result().status());
+      assertEquals(
+          "AGENT_VERIFIER_FAILED",
+          outcome.result().failureReason());
+      assertFalse(
+          outcome.run().toString().contains("SECRET_VERIFIER_DETAIL"));
+      assertEquals(1, runs.startCalls);
+      assertEquals(1, runs.completeCalls);
+      assertEquals(0, artifacts.createCalls);
+    }
+  }
+
+  @Test
   void legacyFakeProfileRejectsAKernelBoundToAnyLiveProfile() {
     AgentExecutionProfile liveProfile = modelBoundProfile();
 
@@ -759,6 +941,39 @@ class AgentDraftServiceTest {
               Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
           executionProfile);
     }
+    return new AgentDraftService(
+        kernel,
+        runStore,
+        new FixedCaptureStore(capture),
+        prefix -> prefix + "-test",
+        Clock.fixed(
+            Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
+        executionProfile,
+        exactPermit(executionProfile));
+  }
+
+  private static AgentDraftService service(
+      RecordingAgentRunStore runStore,
+      AgentKernel kernel,
+      Capture capture,
+      AgentExecutionProfile executionProfile,
+      AgentDraftVerifier verifier) {
+    return new AgentDraftService(
+        kernel,
+        runStore,
+        new FixedCaptureStore(capture),
+        prefix -> prefix + "-test",
+        Clock.fixed(
+            Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
+        executionProfile,
+        executionProfile.modelBound()
+            ? exactPermit(executionProfile)
+            : AgentTaskAuthorizer.allowAll(),
+        verifier);
+  }
+
+  private static AgentTaskAuthorizer exactPermit(
+      AgentExecutionProfile executionProfile) {
     TaskEnvelope permittedTask =
         executionProfile.newDraftTask(
             "task-test",
@@ -774,15 +989,7 @@ class AgentDraftServiceTest {
                 "task is not covered by the explicit test permit");
           }
         };
-    return new AgentDraftService(
-        kernel,
-        runStore,
-        new FixedCaptureStore(capture),
-        prefix -> prefix + "-test",
-        Clock.fixed(
-            Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
-        executionProfile,
-        exactPermit);
+    return exactPermit;
   }
 
   private static void assertPreflightDataRejection(Capture capture) {
@@ -843,6 +1050,33 @@ class AgentDraftServiceTest {
         "environment://sha256:" + "a".repeat(64),
         List.of(AgentExecutionProfile.SYNTHETIC_MODEL_EGRESS_CAPABILITY),
         DataClass.PUBLIC);
+  }
+
+  private static AgentExecutionProfile copyWithVerifier(
+      AgentExecutionProfile source, String verifierVersion) {
+    return new AgentExecutionProfile(
+        source.id(),
+        source.taskSchemaVersion(),
+        source.risk(),
+        source.maxModelSteps(),
+        source.maxToolCalls(),
+        source.deadlineMs(),
+        source.budgetUsd(),
+        source.maxInputTokensPerStep(),
+        source.maxOutputTokensPerStep(),
+        source.pricing(),
+        source.modelAdapterVersion(),
+        source.agentVersion(),
+        verifierVersion,
+        source.harnessVersion(),
+        source.experiment(),
+        source.policyVersion(),
+        source.stateVersion(),
+        source.contextPolicyVersion(),
+        source.toolRegistryVersion(),
+        source.environmentSnapshotRef(),
+        source.capabilityRefs(),
+        source.requiredDataClass());
   }
 
   private static AgentKernel profileBoundKernel(
