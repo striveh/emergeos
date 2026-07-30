@@ -1,9 +1,14 @@
-package io.emergeos.adapters.inmemory.agent;
+package io.emergeos.adapters.agentloop;
 
 import io.emergeos.contracts.TaskEnvelope;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Provider-neutral model boundary used by the framework-free Agent loop.
+ *
+ * <p>Provider SDK types must not cross this interface.
+ */
 public interface AgentModel {
 
   String modelId();

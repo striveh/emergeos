@@ -20,6 +20,11 @@
       <artifactId>emerge-core</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>io.emergeos</groupId>
+      <artifactId>emerge-adapter-agent-loop</artifactId>
+      <version>${project.version}</version>
+    </dependency>
 
     <dependency>
       <groupId>org.junit.jupiter</groupId>

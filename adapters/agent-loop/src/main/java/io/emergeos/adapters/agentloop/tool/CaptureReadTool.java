@@ -1,5 +1,7 @@
-package io.emergeos.adapters.inmemory.agent;
+package io.emergeos.adapters.agentloop.tool;
 
+import io.emergeos.adapters.agentloop.AgentModel;
+import io.emergeos.adapters.agentloop.AgentTool;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.Capture;
 import io.emergeos.core.port.CaptureStore;

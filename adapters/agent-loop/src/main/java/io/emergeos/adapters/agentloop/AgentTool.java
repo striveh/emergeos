@@ -1,4 +1,4 @@
-package io.emergeos.adapters.inmemory.agent;
+package io.emergeos.adapters.agentloop;
 
 import io.emergeos.contracts.TaskEnvelope;
 

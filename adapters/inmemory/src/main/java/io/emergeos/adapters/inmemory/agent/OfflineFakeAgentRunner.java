@@ -1,5 +1,8 @@
 package io.emergeos.adapters.inmemory.agent;
 
+import io.emergeos.adapters.agentloop.AgentLoopKernel;
+import io.emergeos.adapters.agentloop.AgentToolRegistry;
+import io.emergeos.adapters.agentloop.tool.CaptureReadTool;
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.core.application.AgentDraftCommand;
@@ -61,9 +64,9 @@ public final class OfflineFakeAgentRunner {
                 "task", spec.taskId(),
                 "art", spec.artifactId()));
     LongSupplier nanoTime = new FrozenNanoTime(spec.kernelLatencyMs());
-    var tools = new InMemoryToolRegistry(List.of(new CaptureReadTool(captures)));
+    var tools = new AgentToolRegistry(List.of(new CaptureReadTool(captures)));
     var kernel =
-        new FakeAgentKernel(
+        new AgentLoopKernel(
             ScriptedFakeModel.forCaptureDraft(),
             tools,
             spec.maxModelSteps(),

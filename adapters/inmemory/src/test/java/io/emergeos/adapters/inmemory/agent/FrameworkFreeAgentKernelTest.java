@@ -5,6 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.emergeos.adapters.agentloop.AgentLoopKernel;
+import io.emergeos.adapters.agentloop.AgentModel;
+import io.emergeos.adapters.agentloop.AgentTool;
+import io.emergeos.adapters.agentloop.AgentToolRegistry;
+import io.emergeos.adapters.agentloop.tool.CaptureReadTool;
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.contracts.RunStatus;
@@ -35,10 +40,10 @@ class FrameworkFreeAgentKernelTest {
   void initialModelTurnContainsReferencesButNotCaptureContent() {
     RecordingCaptureStore captures = new RecordingCaptureStore(capture());
     RecordingModel model = new RecordingModel(ScriptedFakeModel.forCaptureDraft());
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             model,
-            new InMemoryToolRegistry(List.of(new CaptureReadTool(captures))),
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             2,
             1);
 
@@ -57,10 +62,10 @@ class FrameworkFreeAgentKernelTest {
   @Test
   void executesOneAllowedToolInTheExactSafeEventOrder() {
     RecordingCaptureStore captures = new RecordingCaptureStore(capture());
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             ScriptedFakeModel.forCaptureDraft(),
-            new InMemoryToolRegistry(List.of(new CaptureReadTool(captures))),
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             2,
             1);
 
@@ -99,10 +104,10 @@ class FrameworkFreeAgentKernelTest {
             return new AgentModel.ToolResult(name(), call.reference(), "must not execute");
           }
         };
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             ScriptedFakeModel.requestingTool("danger.write"),
-            new InMemoryToolRegistry(
+            new AgentToolRegistry(
                 List.of(new CaptureReadTool(captures), registeredDangerTool)),
             2,
             1);
@@ -120,10 +125,10 @@ class FrameworkFreeAgentKernelTest {
   void cancelsBetweenTheToolAndTheNextModelStep() {
     RecordingCaptureStore captures = new RecordingCaptureStore(capture());
     RecordingModel model = new RecordingModel(ScriptedFakeModel.forCaptureDraft());
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             model,
-            new InMemoryToolRegistry(List.of(new CaptureReadTool(captures))),
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             2,
             1);
     AtomicInteger checks = new AtomicInteger();
@@ -157,10 +162,10 @@ class FrameworkFreeAgentKernelTest {
             return decision;
           }
         };
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             model,
-            new InMemoryToolRegistry(List.of(new CaptureReadTool(captures))),
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             2,
             1,
             now::get);
@@ -189,10 +194,10 @@ class FrameworkFreeAgentKernelTest {
             return new FinalDraft("late draft", List.of(CAPTURE_REF));
           }
         };
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             slowFinal,
-            new InMemoryToolRegistry(List.of()),
+            new AgentToolRegistry(List.of()),
             1,
             1,
             now::get);
@@ -221,10 +226,10 @@ class FrameworkFreeAgentKernelTest {
             return new FinalDraft("cancelled draft", List.of(CAPTURE_REF));
           }
         };
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             cancellingFinal,
-            new InMemoryToolRegistry(List.of()),
+            new AgentToolRegistry(List.of()),
             1,
             1);
 
@@ -251,10 +256,10 @@ class FrameworkFreeAgentKernelTest {
                 CaptureReadTool.NAME, "capture://forged", "untrusted tool content");
           }
         };
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             ScriptedFakeModel.forCaptureDraft(),
-            new InMemoryToolRegistry(List.of(malformedTool)),
+            new AgentToolRegistry(List.of(malformedTool)),
             2,
             1);
 
@@ -283,10 +288,10 @@ class FrameworkFreeAgentKernelTest {
             DataClass.PERSONAL,
             Instant.parse("2026-07-30T00:00:00Z"));
     RecordingCaptureStore captures = new RecordingCaptureStore(injected);
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             ScriptedFakeModel.forCaptureDraft(),
-            new InMemoryToolRegistry(List.of(new CaptureReadTool(captures))),
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             2,
             1);
 
@@ -317,10 +322,10 @@ class FrameworkFreeAgentKernelTest {
             return new ToolCall(CaptureReadTool.NAME, "capture://" + SENTINEL);
           }
         };
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             maliciousReference,
-            new InMemoryToolRegistry(List.of(new CaptureReadTool(captures))),
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             1,
             1);
 
@@ -337,10 +342,10 @@ class FrameworkFreeAgentKernelTest {
 
   @Test
   void blocksADeclaredButUnregisteredTool() {
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             ScriptedFakeModel.forCaptureDraft(),
-            new InMemoryToolRegistry(List.of()),
+            new AgentToolRegistry(List.of()),
             1,
             1);
 
@@ -369,10 +374,10 @@ class FrameworkFreeAgentKernelTest {
             return new ToolCall(CaptureReadTool.NAME, CAPTURE_REF);
           }
         };
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             repeatedToolCall,
-            new InMemoryToolRegistry(List.of(new CaptureReadTool(captures))),
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             2,
             1);
 
@@ -398,10 +403,10 @@ class FrameworkFreeAgentKernelTest {
             return new ToolCall(CaptureReadTool.NAME, CAPTURE_REF);
           }
         };
-    FakeAgentKernel kernel =
-        new FakeAgentKernel(
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
             repeatedToolCall,
-            new InMemoryToolRegistry(List.of(new CaptureReadTool(captures))),
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             2,
             3);
 

@@ -15,6 +15,7 @@
   <modules>
     <module>modules/contracts</module>
     <module>modules/core</module>
+    <module>adapters/agent-loop</module>
     <module>adapters/inmemory</module>
     <module>adapters/postgres</module>
     <module>apps/api</module>

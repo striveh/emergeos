@@ -11,10 +11,13 @@ modules/core
   application  用例编排与 Agent 结果的确定性验收/提交
   port         对外能力端口，包括 provider-neutral AgentKernel
 
+adapters/agent-loop
+  framework-free 有限工具循环、provider-neutral Model/Tool SPI、固定工具注册表
+  不依赖具体模型 SDK、Spring、数据库、Temporal 或其他 Agent Runtime
+
 adapters/inmemory
   内存 Ledger、确定性草稿生成、Policy、Action Stub
-  framework-free 有限工具循环、脚本 Fake Model、工具注册表、capture.read
-  与 frozen synthetic Offline golden runner
+  脚本 Fake Model 与 frozen synthetic Offline golden runner
 
 adapters/postgres
   Capture、Artifact lineage、local Action 与 AgentRun 的 JdbcClient 适配器
@@ -30,14 +33,18 @@ apps/api
 ```mermaid
 flowchart RL
   API["apps/api"]
+  LOOP["adapters/agent-loop"]
   MEM["adapters/inmemory"]
   PG["adapters/postgres"]
   CORE["modules/core"]
   CT["modules/contracts"]
 
+  API --> LOOP
   API --> MEM
   API --> PG
   API --> CORE
+  MEM --> LOOP
+  LOOP --> CORE
   MEM --> CORE
   PG --> CORE
   CORE --> CT
@@ -45,7 +52,8 @@ flowchart RL
 
 - `core` 不依赖 Spring、数据库、Temporal、AgentScope 或模型 SDK。
 - `contracts` 不依赖任何实现模块。
-- Maven Enforcer 在 `core` 与 `contracts` 构建中阻止框架、数据库和模型 SDK 越界。
+- `agent-loop` 不依赖具体模型 SDK、Spring、数据库、Temporal 或上层 Agent Runtime。
+- Maven Enforcer 在 `core`、`contracts` 与 `agent-loop` 构建中阻止依赖越界。
 - Adapter 只能实现 Core Port，不能让 SDK 类型进入 Core。
 - API 负责传输协议，不能包含领域状态转移。
 - 跨模块只交换显式类型与引用，不共享可变聊天上下文。
@@ -71,7 +79,8 @@ flowchart RL
 ## 当前与后续 Adapter
 
 ```text
-adapters/inmemory/agent    # 已实现：有界 Fake Agent 基线，不含真实模型 SDK
+adapters/agent-loop        # 已实现：provider-neutral、framework-free 有界 Loop 与 Tool SPI
+adapters/inmemory/agent    # 已实现：脚本 Fake Model 与 Offline golden baseline
 adapters/postgres          # 已实现：Capture、Artifact、local Action、AgentRun/Trace
 adapters/openai
 adapters/object-storage
@@ -81,7 +90,7 @@ adapters/temporal
 adapters/connectors/*
 ```
 
-除已标记的 in-memory Agent/Offline baseline 与 PostgreSQL 持久适配器外，其余都是计划，
+除已标记的通用 Agent Loop、in-memory Fake/Offline baseline 与 PostgreSQL 持久适配器外，其余都是计划，
 不应在存在真实实现前创建空目录。S3 模拟 Provider 属于 API 外层的 test-only 协议，不代表
 真实 Connector。当前 safe Trace 已持久化并与 owner-scoped AgentRun、Result、Artifact
 version 和 HarnessRunBundle 绑定；它不是原始模型 transcript。

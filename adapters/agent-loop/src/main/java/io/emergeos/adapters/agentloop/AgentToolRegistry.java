@@ -1,4 +1,4 @@
-package io.emergeos.adapters.inmemory.agent;
+package io.emergeos.adapters.agentloop;
 
 import io.emergeos.contracts.TaskEnvelope;
 import java.util.LinkedHashMap;
@@ -6,11 +6,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-public final class InMemoryToolRegistry {
+/**
+ * Fixed tool registry. A Task can use only the intersection of this registry and its own
+ * server-owned allowlist.
+ */
+public final class AgentToolRegistry {
 
   private final Map<String, AgentTool> tools;
 
-  public InMemoryToolRegistry(List<AgentTool> tools) {
+  public AgentToolRegistry(List<AgentTool> tools) {
     Objects.requireNonNull(tools, "tools");
     Map<String, AgentTool> indexed = new LinkedHashMap<>();
     for (AgentTool tool : tools) {

@@ -1,5 +1,7 @@
 package io.emergeos.adapters.inmemory.agent;
 
+import io.emergeos.adapters.agentloop.AgentModel;
+import io.emergeos.adapters.agentloop.tool.CaptureReadTool;
 import java.util.List;
 import java.util.Objects;
 

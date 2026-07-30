@@ -1,4 +1,4 @@
-package io.emergeos.adapters.inmemory.agent;
+package io.emergeos.adapters.agentloop;
 
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
@@ -15,25 +15,33 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 
-public final class FakeAgentKernel implements AgentKernel {
+/**
+ * Framework-free, provider-neutral Agent loop.
+ *
+ * <p>Core remains the authority for persistent lifecycle, Trace verification and Artifact commit.
+ */
+public final class AgentLoopKernel implements AgentKernel {
 
   private final AgentModel model;
-  private final InMemoryToolRegistry tools;
+  private final AgentToolRegistry tools;
   private final int modelStepCeiling;
   private final int toolCallCeiling;
   private final LongSupplier nanoTime;
 
-  public FakeAgentKernel(
+  public AgentLoopKernel(
       AgentModel model,
-      InMemoryToolRegistry tools,
+      AgentToolRegistry tools,
       int maxModelSteps,
       int maxToolCalls) {
     this(model, tools, maxModelSteps, maxToolCalls, System::nanoTime);
   }
 
-  FakeAgentKernel(
+  /**
+   * Deterministic clock injection for frozen evaluation and deadline tests.
+   */
+  public AgentLoopKernel(
       AgentModel model,
-      InMemoryToolRegistry tools,
+      AgentToolRegistry tools,
       int maxModelSteps,
       int maxToolCalls,
       LongSupplier nanoTime) {
@@ -137,7 +145,7 @@ public final class FakeAgentKernel implements AgentKernel {
               "TOOL_CALL_LIMIT_EXHAUSTED",
               startedNanos);
         }
-        InMemoryToolRegistry.ToolExecution execution;
+        AgentToolRegistry.ToolExecution execution;
         try {
           execution = tools.execute(task, call);
         } catch (RuntimeException toolFailure) {

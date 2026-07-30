@@ -1,5 +1,8 @@
 package io.emergeos.api;
 
+import io.emergeos.adapters.agentloop.AgentLoopKernel;
+import io.emergeos.adapters.agentloop.AgentToolRegistry;
+import io.emergeos.adapters.agentloop.tool.CaptureReadTool;
 import io.emergeos.adapters.inmemory.DefaultReflectionProposer;
 import io.emergeos.adapters.inmemory.DeterministicActionPolicy;
 import io.emergeos.adapters.inmemory.InMemoryJourneyStore;
@@ -7,9 +10,6 @@ import io.emergeos.adapters.inmemory.LocalDraftActionExecutor;
 import io.emergeos.adapters.inmemory.LocalWorkingSelfProjector;
 import io.emergeos.adapters.inmemory.TemplateArtifactGenerator;
 import io.emergeos.adapters.inmemory.UuidIdGenerator;
-import io.emergeos.adapters.inmemory.agent.CaptureReadTool;
-import io.emergeos.adapters.inmemory.agent.FakeAgentKernel;
-import io.emergeos.adapters.inmemory.agent.InMemoryToolRegistry;
 import io.emergeos.adapters.inmemory.agent.ScriptedFakeModel;
 import io.emergeos.adapters.postgres.PostgresActionAttemptStore;
 import io.emergeos.adapters.postgres.PostgresArtifactLineageStore;
@@ -80,9 +80,9 @@ class ApiConfiguration {
 
   @Bean
   AgentKernel agentKernel(PostgresCaptureStore captureStore) {
-    return new FakeAgentKernel(
+    return new AgentLoopKernel(
         ScriptedFakeModel.forCaptureDraft(),
-        new InMemoryToolRegistry(List.of(new CaptureReadTool(captureStore))),
+        new AgentToolRegistry(List.of(new CaptureReadTool(captureStore))),
         2,
         1);
   }
