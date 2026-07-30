@@ -1,0 +1,105 @@
+{
+  "profile": "emergeos-length-prefixed-sha256-v1",
+  "vectors": [
+    {
+      "name": "model-bound-v11-complete-task",
+      "taskHash": "eebb3b1de68b34b74ea11b5431931c57e72805dcc0e8bb0266fc6725739ed188",
+      "task": {
+        "schemaVersion": "1.1",
+        "id": "task-synthetic-003",
+        "parentId": null,
+        "principalRef": "synthetic-owner",
+        "delegationChain": [],
+        "kind": "CREATE_ARTICLE_DRAFT",
+        "intent": "Create a synthetic public draft",
+        "inputRefs": [
+          "capture://synthetic-003"
+        ],
+        "evidenceRefs": [],
+        "modalities": [
+          "text"
+        ],
+        "dataClass": "PUBLIC",
+        "risk": "EXTERNAL",
+        "latencyClass": "INTERACTIVE",
+        "requiredTools": [
+          "capture.read"
+        ],
+        "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+        "acceptanceChecks": [
+          "draft cites the source Capture"
+        ],
+        "allowParallel": false,
+        "maxModelSteps": 2,
+        "maxToolCalls": 1,
+        "deadlineMs": 30000,
+        "budgetUsd": 0.022,
+        "modelProvider": "openai.responses",
+        "modelRequested": "gpt-5.6",
+        "pricingProfile": "openai-gpt-5.6-2026-07-v1",
+        "idempotencyKey": "agent-task-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "policyVersion": "synthetic-model-egress-policy-v1",
+        "stateVersion": "stage2-s3",
+        "contextPolicyVersion": "ref-only-v1",
+        "toolRegistryVersion": "agent-tools-v1",
+        "environmentSnapshotRef": "environment://sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "capabilityRefs": [
+          "capability://model-egress/synthetic-openai-v1"
+        ],
+        "unresolvedDecisions": [],
+        "returnControlWhen": "structured final or non-success"
+      }
+    },
+    {
+      "name": "legacy-v10-explicit-null-model-binding",
+      "taskHash": "0860319a84c2e02369cd62c0147b1dd25d7d64343d3fce620559584b2b77f015",
+      "task": {
+        "schemaVersion": "1.0",
+        "id": "task-v10-explicit-null-binding",
+        "parentId": null,
+        "principalRef": "synthetic-persona-quiet-builder",
+        "delegationChain": [],
+        "kind": "CREATE_ARTICLE_DRAFT",
+        "intent": "Turn one thought into a local article draft",
+        "inputRefs": [
+          "evidence://thought/001"
+        ],
+        "evidenceRefs": [
+          "evidence://thought/001"
+        ],
+        "modalities": [
+          "text"
+        ],
+        "dataClass": "PERSONAL",
+        "risk": "REVERSIBLE",
+        "latencyClass": "INTERACTIVE",
+        "requiredTools": [
+          "local-draft-writer"
+        ],
+        "outputSchema": "urn:emergeos:output:article-draft:v1",
+        "acceptanceChecks": [
+          "draft preserves the original thought"
+        ],
+        "allowParallel": false,
+        "maxModelSteps": 2,
+        "maxToolCalls": 1,
+        "deadlineMs": 30000,
+        "budgetUsd": 0,
+        "modelProvider": null,
+        "modelRequested": null,
+        "pricingProfile": null,
+        "idempotencyKey": "task-v10-explicit-null-attempt",
+        "policyVersion": "policy-1",
+        "stateVersion": "state-1",
+        "contextPolicyVersion": "context-policy-1",
+        "toolRegistryVersion": "tools-1",
+        "environmentSnapshotRef": null,
+        "capabilityRefs": [
+          "capability://local-draft"
+        ],
+        "unresolvedDecisions": [],
+        "returnControlWhen": "approval is required"
+      }
+    }
+  ]
+}

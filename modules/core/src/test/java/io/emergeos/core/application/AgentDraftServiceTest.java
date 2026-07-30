@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.HarnessExperiment;
+import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.ResourceRole;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.contracts.RunStatus;
@@ -23,6 +24,7 @@ import io.emergeos.core.domain.CaptureRequestHashes;
 import io.emergeos.core.domain.CaptureSourceType;
 import io.emergeos.core.port.AgentKernel;
 import io.emergeos.core.port.AgentRunStore;
+import io.emergeos.core.port.AgentTaskAuthorizer;
 import io.emergeos.core.port.CaptureStore;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -628,6 +630,106 @@ class AgentDraftServiceTest {
                 AgentExecutionProfile.legacyFakeV1()));
   }
 
+  @Test
+  void taskAuthorizationFailureOccursBeforeRunStartAndKernelExecution() {
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+    AtomicInteger authorizerCalls = new AtomicInteger();
+    AtomicInteger kernelCalls = new AtomicInteger();
+    AgentExecutionProfile profile = modelBoundProfile();
+    AgentDraftService service =
+        new AgentDraftService(
+            profileBoundKernel(
+                profile,
+                (task, cancellation) -> {
+                  kernelCalls.incrementAndGet();
+                  throw new AssertionError("kernel must not run");
+                }),
+            runs,
+            new FixedCaptureStore(capture(DataClass.PUBLIC)),
+            prefix -> prefix + "-test",
+            Clock.fixed(
+                Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
+            profile,
+            task -> {
+              authorizerCalls.incrementAndGet();
+              throw new IllegalArgumentException("synthetic permit missing");
+            });
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            service.draft(
+                new AgentDraftCommand(
+                    PRINCIPAL, CAPTURE_ID, "Create a synthetic public draft")));
+    assertEquals(1, authorizerCalls.get());
+    assertEquals(0, runs.startCalls);
+    assertEquals(0, kernelCalls.get());
+    assertEquals(0, artifacts.createCalls);
+  }
+
+  @Test
+  void modelBoundServiceRejectsMissingOrUnrestrictedTaskAuthorization() {
+    AgentExecutionProfile profile = modelBoundProfile();
+    AgentKernel kernel =
+        profileBoundKernel(
+            profile,
+            (task, cancellation) -> {
+              throw new AssertionError("kernel must not run");
+            });
+    RecordingAgentRunStore runs =
+        new RecordingAgentRunStore(new RecordingArtifactStore());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new AgentDraftService(
+                kernel,
+                runs,
+                new FixedCaptureStore(capture(DataClass.PUBLIC)),
+                prefix -> prefix + "-test",
+                Clock.fixed(
+                    Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
+                profile));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new AgentDraftService(
+                kernel,
+                runs,
+                new FixedCaptureStore(capture(DataClass.PUBLIC)),
+                prefix -> prefix + "-test",
+                Clock.fixed(
+                    Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
+                profile,
+                AgentTaskAuthorizer.allowAll()));
+    assertEquals(0, runs.startCalls);
+  }
+
+  @Test
+  void unexpectedKernelFailureTerminalizesTheStartedRun() {
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+    AgentDraftService service =
+        service(
+            runs,
+            (task, cancellation) -> {
+              throw new IllegalStateException("unsafe provider detail");
+            });
+
+    AgentDraftOutcome outcome =
+        service.draft(
+            new AgentDraftCommand(
+                PRINCIPAL, CAPTURE_ID, "Create an article draft"));
+
+    assertEquals(RunStatus.FAILED, outcome.result().status());
+    assertEquals("AGENT_KERNEL_FAILED", outcome.result().failureReason());
+    assertEquals(1, runs.startCalls);
+    assertEquals(1, runs.completeCalls);
+    assertEquals(AgentRunLifecycle.FAILED, runs.stored.lifecycle());
+    assertEquals(0, artifacts.createCalls);
+  }
+
   private static AgentDraftService service(
       RecordingArtifactStore artifactStore, AgentKernel kernel) {
     return service(new RecordingAgentRunStore(artifactStore), kernel);
@@ -647,13 +749,40 @@ class AgentDraftServiceTest {
       AgentKernel kernel,
       Capture capture,
       AgentExecutionProfile executionProfile) {
+    if (!executionProfile.modelBound()) {
+      return new AgentDraftService(
+          kernel,
+          runStore,
+          new FixedCaptureStore(capture),
+          prefix -> prefix + "-test",
+          Clock.fixed(
+              Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
+          executionProfile);
+    }
+    TaskEnvelope permittedTask =
+        executionProfile.newDraftTask(
+            "task-test",
+            PRINCIPAL,
+            "Create a synthetic public draft",
+            "capture://" + CAPTURE_ID,
+            DataClass.PUBLIC);
+    String permittedTaskHash = IntegrityHashes.taskHash(permittedTask);
+    AgentTaskAuthorizer exactPermit =
+        task -> {
+          if (!permittedTaskHash.equals(IntegrityHashes.taskHash(task))) {
+            throw new IllegalArgumentException(
+                "task is not covered by the explicit test permit");
+          }
+        };
     return new AgentDraftService(
         kernel,
         runStore,
         new FixedCaptureStore(capture),
         prefix -> prefix + "-test",
-        Clock.fixed(Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
-        executionProfile);
+        Clock.fixed(
+            Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
+        executionProfile,
+        exactPermit);
   }
 
   private static void assertPreflightDataRejection(Capture capture) {

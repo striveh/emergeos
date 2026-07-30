@@ -9,6 +9,7 @@ import addFormats from "ajv-formats";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const schemaDir = path.join(repoRoot, "contracts", "schemas", "v1");
 const fixtureDir = path.join(repoRoot, "contracts", "fixtures", "v1");
+const goldenDir = path.join(repoRoot, "contracts", "golden", "v1");
 const taskPackDir = path.join(repoRoot, "evals", "task-packs", "synthetic");
 
 function readJson(file) {
@@ -604,6 +605,51 @@ for (const { file, schema } of schemas) {
 }
 
 process.stdout.write(`Compiled ${schemas.length} JSON Schema 2020-12 contracts and validated ${fixtureCount} fixtures.\n`);
+
+const taskHashGoldenFile =
+  path.join(goldenDir, "task-envelope-integrity-hashes.json");
+const taskHashGolden = readJson(taskHashGoldenFile);
+if (
+  taskHashGolden.profile !== INTEGRITY_PROFILE
+  || !Array.isArray(taskHashGolden.vectors)
+  || taskHashGolden.vectors.length === 0
+) {
+  throw new Error(
+    `${path.relative(repoRoot, taskHashGoldenFile)} has an unsupported or empty profile`
+  );
+}
+for (const vector of taskHashGolden.vectors) {
+  if (
+    typeof vector.name !== "string"
+    || typeof vector.taskHash !== "string"
+    || !/^[a-f0-9]{64}$/.test(vector.taskHash)
+    || vector.task === null
+    || typeof vector.task !== "object"
+  ) {
+    throw new Error(
+      `${path.relative(repoRoot, taskHashGoldenFile)} contains an invalid task hash vector`
+    );
+  }
+  verifyTask(vector.task, `${vector.name}.task`);
+  const preimage = JSON.parse(JSON.stringify(vector.task));
+  if (preimage.schemaVersion === "1.0") {
+    delete preimage.modelProvider;
+    delete preimage.modelRequested;
+    delete preimage.pricingProfile;
+  }
+  const expected = domainHash(
+    "emergeos.task-envelope.v1",
+    canonicalEncode(preimage)
+  );
+  if (vector.taskHash !== expected) {
+    throw new Error(
+      `${vector.name}: taskHash mismatch (expected ${expected})`
+    );
+  }
+}
+process.stdout.write(
+  `Validated ${taskHashGolden.vectors.length} cross-language Task hash golden vector.\n`
+);
 
 const taskPackFiles = jsonFiles(taskPackDir);
 if (taskPackFiles.length === 0) {

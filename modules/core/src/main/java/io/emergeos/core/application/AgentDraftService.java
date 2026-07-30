@@ -23,6 +23,7 @@ import io.emergeos.core.domain.Capture;
 import io.emergeos.core.domain.ContentHashes;
 import io.emergeos.core.port.AgentKernel;
 import io.emergeos.core.port.AgentRunStore;
+import io.emergeos.core.port.AgentTaskAuthorizer;
 import io.emergeos.core.port.CancellationSignal;
 import io.emergeos.core.port.CaptureStore;
 import io.emergeos.core.port.IdGenerator;
@@ -44,6 +45,7 @@ public final class AgentDraftService {
   private final IdGenerator ids;
   private final Clock clock;
   private final AgentExecutionProfile executionProfile;
+  private final AgentTaskAuthorizer taskAuthorizer;
 
   public AgentDraftService(
       AgentKernel kernel,
@@ -52,6 +54,24 @@ public final class AgentDraftService {
       IdGenerator ids,
       Clock clock,
       AgentExecutionProfile executionProfile) {
+    this(
+        kernel,
+        runs,
+        captures,
+        ids,
+        clock,
+        executionProfile,
+        legacyOfflineAuthorizer(executionProfile));
+  }
+
+  public AgentDraftService(
+      AgentKernel kernel,
+      AgentRunStore runs,
+      CaptureStore captures,
+      IdGenerator ids,
+      Clock clock,
+      AgentExecutionProfile executionProfile,
+      AgentTaskAuthorizer taskAuthorizer) {
     this.kernel = Objects.requireNonNull(kernel, "kernel");
     this.runs = Objects.requireNonNull(runs, "runs");
     this.captures = Objects.requireNonNull(captures, "captures");
@@ -59,6 +79,13 @@ public final class AgentDraftService {
     this.clock = Objects.requireNonNull(clock, "clock");
     this.executionProfile =
         Objects.requireNonNull(executionProfile, "executionProfile");
+    this.taskAuthorizer =
+        Objects.requireNonNull(taskAuthorizer, "taskAuthorizer");
+    if (executionProfile.modelBound()
+        && taskAuthorizer == AgentTaskAuthorizer.allowAll()) {
+      throw new IllegalArgumentException(
+          "a model-bound AgentDraftService rejects the unrestricted task authorizer");
+    }
     String kernelProfileId = kernel.executionProfileId();
     String kernelProfileFingerprint = kernel.executionProfileFingerprint();
     if (executionProfile.modelBound()
@@ -80,6 +107,7 @@ public final class AgentDraftService {
         captures.findOwned(command.principalId(), command.captureId()).orElse(null);
     TaskEnvelope task = task(command, captureRef, ownedCapture);
     executionProfile.requireTaskBinding(task);
+    taskAuthorizer.authorize(task);
     Instant startedAt = clock.instant();
     runs.start(AgentRun.running(runId, command.principalId(), task, startedAt));
 
@@ -314,41 +342,22 @@ public final class AgentDraftService {
 
   private TaskEnvelope task(
       AgentDraftCommand command, String captureRef, Capture ownedCapture) {
-    String taskId = ids.next("task");
-    return new TaskEnvelope(
-        executionProfile.taskSchemaVersion(),
-        taskId,
-        null,
+    return executionProfile.newDraftTask(
+        ids.next("task"),
         command.principalId(),
-        List.of(),
-        "CREATE_ARTICLE_DRAFT",
         command.intent(),
-        List.of(captureRef),
-        List.of(),
-        List.of("text"),
-        ownedCapture == null ? DataClass.PERSONAL : ownedCapture.dataClass(),
-        executionProfile.risk(),
-        "INTERACTIVE",
-        List.of("capture.read"),
-        "urn:emergeos:schema:internal:agent-draft-proposal:v1",
-        List.of("draft cites the source Capture"),
-        false,
-        executionProfile.maxModelSteps(),
-        executionProfile.maxToolCalls(),
-        executionProfile.deadlineMs(),
-        executionProfile.budgetUsd(),
-        executionProfile.modelProvider(),
-        executionProfile.modelRequested(),
-        executionProfile.pricingProfile(),
-        executionProfile.taskIdempotencyKey(taskId),
-        executionProfile.policyVersion(),
-        executionProfile.stateVersion(),
-        executionProfile.contextPolicyVersion(),
-        executionProfile.toolRegistryVersion(),
-        executionProfile.environmentSnapshotRef(),
-        executionProfile.capabilityRefs(),
-        List.of(),
-        "structured final or non-success");
+        captureRef,
+        ownedCapture == null ? DataClass.PERSONAL : ownedCapture.dataClass());
+  }
+
+  private static AgentTaskAuthorizer legacyOfflineAuthorizer(
+      AgentExecutionProfile executionProfile) {
+    Objects.requireNonNull(executionProfile, "executionProfile");
+    if (executionProfile.modelBound()) {
+      throw new IllegalArgumentException(
+          "a model-bound AgentDraftService requires an explicit task authorizer");
+    }
+    return AgentTaskAuthorizer.allowAll();
   }
 
   private static AgentRunOutcome sanitizeKernelOutcome(

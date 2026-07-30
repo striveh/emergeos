@@ -14,6 +14,7 @@ public final class IntegrityHashes {
   private static final String EMPTY_TRACE_DOMAIN = "emergeos.agent-trace.v1.empty";
   private static final String TRACE_EVENT_DOMAIN = "emergeos.agent-trace-event.v1";
   private static final String TRACE_ROOT_DOMAIN = "emergeos.agent-trace.v1";
+  private static final String TASK_DOMAIN = "emergeos.task-envelope.v1";
   private static final String BUNDLE_DOMAIN = "emergeos.harness-run-bundle.v1";
 
   private IntegrityHashes() {}
@@ -55,6 +56,17 @@ public final class IntegrityHashes {
         BUNDLE_DOMAIN,
         CanonicalEncoding.encode(
             CanonicalEncoding.recordValues(bundle, Set.of("integrityHash"))));
+  }
+
+  /**
+   * Hashes the complete canonical Task, including every prompt-bearing and execution-binding
+   * field supported by its schema version.
+   */
+  public static String taskHash(TaskEnvelope task) {
+    if (task == null) {
+      throw new NullPointerException("task");
+    }
+    return domainHash(TASK_DOMAIN, CanonicalEncoding.encode(task));
   }
 
   static String bundleHash(Map<String, Object> bundlePreimage) {

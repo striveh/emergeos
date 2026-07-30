@@ -195,6 +195,24 @@ class AgentExecutionProfileTest {
         () -> profile.requireTaskBinding(task(profile, "openai.responses-alt")));
   }
 
+  @Test
+  void createsTheExactServerOwnedDraftTaskUsedByPreflightAndService() {
+    AgentExecutionProfile profile =
+        modelBoundProfile(new BigDecimal("0.022000"));
+
+    TaskEnvelope task =
+        profile.newDraftTask(
+            "task-001",
+            "synthetic-owner",
+            "Create one synthetic public draft",
+            "capture://synthetic",
+            DataClass.PUBLIC);
+
+    profile.requireTaskBinding(task);
+    assertEquals(profile.taskIdempotencyKey(task.id()), task.idempotencyKey());
+    assertEquals(profile.fingerprint(), profile.fingerprint());
+  }
+
   private static AgentExecutionProfile modelBoundProfile(BigDecimal budgetUsd) {
     return modelBoundProfile(1_000, 200, budgetUsd);
   }

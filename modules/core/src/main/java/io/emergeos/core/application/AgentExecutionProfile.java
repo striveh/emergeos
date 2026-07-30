@@ -244,6 +244,57 @@ public record AgentExecutionProfile(
   }
 
   /**
+   * Creates the only draft Task shape supported by this execution profile.
+   *
+   * <p>Eval preflight and the production service must call this same factory so the reviewed
+   * whole-Task hash cannot drift through duplicate Task construction.
+   */
+  public TaskEnvelope newDraftTask(
+      String taskId,
+      String principalRef,
+      String intent,
+      String captureRef,
+      DataClass dataClass) {
+    TaskEnvelope task =
+        new TaskEnvelope(
+            taskSchemaVersion,
+            taskId,
+            null,
+            principalRef,
+            List.of(),
+            "CREATE_ARTICLE_DRAFT",
+            intent,
+            List.of(captureRef),
+            List.of(),
+            List.of("text"),
+            dataClass,
+            risk,
+            "INTERACTIVE",
+            List.of("capture.read"),
+            "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+            List.of("draft cites the source Capture"),
+            false,
+            maxModelSteps,
+            maxToolCalls,
+            deadlineMs,
+            budgetUsd,
+            modelProvider(),
+            modelRequested(),
+            pricingProfile(),
+            taskIdempotencyKey(taskId),
+            policyVersion,
+            stateVersion,
+            contextPolicyVersion,
+            toolRegistryVersion,
+            environmentSnapshotRef,
+            capabilityRefs,
+            List.of(),
+            "structured final or non-success");
+    requireTaskBinding(task);
+    return task;
+  }
+
+  /**
    * Hashes every server-owned field that changes execution or metering semantics.
    *
    * <p>A compiled Eval catalog must bind {@code id -> fingerprint}; the fingerprint in a Bundle
