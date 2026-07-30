@@ -1,6 +1,7 @@
 package io.emergeos.contracts;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -102,6 +103,54 @@ class HarnessRunBundleConsistencyTest {
   }
 
   @Test
+  void allowsSafePostDispatchDeadlineRejectionMetadata() {
+    AgentTraceEnvelope trace = deadlineTrace();
+
+    assertEquals(
+        "2532fa4beeafb6dbdd0e20d55ff349dba905256aa0f0664de4e9843bb96500ac",
+        trace.rootHash(),
+        "Java must match the valid Node deadline Trace fixture");
+  }
+
+  private static AgentTraceEnvelope deadlineTrace() {
+    String root = IntegrityHashes.emptyTraceRoot();
+    List<AgentTraceEntry> events = new java.util.ArrayList<>();
+    for (TraceSpec event :
+        List.of(
+            new TraceSpec(
+                TraceEventType.MODEL_STEP,
+                null,
+                "COMPLETED",
+                "task://task-deadline-policy"),
+            new TraceSpec(
+                TraceEventType.TOOL_REQUEST,
+                "capture.read",
+                "REQUESTED",
+                "capture://capture-001"),
+            new TraceSpec(
+                TraceEventType.TOOL_REJECTED,
+                "capture.read",
+                "DEADLINE_EXCEEDED",
+                "capture://capture-001"))) {
+      AgentTraceEntry entry =
+          AgentTraceEntry.create(
+              events.size() + 1,
+              event.type(),
+              event.toolName(),
+              event.status(),
+              event.reference(),
+              root);
+      events.add(entry);
+      root = IntegrityHashes.nextTraceRoot(root, entry.eventHash());
+    }
+    return AgentTraceEnvelope.create(
+        "1.0",
+        "run-deadline-policy",
+        "task-deadline-policy",
+        events);
+  }
+
+  @Test
   void changingAnyBoundResourceChangesBundleHash() {
     HarnessRunBundle original = bundle(components("agent", "verifier"), "task-001");
     ResourceBinding artifact = original.resourceBindings().get(1);
@@ -198,6 +247,41 @@ class HarnessRunBundleConsistencyTest {
             "trace-integrity", IntegrityHashes.PROFILE,
             "model-adapter", "historical-adapter-v1"),
         "task-001");
+  }
+
+  @Test
+  void preservesObservedOverDeadlineLatencyOnlyForNonSuccess() {
+    HarnessRunBundle failed =
+        assertDoesNotThrow(
+            () ->
+                deadlineBundle(
+                    RunStatus.FAILED,
+                    7,
+                    "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH"));
+    assertEquals(
+        "d2fdbf0c2c506392cd3da1fdbb0507599c6c4e3733fe4b7b289722e939e77f39",
+        failed.integrityHash(),
+        "Java must match the valid Node deadline-failure fixture");
+    for (RunStatus status : RunStatus.values()) {
+      if (status != RunStatus.SUCCEEDED) {
+        assertDoesNotThrow(
+            () -> deadlineBundle(status, 7, "SYNTHETIC_NON_SUCCESS"));
+      }
+    }
+    assertDoesNotThrow(
+        () -> deadlineBundle(RunStatus.FAILED, 5, "DEADLINE_EXHAUSTED"));
+    for (long latencyMs : List.of(0L, 5L)) {
+      assertThrows(
+          IllegalArgumentException.class,
+          () ->
+              deadlineBundle(
+                  RunStatus.FAILED,
+                  latencyMs,
+                  "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH"));
+    }
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> deadlineBundle(RunStatus.SUCCEEDED, 7, null));
   }
 
   static HarnessRunBundle goldenBundle() {
@@ -360,6 +444,91 @@ class HarnessRunBundleConsistencyTest {
       case "trace-integrity" -> IntegrityHashes.PROFILE;
       default -> throw new IllegalArgumentException("unsupported component " + name);
     };
+  }
+
+  private static HarnessRunBundle deadlineBundle(
+      RunStatus status, long latencyMs, String failureReason) {
+    TaskEnvelope task =
+        new TaskEnvelope(
+            "1.0",
+            "task-deadline-policy",
+            null,
+            "owner-001",
+            List.of(),
+            "READ_ONLY_EVAL",
+            "Preserve observed failure latency",
+            List.of("capture://capture-001"),
+            List.of(),
+            List.of("text"),
+            DataClass.PUBLIC,
+            RiskLevel.REVERSIBLE,
+            "INTERACTIVE",
+            List.of("capture.read"),
+            "urn:test:read-only-result",
+            List.of(),
+            false,
+            1,
+            1,
+            5,
+            BigDecimal.ZERO,
+            null,
+            null,
+            null,
+            null,
+            "policy-v1",
+            "state-v1",
+            "context-v1",
+            "agent-tools-v1",
+            null,
+            List.of(),
+            List.of(),
+            "terminal");
+    ResultEnvelope result =
+        new ResultEnvelope(
+            "1.0",
+            "run-deadline-policy",
+            task.id(),
+            status,
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            "fake-model",
+            "agent-v1",
+            "verifier-v1",
+            BigDecimal.ZERO,
+            0,
+            latencyMs,
+            "/api/v1/agent-runs/run-deadline-policy/trace",
+            failureReason);
+    return HarnessRunBundle.create(
+        "1.0",
+        result.runId(),
+        task.id(),
+        null,
+        result.resolvedModel(),
+        "harness-v1",
+        Map.of(
+            "agent", result.agentVersion(),
+            "verifier", result.verifierVersion(),
+            "trace-integrity", IntegrityHashes.PROFILE),
+        null,
+        task.toolRegistryVersion(),
+        task,
+        result,
+        null,
+        result.traceRef(),
+        deadlineTrace().rootHash(),
+        List.of(),
+        List.of(),
+        List.of(),
+        null,
+        failureReason,
+        status,
+        BigDecimal.ZERO,
+        0,
+        latencyMs);
   }
 
   private record TraceSpec(

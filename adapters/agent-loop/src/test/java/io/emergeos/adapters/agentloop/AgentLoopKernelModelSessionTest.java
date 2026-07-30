@@ -11,6 +11,8 @@ import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
+import io.emergeos.core.domain.AgentRunOutcome;
+import io.emergeos.core.domain.AgentTraceEventType;
 import io.emergeos.core.port.CancellationSignal;
 import java.math.BigDecimal;
 import java.util.List;
@@ -21,6 +23,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class AgentLoopKernelModelSessionTest {
 
@@ -409,6 +413,223 @@ class AgentLoopKernelModelSessionTest {
     assertEquals(1, outcome.trace().size());
   }
 
+  @ParameterizedTest
+  @EnumSource(LateToolMode.class)
+  void rejectsEveryLateToolOutcomeBeforeResultShapeOrExceptionAttribution(
+      LateToolMode mode) {
+    AtomicLong now = new AtomicLong();
+    AtomicInteger modelCalls = new AtomicInteger();
+    AtomicInteger validations = new AtomicInteger();
+    AtomicInteger executions = new AtomicInteger();
+    String sentinel = "PRIVATE_LATE_TOOL_SENTINEL_" + mode;
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            attributedToolCallingModel(modelCalls),
+            new AgentToolRegistry(
+                List.of(
+                    timedCaptureReadTool(
+                        mode,
+                        7,
+                        now,
+                        validations,
+                        executions,
+                        sentinel,
+                        () -> {}))),
+            2,
+            1,
+            now::get);
+
+    AgentRunOutcome outcome =
+        kernel.run(
+            task("late-tool-" + mode.name().toLowerCase(), 5),
+            CancellationSignal.never());
+
+    assertPostDispatchDeadlineOutcome(outcome);
+    assertEquals(1, modelCalls.get());
+    assertEquals(1, validations.get());
+    assertEquals(1, executions.get());
+    assertFalse(outcome.toString().contains(sentinel));
+  }
+
+  @Test
+  void toolCompletionAtTheExactDeadlineIsNotAttributedAsExceeded() {
+    AtomicLong now = new AtomicLong();
+    AtomicInteger modelCalls = new AtomicInteger();
+    AtomicInteger validations = new AtomicInteger();
+    AtomicInteger executions = new AtomicInteger();
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            attributedToolCallingModel(modelCalls),
+            new AgentToolRegistry(
+                List.of(
+                    timedCaptureReadTool(
+                        LateToolMode.VALID,
+                        5,
+                        now,
+                        validations,
+                        executions,
+                        "SYNTHETIC_EXACT_BOUNDARY_RESULT",
+                        () -> {}))),
+            2,
+            1,
+            now::get);
+
+    AgentRunOutcome outcome =
+        kernel.run(task("exact-tool-deadline", 5), CancellationSignal.never());
+
+    assertEquals(RunStatus.FAILED, outcome.status());
+    assertEquals("DEADLINE_EXHAUSTED", outcome.failureReason());
+    assertEquals(5, outcome.latencyMs());
+    assertEquals("provider-model-snapshot", outcome.resolvedModel());
+    assertEquals(new BigDecimal("0.001000"), outcome.costUsd());
+    assertEquals(11, outcome.tokenCount());
+    assertNull(outcome.proposal());
+    assertEquals(List.of(CAPTURE_REF), outcome.obtainedEvidenceRefs());
+    assertEquals(1, modelCalls.get());
+    assertEquals(1, validations.get());
+    assertEquals(1, executions.get());
+    assertEquals(
+        List.of(
+            AgentTraceEventType.MODEL_STEP,
+            AgentTraceEventType.TOOL_REQUEST,
+            AgentTraceEventType.TOOL_RESULT),
+        outcome.trace().stream().map(event -> event.type()).toList());
+    assertEquals(
+        List.of("COMPLETED", "REQUESTED", "SUCCEEDED"),
+        outcome.trace().stream().map(event -> event.status()).toList());
+    assertFalse(outcome.toString().contains("SYNTHETIC_EXACT_BOUNDARY_RESULT"));
+  }
+
+  @Test
+  void preDeadlineToolExceptionRemainsAnExecutionFailure() {
+    AtomicLong now = new AtomicLong();
+    AtomicInteger modelCalls = new AtomicInteger();
+    AtomicInteger validations = new AtomicInteger();
+    AtomicInteger executions = new AtomicInteger();
+    String sentinel = "PRIVATE_PRE_DEADLINE_TOOL_EXCEPTION";
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            attributedToolCallingModel(modelCalls),
+            new AgentToolRegistry(
+                List.of(
+                    timedCaptureReadTool(
+                        LateToolMode.THROW,
+                        4,
+                        now,
+                        validations,
+                        executions,
+                        sentinel,
+                        () -> {}))),
+            2,
+            1,
+            now::get);
+
+    AgentRunOutcome outcome =
+        kernel.run(task("pre-deadline-tool-throw", 5), CancellationSignal.never());
+
+    assertEquals(RunStatus.FAILED, outcome.status());
+    assertEquals("TOOL_EXECUTION_FAILED", outcome.failureReason());
+    assertEquals(4, outcome.latencyMs());
+    assertEquals("provider-model-snapshot", outcome.resolvedModel());
+    assertEquals(new BigDecimal("0.001000"), outcome.costUsd());
+    assertEquals(11, outcome.tokenCount());
+    assertNull(outcome.proposal());
+    assertEquals(List.of(), outcome.obtainedEvidenceRefs());
+    assertEquals(1, modelCalls.get());
+    assertEquals(1, validations.get());
+    assertEquals(1, executions.get());
+    assertEquals(
+        List.of(
+            AgentTraceEventType.MODEL_STEP,
+            AgentTraceEventType.TOOL_REQUEST,
+            AgentTraceEventType.TOOL_REJECTED),
+        outcome.trace().stream().map(event -> event.type()).toList());
+    assertEquals(
+        List.of("COMPLETED", "REQUESTED", "FAILED"),
+        outcome.trace().stream().map(event -> event.status()).toList());
+    assertFalse(outcome.toString().contains(sentinel));
+  }
+
+  @Test
+  void postDispatchDeadlineIsCanonicalWhenCancellationIsAlsoTrueAtThatBoundary() {
+    AtomicLong now = new AtomicLong();
+    AtomicInteger modelCalls = new AtomicInteger();
+    AtomicInteger validations = new AtomicInteger();
+    AtomicInteger executions = new AtomicInteger();
+    java.util.concurrent.atomic.AtomicBoolean cancelled =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            attributedToolCallingModel(modelCalls),
+            new AgentToolRegistry(
+                List.of(
+                    timedCaptureReadTool(
+                        LateToolMode.VALID,
+                        7,
+                        now,
+                        validations,
+                        executions,
+                        "PRIVATE_SIMULTANEOUS_STOP_SENTINEL",
+                        () -> cancelled.set(true)))),
+            2,
+            1,
+            now::get);
+
+    AgentRunOutcome outcome =
+        kernel.run(task("simultaneous-post-dispatch-stop", 5), cancelled::get);
+
+    assertPostDispatchDeadlineOutcome(outcome);
+    assertTrue(cancelled.get());
+    assertEquals(1, modelCalls.get());
+    assertEquals(1, validations.get());
+    assertEquals(1, executions.get());
+  }
+
+  @Test
+  void cancellationAloneAfterAReadPreservesItsResultButStopsBeforeTheNextModel() {
+    AtomicLong now = new AtomicLong();
+    AtomicInteger modelCalls = new AtomicInteger();
+    AtomicInteger validations = new AtomicInteger();
+    AtomicInteger executions = new AtomicInteger();
+    java.util.concurrent.atomic.AtomicBoolean cancelled =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            attributedToolCallingModel(modelCalls),
+            new AgentToolRegistry(
+                List.of(
+                    timedCaptureReadTool(
+                        LateToolMode.VALID,
+                        4,
+                        now,
+                        validations,
+                        executions,
+                        "SYNTHETIC_CANCELLED_READ_RESULT",
+                        () -> cancelled.set(true)))),
+            2,
+            1,
+            now::get);
+
+    AgentRunOutcome outcome =
+        kernel.run(task("post-dispatch-cancellation-only", 5), cancelled::get);
+
+    assertEquals(RunStatus.CANCELLED, outcome.status());
+    assertEquals("CANCELLED", outcome.failureReason());
+    assertEquals(4, outcome.latencyMs());
+    assertNull(outcome.proposal());
+    assertEquals(List.of(CAPTURE_REF), outcome.obtainedEvidenceRefs());
+    assertEquals(1, modelCalls.get());
+    assertEquals(1, validations.get());
+    assertEquals(1, executions.get());
+    assertEquals(
+        List.of(
+            AgentTraceEventType.MODEL_STEP,
+            AgentTraceEventType.TOOL_REQUEST,
+            AgentTraceEventType.TOOL_RESULT),
+        outcome.trace().stream().map(event -> event.type()).toList());
+    assertFalse(outcome.toString().contains("SYNTHETIC_CANCELLED_READ_RESULT"));
+  }
+
   @Test
   void registryVersionMismatchBlocksBeforeOpeningAModelSession() {
     AtomicInteger opens = new AtomicInteger();
@@ -514,6 +735,100 @@ class AgentLoopKernelModelSessionTest {
         () -> AgentModel.ToolArguments.fromJson("\uD800"));
   }
 
+  private static void assertPostDispatchDeadlineOutcome(AgentRunOutcome outcome) {
+    assertEquals(RunStatus.FAILED, outcome.status());
+    assertEquals(
+        "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH", outcome.failureReason());
+    assertEquals("provider-model-snapshot", outcome.resolvedModel());
+    assertEquals(new BigDecimal("0.001000"), outcome.costUsd());
+    assertEquals(11, outcome.tokenCount());
+    assertEquals(7, outcome.latencyMs());
+    assertNull(outcome.proposal());
+    assertEquals(List.of(), outcome.obtainedEvidenceRefs());
+    assertEquals(
+        List.of(
+            AgentTraceEventType.MODEL_STEP,
+            AgentTraceEventType.TOOL_REQUEST,
+            AgentTraceEventType.TOOL_REJECTED),
+        outcome.trace().stream().map(event -> event.type()).toList());
+    assertEquals(
+        List.of("COMPLETED", "REQUESTED", "DEADLINE_EXCEEDED"),
+        outcome.trace().stream().map(event -> event.status()).toList());
+    assertEquals(
+        List.of(CAPTURE_REF, CAPTURE_REF),
+        outcome.trace().stream()
+            .filter(event -> event.toolName() != null)
+            .map(event -> event.reference())
+            .toList());
+    assertEquals(
+        List.of("capture.read", "capture.read"),
+        outcome.trace().stream()
+            .filter(event -> event.toolName() != null)
+            .map(event -> event.toolName())
+            .toList());
+    assertFalse(
+        outcome.trace().stream()
+            .anyMatch(event -> event.type() == AgentTraceEventType.TOOL_RESULT));
+  }
+
+  private static AgentModel attributedToolCallingModel(AtomicInteger calls) {
+    return task ->
+        (turn, context) -> {
+          calls.incrementAndGet();
+          return new AgentModel.ModelStep(
+              new AgentModel.ToolCall(
+                  "capture.read",
+                  AgentModel.ToolArguments.forReference(CAPTURE_REF)),
+              "provider-model-snapshot",
+              new AgentModel.ModelUsage(new BigDecimal("0.001000"), 11));
+        };
+  }
+
+  private static AgentTool<Arguments> timedCaptureReadTool(
+      LateToolMode mode,
+      long completionMs,
+      AtomicLong now,
+      AtomicInteger validations,
+      AtomicInteger executions,
+      String sentinel,
+      Runnable completionHook) {
+    return new AgentTool<>() {
+      @Override
+      public String name() {
+        return "capture.read";
+      }
+
+      @Override
+      public String argumentSchemaId() {
+        return "urn:emergeos:tool:capture-read-arguments:v1";
+      }
+
+      @Override
+      public Validation<Arguments> validate(
+          TaskEnvelope task, AgentModel.ToolCall call) {
+        validations.incrementAndGet();
+        return Validation.valid(new Arguments(task.inputRefs().getFirst()));
+      }
+
+      @Override
+      public AgentModel.ToolResult execute(
+          TaskEnvelope task, Arguments arguments) {
+        executions.incrementAndGet();
+        now.set(TimeUnit.MILLISECONDS.toNanos(completionMs));
+        completionHook.run();
+        return switch (mode) {
+          case VALID ->
+              new AgentModel.ToolResult(name(), arguments.reference(), sentinel);
+          case THROW -> throw new IllegalStateException(sentinel);
+          case NULL -> null;
+          case WRONG_REFERENCE ->
+              new AgentModel.ToolResult(
+                  name(), "capture://wrong-reference", sentinel);
+        };
+      }
+    };
+  }
+
   private static AgentTool<Arguments> captureReadTool() {
     return new AgentTool<>() {
       @Override
@@ -577,6 +892,13 @@ class AgentLoopKernelModelSessionTest {
                     AgentModel.ToolArguments.forReference(CAPTURE_REF)),
                 "provider-model-snapshot",
                 AgentModel.ModelUsage.zero());
+  }
+
+  private enum LateToolMode {
+    VALID,
+    THROW,
+    NULL,
+    WRONG_REFERENCE
   }
 
   private record Arguments(String reference) implements AgentTool.ValidatedArguments {}

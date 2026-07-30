@@ -55,7 +55,8 @@ public record AgentTraceEntry(
         if (!(status.equals("BLOCKED")
             || status.equals("LIMIT_EXHAUSTED")
             || status.equals("FAILED")
-            || status.equals("MALFORMED_RESULT"))) {
+            || status.equals("MALFORMED_RESULT")
+            || status.equals("DEADLINE_EXCEEDED"))) {
           throw new IllegalArgumentException("TOOL_REJECTED metadata is outside the safe allowlist");
         }
       }

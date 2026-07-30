@@ -2,6 +2,7 @@ package io.emergeos.evalrunner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,6 +16,7 @@ import io.emergeos.contracts.AgentTraceEnvelope;
 import io.emergeos.contracts.HarnessRunBundle;
 import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.RunStatus;
+import io.emergeos.contracts.TraceEventType;
 import io.emergeos.core.domain.ContentHashes;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -344,7 +346,7 @@ class SyntheticEvalLoopbackTest {
   }
 
   @Test
-  void attributedUsageSurvivesLaterDeadlineSanitization()
+  void attributedUsageSurvivesLaterDeadlineFailure()
       throws Exception {
     List<String> requests = new ArrayList<>();
     AtomicLong now = new AtomicLong();
@@ -378,10 +380,28 @@ class SyntheticEvalLoopbackTest {
       assertEquals(
           RunStatus.FAILED, result.outcome().result().status());
       assertEquals(
-          "UNSAFE_AGENT_OUTCOME",
+          "DEADLINE_EXHAUSTED",
           result.outcome().result().failureReason());
-      assertEquals(BigDecimal.ZERO, result.outcome().result().costUsd());
-      assertEquals(0, result.outcome().result().tokenCount());
+      assertEquals(31_000, result.outcome().result().latencyMs());
+      assertEquals(
+          "gpt-5.4-mini-2026-03-17",
+          result.outcome().result().resolvedModel());
+      assertEquals(
+          new BigDecimal("0.000165"),
+          result.outcome().result().costUsd());
+      assertEquals(120, result.outcome().result().tokenCount());
+      assertTrue(result.outcome().result().artifactRefs().isEmpty());
+      assertTrue(result.outcome().result().evidenceRefs().isEmpty());
+      assertNull(result.outcome().artifact());
+      assertEquals(1, result.outcome().trace().size());
+      assertEquals(
+          TraceEventType.MODEL_STEP,
+          result.outcome().trace().getFirst().type());
+      assertEquals(
+          "COMPLETED", result.outcome().trace().getFirst().status());
+      assertEquals(
+          "task://" + SyntheticEvalCatalog.TASK_ID,
+          result.outcome().trace().getFirst().reference());
       assertEquals(
           new BigDecimal("0.000165"),
           result.effects().providerObservedCostUsd());
@@ -397,10 +417,11 @@ class SyntheticEvalLoopbackTest {
           result.receipt().contains("observedCostUsd=0.000165"));
       assertTrue(
           result.receipt().contains("observedTokenCount=120"));
-      assertTrue(result.receipt().contains("runCostUsd=0"));
-      assertTrue(result.receipt().contains("runTokenCount=0"));
       assertTrue(
-          result.receipt().contains("meteringMatchesRun=false"));
+          result.receipt().contains("runCostUsd=0.000165"));
+      assertTrue(result.receipt().contains("runTokenCount=120"));
+      assertTrue(
+          result.receipt().contains("meteringMatchesRun=true"));
 
       PersistedEvidence persisted =
           assertPersistedEvidence(home, result, "ATTRIBUTED", 1, 1);
@@ -411,10 +432,11 @@ class SyntheticEvalLoopbackTest {
           120,
           persisted.record().path("observedTokenCount").asLong());
       assertEquals(
-          BigDecimal.ZERO,
+          new BigDecimal("0.000165"),
           persisted.record().path("runCostUsd").decimalValue());
-      assertEquals(0, persisted.record().path("runTokenCount").asLong());
-      assertFalse(
+      assertEquals(
+          120, persisted.record().path("runTokenCount").asLong());
+      assertTrue(
           persisted.record().path("meteringMatchesRun").asBoolean());
       assertEquals(
           List.of(
@@ -436,7 +458,7 @@ class SyntheticEvalLoopbackTest {
       assertTrue(
           persisted
               .journalText()
-              .contains("meteringMatchesRun=false"));
+              .contains("meteringMatchesRun=true"));
     }
   }
 

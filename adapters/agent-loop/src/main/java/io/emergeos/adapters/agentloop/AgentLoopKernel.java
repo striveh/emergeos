@@ -1,6 +1,7 @@
 package io.emergeos.adapters.agentloop;
 
 import io.emergeos.contracts.ContractValueDomains;
+import io.emergeos.contracts.ObservedExecutionLimits;
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.AgentDraftProposal;
@@ -274,7 +275,7 @@ public final class AgentLoopKernel implements AgentKernel {
         return outcome(
             task, RunStatus.CANCELLED, null, state, "CANCELLED", startedNanos);
       }
-      if (deadlineExceeded(task, startedNanos)) {
+      if (deadlineExhausted(task, startedNanos)) {
         return outcome(
             task,
             RunStatus.FAILED,
@@ -307,7 +308,7 @@ public final class AgentLoopKernel implements AgentKernel {
           return outcome(
               task, RunStatus.CANCELLED, null, state, "CANCELLED", startedNanos);
         }
-        if (deadlineExceeded(task, startedNanos)) {
+        if (deadlineExhausted(task, startedNanos)) {
           return outcome(
               task,
               RunStatus.FAILED,
@@ -363,6 +364,22 @@ public final class AgentLoopKernel implements AgentKernel {
         try {
           result = prepared.execute();
         } catch (RuntimeException toolFailure) {
+          if (deadlineExceeded(task, startedNanos)) {
+            state.trace.add(
+                event(
+                    state.trace,
+                    AgentTraceEventType.TOOL_REJECTED,
+                    prepared.toolName(),
+                    "DEADLINE_EXCEEDED",
+                    prepared.reference()));
+            return outcome(
+                task,
+                RunStatus.FAILED,
+                null,
+                state,
+                ObservedExecutionLimits.POST_DISPATCH_DEADLINE_FAILURE,
+                startedNanos);
+          }
           state.trace.add(
               event(
                   state.trace,
@@ -376,6 +393,22 @@ public final class AgentLoopKernel implements AgentKernel {
               null,
               state,
               "TOOL_EXECUTION_FAILED",
+              startedNanos);
+        }
+        if (deadlineExceeded(task, startedNanos)) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.TOOL_REJECTED,
+                  prepared.toolName(),
+                  "DEADLINE_EXCEEDED",
+                  prepared.reference()));
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              ObservedExecutionLimits.POST_DISPATCH_DEADLINE_FAILURE,
               startedNanos);
         }
         if (result == null
@@ -473,6 +506,11 @@ public final class AgentLoopKernel implements AgentKernel {
   }
 
   private boolean deadlineExceeded(TaskEnvelope task, long startedNanos) {
+    return ObservedExecutionLimits.postDispatchDeadlineExceeded(
+        task, elapsedMillis(startedNanos));
+  }
+
+  private boolean deadlineExhausted(TaskEnvelope task, long startedNanos) {
     return remainingDeadlineMs(task, startedNanos) <= 0;
   }
 

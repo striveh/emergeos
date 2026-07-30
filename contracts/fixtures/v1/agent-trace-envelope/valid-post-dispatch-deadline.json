@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "run-deadline-policy",
+  "taskId": "task-deadline-policy",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://task-deadline-policy",
+      "previousRootHash": "1e689944b93c8523a09a2fc92b76edfd58adfe5864d2a9b68c72e4043ab9b79f",
+      "eventHash": "5fcc0ebd5c6c0310e957353f1ff0443ba512c92515a3475eb12e62d808053ff7"
+    },
+    {
+      "sequence": 2,
+      "type": "TOOL_REQUEST",
+      "toolName": "capture.read",
+      "status": "REQUESTED",
+      "reference": "capture://capture-001",
+      "previousRootHash": "f26891d675ca24250c1334ee6b67bd1e533aa8808c123a7d32cf9828882836c5",
+      "eventHash": "c57e044c9b603157c273d7396801766c80588a4615d2507e0fda02488101290b"
+    },
+    {
+      "sequence": 3,
+      "type": "TOOL_REJECTED",
+      "toolName": "capture.read",
+      "status": "DEADLINE_EXCEEDED",
+      "reference": "capture://capture-001",
+      "previousRootHash": "8f55d17790f8176778e6bdfb6309bfb9f4a6a178ad36f7c8a6df0bcf9aa27a67",
+      "eventHash": "32bdb767b170f3e2287f0cf4afd8aef581f2a1e9a173adef615401eaeeec62b8"
+    }
+  ],
+  "eventCount": 3,
+  "rootHash": "2532fa4beeafb6dbdd0e20d55ff349dba905256aa0f0664de4e9843bb96500ac"
+}

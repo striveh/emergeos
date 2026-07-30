@@ -5,6 +5,7 @@ import io.emergeos.contracts.AgentTraceEnvelope;
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.HarnessRunBundle;
 import io.emergeos.contracts.IntegrityHashes;
+import io.emergeos.contracts.ObservedExecutionLimits;
 import io.emergeos.contracts.ResourceBinding;
 import io.emergeos.contracts.ResourceRole;
 import io.emergeos.contracts.ResultEnvelope;
@@ -398,7 +399,13 @@ public final class AgentDraftService {
           || candidate.tokenCount() > io.emergeos.contracts.ContractValueDomains.MAX_SAFE_INTEGER
           || candidate.latencyMs()
               > io.emergeos.contracts.ContractValueDomains.MAX_DURATION_MS
-          || candidate.latencyMs() > task.deadlineMs()
+          || !ObservedExecutionLimits.permitsLatency(
+              task, candidate.status(), candidate.latencyMs())
+          || !ObservedExecutionLimits.permitsFailureAttribution(
+              task,
+              candidate.status(),
+              candidate.latencyMs(),
+              candidate.failureReason())
           || (candidate.costUsd().compareTo(task.budgetUsd()) > 0
               && !("1.1".equals(task.schemaVersion())
                   && !success

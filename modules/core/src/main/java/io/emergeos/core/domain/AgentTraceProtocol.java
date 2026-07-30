@@ -2,6 +2,7 @@ package io.emergeos.core.domain;
 
 import io.emergeos.contracts.AgentTraceEntry;
 import io.emergeos.contracts.AgentTraceEnvelope;
+import io.emergeos.contracts.ObservedExecutionLimits;
 import io.emergeos.contracts.ResultEnvelope;
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
@@ -42,7 +43,8 @@ public final class AgentTraceProtocol {
         outcome.failureReason(),
         events,
         outcome.obtainedEvidenceRefs(),
-        false);
+        false,
+        outcome.latencyMs());
   }
 
   public static void verifyTerminal(
@@ -92,7 +94,8 @@ public final class AgentTraceProtocol {
         result.failureReason(),
         kernelEvents,
         result.evidenceRefs(),
-        true);
+        true,
+        result.latencyMs());
   }
 
   private static void verifyKernelEvents(
@@ -101,7 +104,8 @@ public final class AgentTraceProtocol {
       String failureReason,
       List<EventView> events,
       List<String> declaredEvidenceRefs,
-      boolean allowRejectedStructuredFinal) {
+      boolean allowRejectedStructuredFinal,
+      long latencyMs) {
     Phase phase = Phase.EXPECT_MODEL;
     int modelSteps = 0;
     int executedToolCalls = 0;
@@ -110,6 +114,7 @@ public final class AgentTraceProtocol {
     boolean pendingOverLimit = false;
     boolean structuredFinal = false;
     boolean toolArgumentsRejected = false;
+    boolean postDispatchDeadlineRejected = false;
     List<String> obtainedEvidence = new ArrayList<>();
     String taskRef = "task://" + task.id();
 
@@ -181,6 +186,8 @@ public final class AgentTraceProtocol {
               throw new IllegalArgumentException(
                   "Only the first over-limit request may use LIMIT_EXHAUSTED");
             }
+            postDispatchDeadlineRejected =
+                "DEADLINE_EXCEEDED".equals(event.status());
             phase = Phase.TERMINAL;
           } else {
             throw new IllegalArgumentException(
@@ -216,6 +223,16 @@ public final class AgentTraceProtocol {
       throw new IllegalArgumentException(
           "Tool-argument failure and Trace rejection must be bound");
     }
+    boolean declaresPostDispatchDeadlineFailure =
+        ObservedExecutionLimits.POST_DISPATCH_DEADLINE_FAILURE.equals(
+            failureReason);
+    if (declaresPostDispatchDeadlineFailure != postDispatchDeadlineRejected
+        || (postDispatchDeadlineRejected
+            && !ObservedExecutionLimits.permitsFailureAttribution(
+                task, status, latencyMs, failureReason))) {
+      throw new IllegalArgumentException(
+          "Post-dispatch Tool deadline and Trace rejection must be bound");
+    }
   }
 
   private static void requireTaskScopedMetadata(
@@ -247,7 +264,8 @@ public final class AgentTraceProtocol {
             "BLOCKED".equals(event.status())
                 || "LIMIT_EXHAUSTED".equals(event.status())
                 || "FAILED".equals(event.status())
-                || "MALFORMED_RESULT".equals(event.status());
+                || "MALFORMED_RESULT".equals(event.status())
+                || "DEADLINE_EXCEEDED".equals(event.status());
         boolean safeUntrusted =
             "untrusted".equals(event.toolName()) && event.reference() == null;
         boolean safePreDispatchRejection =

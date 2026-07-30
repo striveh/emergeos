@@ -426,6 +426,64 @@ class PostgresAgentRunStoreTest {
   }
 
   @Test
+  void roundTripsPostDispatchDeadlineTruthWithActualLateLatency() {
+    Fixture fixture =
+        fixture(
+            "run-post-dispatch-deadline",
+            BigDecimal.ZERO,
+            0,
+            4,
+            BigDecimal.ZERO,
+            5);
+    AgentRun failed = postDispatchDeadlineFailedTerminal(fixture);
+    PostgresAgentRunStore first = store();
+    first.start(fixture.running());
+
+    AgentRun completed = first.complete(failed, null).run();
+    AgentRun loaded =
+        store().findOwned(PRINCIPAL, failed.runId()).orElseThrow();
+
+    assertEquals(failed, completed);
+    assertEquals(failed, loaded);
+    assertEquals(
+        new DeadlineColumns(
+            "FAILED",
+            "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH",
+            7),
+        deadlineColumns(failed.runId()));
+    assertEquals(
+        List.of(
+            TraceEventType.MODEL_STEP,
+            TraceEventType.TOOL_REQUEST,
+            TraceEventType.TOOL_REJECTED),
+        loaded.trace().events().stream().map(AgentTraceEntry::type).toList());
+    assertEquals(
+        List.of("COMPLETED", "REQUESTED", "DEADLINE_EXCEEDED"),
+        loaded.trace().events().stream().map(AgentTraceEntry::status).toList());
+    assertEquals(List.of(), loaded.result().artifactRefs());
+    assertEquals(List.of(), loaded.result().evidenceRefs());
+    assertEquals(List.of(), loaded.result().uncertainty());
+    assertEquals(List.of(), loaded.bundle().resourceBindings());
+    assertEquals(loaded.result(), loaded.bundle().result());
+    assertEquals(loaded.trace().rootHash(), loaded.bundle().traceRootHash());
+    assertEquals(
+        failed.bundle().integrityHash(), loaded.bundle().integrityHash());
+    assertEquals(
+        0L,
+        jdbc.sql("SELECT count(*) FROM artifacts").query(Long.class).single());
+    assertEquals(
+        0L,
+        jdbc.sql("SELECT count(*) FROM agent_run_resource_bindings")
+            .query(Long.class)
+            .single());
+    assertEquals(
+        3L,
+        jdbc.sql("SELECT count(*) FROM agent_trace_events")
+            .query(Long.class)
+            .single());
+  }
+
+  @Test
   void exactlyOneConcurrentTerminalCompletionWins() throws Exception {
     Fixture fixture = fixture("run-concurrent-terminal");
     store().start(fixture.running());
@@ -714,6 +772,24 @@ class PostgresAgentRunStoreTest {
         .single();
   }
 
+  private static DeadlineColumns deadlineColumns(String runId) {
+    return jdbc.sql(
+            """
+            SELECT lifecycle_status, failure_attribution, latency_ms
+            FROM agent_runs
+            WHERE principal_id = :principalId AND run_id = :runId
+            """)
+        .param("principalId", PRINCIPAL)
+        .param("runId", runId)
+        .query(
+            (resultSet, rowNumber) ->
+                new DeadlineColumns(
+                    resultSet.getString("lifecycle_status"),
+                    resultSet.getString("failure_attribution"),
+                    resultSet.getLong("latency_ms")))
+        .single();
+  }
+
   private static ModelBoundFixture modelBoundFixture(String runId) {
     String taskId = "task-" + runId;
     TaskEnvelope task =
@@ -823,6 +899,103 @@ class PostgresAgentRunStoreTest {
             STARTED,
             COMPLETED);
     return new ModelBoundFixture(running, failed);
+  }
+
+  private static AgentRun postDispatchDeadlineFailedTerminal(
+      Fixture fixture) {
+    TaskEnvelope task = fixture.running().task();
+    String runId = fixture.running().runId();
+    String captureRef = "capture://" + CAPTURE_ID;
+    String root = IntegrityHashes.emptyTraceRoot();
+    java.util.ArrayList<AgentTraceEntry> events = new java.util.ArrayList<>();
+    for (TraceSpec event :
+        List.of(
+            new TraceSpec(
+                TraceEventType.MODEL_STEP,
+                null,
+                "COMPLETED",
+                "task://" + task.id()),
+            new TraceSpec(
+                TraceEventType.TOOL_REQUEST,
+                "capture.read",
+                "REQUESTED",
+                captureRef),
+            new TraceSpec(
+                TraceEventType.TOOL_REJECTED,
+                "capture.read",
+                "DEADLINE_EXCEEDED",
+                captureRef))) {
+      AgentTraceEntry entry =
+          AgentTraceEntry.create(
+              events.size() + 1,
+              event.type(),
+              event.toolName(),
+              event.status(),
+              event.reference(),
+              root);
+      events.add(entry);
+      root = IntegrityHashes.nextTraceRoot(root, entry.eventHash());
+    }
+    AgentTraceEnvelope trace =
+        AgentTraceEnvelope.create("1.0", runId, task.id(), events);
+    String traceRef = "/api/v1/agent-runs/" + runId + "/trace";
+    ResultEnvelope result =
+        new ResultEnvelope(
+            "1.0",
+            runId,
+            task.id(),
+            RunStatus.FAILED,
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            "scripted-fake-draft-v1",
+            "agent-draft-service-v1",
+            "agent-draft-verifier-v1",
+            BigDecimal.ZERO,
+            0,
+            7,
+            traceRef,
+            "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH");
+    HarnessRunBundle bundle =
+        HarnessRunBundle.create(
+            "1.0",
+            runId,
+            task.id(),
+            null,
+            result.resolvedModel(),
+            "framework-free-agent-kernel-v1",
+            Map.of(
+                "agent", result.agentVersion(),
+                "verifier", result.verifierVersion(),
+                "trace-integrity", IntegrityHashes.PROFILE),
+            task.environmentSnapshotRef(),
+            task.toolRegistryVersion(),
+            task,
+            result,
+            null,
+            traceRef,
+            trace.rootHash(),
+            List.of(),
+            List.of(),
+            List.of(),
+            null,
+            result.failureReason(),
+            result.status(),
+            result.costUsd(),
+            result.tokenCount(),
+            result.latencyMs());
+    return new AgentRun(
+        runId,
+        PRINCIPAL,
+        task,
+        AgentRunLifecycle.FAILED,
+        result,
+        trace,
+        bundle,
+        STARTED,
+        COMPLETED);
   }
 
   private static AgentRun failedTerminal(Fixture fixture) {
@@ -1145,6 +1318,9 @@ class PostgresAgentRunStoreTest {
       String provider,
       String requestedModel,
       String pricingProfile) {}
+
+  private record DeadlineColumns(
+      String lifecycle, String failureAttribution, long latencyMs) {}
 
   private record TraceSpec(
       TraceEventType type, String toolName, String status, String reference) {}

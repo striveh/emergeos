@@ -189,6 +189,53 @@ class AgentRunInvariantTest {
                 null));
   }
 
+  @Test
+  void preservesObservedOverDeadlineLatencyForANonSuccessAggregate() {
+    TaskEnvelope task = task("record the late failure honestly");
+    AgentTraceEnvelope trace =
+        AgentTraceEnvelope.create("1.0", "run-001", task.id(), List.of());
+    ResultEnvelope result =
+        new ResultEnvelope(
+            "1.0",
+            "run-001",
+            task.id(),
+            RunStatus.FAILED,
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            "fake-model",
+            "agent-v1",
+            "verifier-v1",
+            BigDecimal.ZERO,
+            0,
+            5_001,
+            "/api/v1/agent-runs/run-001/trace",
+            "MODEL_PROVIDER_UNAVAILABLE");
+
+    assertDoesNotThrow(
+        () -> {
+          HarnessRunBundle bundle =
+              bundle(
+                  task,
+                  result,
+                  trace.rootHash(),
+                  List.of(),
+                  result.failureReason());
+          new AgentRun(
+              "run-001",
+              "owner-001",
+              task,
+              AgentRunLifecycle.FAILED,
+              result,
+              trace,
+              bundle,
+              STARTED,
+              STARTED.plusMillis(5_001));
+        });
+  }
+
   private static AgentRun aggregate(
       TaskEnvelope task,
       ResultEnvelope result,

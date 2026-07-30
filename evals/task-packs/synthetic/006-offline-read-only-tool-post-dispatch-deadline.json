@@ -1,0 +1,160 @@
+{
+  "schemaVersion": "0.5",
+  "taskId": "synthetic-offline-read-only-tool-post-dispatch-deadline-006",
+  "title": "离线验证 read-only Tool 在 dispatch 后越过 deadline 的持久真相",
+  "principalRef": "synthetic-tool-deadline-owner",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic://eval/s4-f2-tool-deadline-006",
+    "dataClass": "PUBLIC",
+    "content": "这是公开、虚构、仅用于离线验证 post-dispatch deadline truth 的测试素材。"
+  },
+  "requiredConstraints": [
+    "control 与 fault 使用完全相同的 Task、Capture、合法 Tool arguments、Fake Model、预算和组件版本，只改变 Tool completion latency",
+    "fault 必须发生一次真实 Tool execute 与 Tool-backed Capture read，但 late result 不能成为 TOOL_RESULT 或 Evidence",
+    "失败 Run 必须保留真实 elapsed time、typed failure 和已 dispatch 的安全 Trace，且不得产生 Artifact"
+  ],
+  "forbiddenActions": [
+    "访问真实模型、互联网、HTTP endpoint 或 Connector",
+    "访问真实用户数据、账号或社交平台",
+    "把 cooperative late-result detection 宣称为线程抢占、hard timeout 或 write-capable Tool 安全"
+  ],
+  "acceptanceChecks": [
+    "4ms control 在 5ms deadline 内产生一次 Tool execute/read、第二次 Model call 和一个 Artifact",
+    "7ms fault 在 5ms deadline 后以 FAILED 和 TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH 结束",
+    "fault Trace 是 MODEL_STEP 到 TOOL_REQUEST 再到 TOOL_REJECTED/DEADLINE_EXCEEDED，且没有 TOOL_RESULT",
+    "fault 的 Evidence、resource bindings、uncertainty 和 Artifact 均为空，但 execute/read 计数均为 1",
+    "两个 fresh fixture 对同一 case 产生完全相同的 terminal Run、Result、Trace 和 Bundle"
+  ],
+  "humanReviewQuestions": [
+    "证据是否同时证明 Tool 确实 dispatch/read，以及 late result 没有被接受为 Evidence？",
+    "回执是否明确 cooperative detection 不能中断 hang Tool，也不能用于未知写副作用？"
+  ],
+  "risk": "REVERSIBLE",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "control 在 execute 完成 read 后把 frozen monotonic clock 推进到 4ms",
+    "fault 保持其他输入不变，只把 completion latency 推进到 7ms",
+    "Task deadline 固定 5ms，Kernel 必须在接受 Tool Result 前重新观察 deadline"
+  ],
+  "postDispatchDeadlineFault": {
+    "suiteId": "offline-read-only-tool-post-dispatch-deadline-v1",
+    "variable": "capture-read-completion-latency-ms",
+    "provenance": {
+      "kind": "LITERAL_CHECKED_IN_SYNTHETIC",
+      "containsRealUserData": false,
+      "containsRealAccount": false,
+      "networkAllowed": false,
+      "realModelAllowed": false,
+      "connectorAllowed": false
+    },
+    "frozen": {
+      "principalId": "synthetic-tool-deadline-owner",
+      "captureId": "capture-tool-deadline-006",
+      "clientNonce": "tool-deadline-006",
+      "sourceType": "TEXT",
+      "sourceRef": "synthetic://eval/s4-f2-tool-deadline-006",
+      "dataClass": "PUBLIC",
+      "content": "这是公开、虚构、仅用于离线验证 post-dispatch deadline truth 的测试素材。",
+      "intent": "把公开的虚构测试素材整理成一段短文",
+      "runId": "run-tool-deadline-006",
+      "taskId": "task-tool-deadline-006",
+      "artifactId": "art-tool-deadline-006",
+      "frozenTime": "2026-07-31T00:00:00Z",
+      "taskSchemaVersion": "1.0",
+      "budgetUsd": "0.000000",
+      "maxModelSteps": 2,
+      "maxToolCalls": 1,
+      "taskDeadlineMs": 5,
+      "executionProfile": "offline-tool-deadline-fault-v1",
+      "model": "scripted-tool-deadline-fault-v1",
+      "harness": "framework-free-agent-kernel-v1",
+      "agent": "agent-draft-service-v1",
+      "verifier": "agent-draft-verifier-v1",
+      "policy": "agent-draft-policy-v1",
+      "state": "stage2-s4-f2",
+      "contextPolicy": "ref-only-v1",
+      "toolRegistry": "agent-tools-v2",
+      "traceIntegrity": "emergeos-length-prefixed-sha256-v1"
+    },
+    "control": {
+      "id": "within-deadline-control",
+      "completionLatencyMs": 4,
+      "expected": {
+        "status": "SUCCEEDED",
+        "failureReason": null,
+        "traceTypes": [
+          "MODEL_STEP",
+          "TOOL_REQUEST",
+          "TOOL_RESULT",
+          "MODEL_STEP",
+          "STRUCTURED_FINAL",
+          "ARTIFACT_COMMITTED"
+        ],
+        "traceStatuses": [
+          "COMPLETED",
+          "REQUESTED",
+          "SUCCEEDED",
+          "COMPLETED",
+          "PROPOSED",
+          "SUCCEEDED"
+        ],
+        "modelCallCount": 2,
+        "validationCount": 1,
+        "toolExecuteCount": 1,
+        "totalFindOwnedCount": 2,
+        "toolBackedReadCount": 1,
+        "runStartCount": 1,
+        "runCompleteCount": 1,
+        "artifactCount": 1,
+        "evidenceRefCount": 1,
+        "resourceBindingCount": 2,
+        "uncertaintyCount": 0,
+        "consumedIdPrefixes": [
+          "run",
+          "task",
+          "art"
+        ],
+        "taskIntegrityHash": "da267ac640654eeae9e83e485a90f4cfd9496ea2ab95a4e3358f29b002696489",
+        "traceRootHash": "e3e72b87f00047a6a4c455b5ffe3698d75619d0174550359e88f62a7db8f18a9",
+        "bundleIntegrityHash": "ebb982e652777f176b3ae1786ca4a28d066eb58e82e21aaacfebbc08bdc45451"
+      }
+    },
+    "fault": {
+      "id": "deadline-exceeded-after-dispatch",
+      "completionLatencyMs": 7,
+      "expected": {
+        "status": "FAILED",
+        "failureReason": "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH",
+        "traceTypes": [
+          "MODEL_STEP",
+          "TOOL_REQUEST",
+          "TOOL_REJECTED"
+        ],
+        "traceStatuses": [
+          "COMPLETED",
+          "REQUESTED",
+          "DEADLINE_EXCEEDED"
+        ],
+        "modelCallCount": 1,
+        "validationCount": 1,
+        "toolExecuteCount": 1,
+        "totalFindOwnedCount": 2,
+        "toolBackedReadCount": 1,
+        "runStartCount": 1,
+        "runCompleteCount": 1,
+        "artifactCount": 0,
+        "evidenceRefCount": 0,
+        "resourceBindingCount": 0,
+        "uncertaintyCount": 0,
+        "consumedIdPrefixes": [
+          "run",
+          "task"
+        ],
+        "taskIntegrityHash": "da267ac640654eeae9e83e485a90f4cfd9496ea2ab95a4e3358f29b002696489",
+        "traceRootHash": "d081324187b38e962ca14876a1b4fa9da762cdbb0823e90d44dc061763edadd0",
+        "bundleIntegrityHash": "71ce0d367459bbe5a55f1da713d9311c71ba06f33815f05b8f5017b3b9438f3a"
+      }
+    }
+  }
+}

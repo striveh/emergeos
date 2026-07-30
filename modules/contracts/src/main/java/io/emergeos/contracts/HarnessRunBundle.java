@@ -249,7 +249,9 @@ public record HarnessRunBundle(
         || (costUsd.compareTo(task.budgetUsd()) > 0
             && !permitsObservedBudgetOverage(
                 schemaVersion, outcome, failureAttribution))
-        || latencyMs > task.deadlineMs()) {
+        || !ObservedExecutionLimits.permitsLatency(task, outcome, latencyMs)
+        || !ObservedExecutionLimits.permitsFailureAttribution(
+            task, outcome, latencyMs, failureAttribution)) {
       throw new IllegalArgumentException("Bundle fields do not match Task and Result");
     }
     if (!result.agentVersion().equals(componentVersions.get("agent"))

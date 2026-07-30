@@ -3,6 +3,7 @@ package io.emergeos.core.domain;
 import io.emergeos.contracts.AgentTraceEnvelope;
 import io.emergeos.contracts.ContractText;
 import io.emergeos.contracts.HarnessRunBundle;
+import io.emergeos.contracts.ObservedExecutionLimits;
 import io.emergeos.contracts.ResultEnvelope;
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
@@ -53,7 +54,13 @@ public record AgentRun(
               && !("1.1".equals(task.schemaVersion())
                   && result.status() != RunStatus.SUCCEEDED
                   && "MODEL_BUDGET_EXHAUSTED".equals(result.failureReason())))
-          || result.latencyMs() > task.deadlineMs()
+          || !ObservedExecutionLimits.permitsLatency(
+              task, result.status(), result.latencyMs())
+          || !ObservedExecutionLimits.permitsFailureAttribution(
+              task,
+              result.status(),
+              result.latencyMs(),
+              result.failureReason())
           || completedAt.isBefore(startedAt)) {
         throw new IllegalArgumentException("terminal AgentRun aggregate is inconsistent");
       }

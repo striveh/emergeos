@@ -500,7 +500,13 @@ function verifyTrace(instance, relative) {
         && event.status === "SUCCEEDED"
         && event.reference !== null)
       || (event.type === "TOOL_REJECTED"
-        && ["BLOCKED", "LIMIT_EXHAUSTED", "FAILED", "MALFORMED_RESULT"]
+        && [
+          "BLOCKED",
+          "LIMIT_EXHAUSTED",
+          "FAILED",
+          "MALFORMED_RESULT",
+          "DEADLINE_EXCEEDED"
+        ]
           .includes(event.status))
       || (event.type === "STRUCTURED_FINAL"
         && event.status === "PROPOSED"
@@ -585,6 +591,96 @@ function equalJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function permitsObservedLatency(task, outcome, latencyMs) {
+  return outcome !== "SUCCEEDED" || latencyMs <= task.deadlineMs;
+}
+
+function permitsObservedFailureAttribution(
+  task,
+  outcome,
+  latencyMs,
+  failureAttribution
+) {
+  return failureAttribution !== "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH"
+    || (outcome === "FAILED" && latencyMs > task.deadlineMs);
+}
+
+for (const [outcome, latencyMs, expected] of [
+  ["SUCCEEDED", 5, true],
+  ["SUCCEEDED", 7, false],
+  ["FAILED", 7, true],
+  ["NEEDS_INPUT", 7, true],
+  ["BLOCKED", 7, true],
+  ["CANCELLED", 7, true]
+]) {
+  if (
+    permitsObservedLatency({ deadlineMs: 5 }, outcome, latencyMs)
+      !== expected
+  ) {
+    throw new Error(
+      `Observed latency policy regression for ${outcome}/${latencyMs}ms`
+    );
+  }
+}
+
+for (const [outcome, latencyMs, failureAttribution, expected] of [
+  ["FAILED", 7, "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH", true],
+  ["FAILED", 5, "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH", false],
+  ["BLOCKED", 7, "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH", false],
+  ["FAILED", 5, "TOOL_EXECUTION_FAILED", true]
+]) {
+  if (
+    permitsObservedFailureAttribution(
+      { deadlineMs: 5 },
+      outcome,
+      latencyMs,
+      failureAttribution
+    ) !== expected
+  ) {
+    throw new Error(
+      `Observed failure attribution regression for ${outcome}/${latencyMs}ms/${failureAttribution}`
+    );
+  }
+}
+
+function bundleIntegrityHash(instance) {
+  const preimage = JSON.parse(JSON.stringify(instance));
+  delete preimage.integrityHash;
+  if (preimage.task.schemaVersion === "1.0") {
+    delete preimage.task.modelProvider;
+    delete preimage.task.modelRequested;
+    delete preimage.task.pricingProfile;
+  }
+  return domainHash(
+    "emergeos.harness-run-bundle.v1",
+    canonicalEncode(preimage)
+  );
+}
+
+function expectedDeadlineNegative(kind) {
+  const baseline = readJson(
+    path.join(
+      fixtureDir,
+      "harness-run-bundle",
+      "valid-post-dispatch-deadline-observed-failure.json"
+    )
+  );
+  const expected = JSON.parse(JSON.stringify(baseline));
+  if (kind === "success-over-deadline") {
+    expected.result.status = "SUCCEEDED";
+    expected.result.failureReason = null;
+    expected.failureAttribution = null;
+    expected.outcome = "SUCCEEDED";
+  } else if (kind === "deadline-at-boundary") {
+    expected.result.latencyMs = expected.task.deadlineMs;
+    expected.latencyMs = expected.task.deadlineMs;
+  } else {
+    throw new Error(`Unsupported deadline negative fixture kind ${kind}`);
+  }
+  expected.integrityHash = bundleIntegrityHash(expected);
+  return expected;
+}
+
 function verifyBundle(instance, relative) {
   const result = instance.result;
   const task = instance.task;
@@ -609,7 +705,13 @@ function verifyBundle(instance, relative) {
       && !(instance.schemaVersion === "1.1"
         && instance.outcome !== "SUCCEEDED"
         && instance.failureAttribution === "MODEL_BUDGET_EXHAUSTED"))
-    || instance.latencyMs > task.deadlineMs
+    || !permitsObservedLatency(task, instance.outcome, instance.latencyMs)
+    || !permitsObservedFailureAttribution(
+      task,
+      instance.outcome,
+      instance.latencyMs,
+      instance.failureAttribution
+    )
   ) {
     throw new Error(`${relative}: Bundle fields do not match Task and Result`);
   }
@@ -675,17 +777,7 @@ function verifyBundle(instance, relative) {
   if (instance.integrityProfile !== INTEGRITY_PROFILE) {
     throw new Error(`${relative}: unsupported integrityProfile`);
   }
-  const preimage = JSON.parse(JSON.stringify(instance));
-  delete preimage.integrityHash;
-  if (preimage.task.schemaVersion === "1.0") {
-    delete preimage.task.modelProvider;
-    delete preimage.task.modelRequested;
-    delete preimage.task.pricingProfile;
-  }
-  const expected = domainHash(
-    "emergeos.harness-run-bundle.v1",
-    canonicalEncode(preimage)
-  );
+  const expected = bundleIntegrityHash(instance);
   if (instance.integrityHash !== expected) {
     throw new Error(
       `${relative}: integrityHash mismatch (expected ${expected})`
@@ -798,6 +890,42 @@ for (const { file, schema } of schemas) {
         `${path.relative(repoRoot, fixture)} must fail the budget/failure semantic check`
       );
     }
+    if (
+      path.basename(fixture)
+        === "invalid-success-over-deadline-correct-hash.json"
+      && (
+        !schemaValid
+        || semanticError === null
+        || !semanticError.message.includes("Bundle fields do not match Task and Result")
+        || !equalJson(
+          instance,
+          expectedDeadlineNegative("success-over-deadline")
+        )
+        || instance.integrityHash !== bundleIntegrityHash(instance)
+      )
+    ) {
+      throw new Error(
+        `${path.relative(repoRoot, fixture)} must fail only the success/deadline semantic check and carry integrityHash ${bundleIntegrityHash(instance)}`
+      );
+    }
+    if (
+      path.basename(fixture)
+        === "invalid-post-dispatch-deadline-at-boundary-correct-hash.json"
+      && (
+        !schemaValid
+        || semanticError === null
+        || !semanticError.message.includes("Bundle fields do not match Task and Result")
+        || !equalJson(
+          instance,
+          expectedDeadlineNegative("deadline-at-boundary")
+        )
+        || instance.integrityHash !== bundleIntegrityHash(instance)
+      )
+    ) {
+      throw new Error(
+        `${path.relative(repoRoot, fixture)} must fail only the typed deadline-attribution semantic check and carry integrityHash ${bundleIntegrityHash(instance)}`
+      );
+    }
     fixtureCount += 1;
   }
 }
@@ -861,6 +989,7 @@ const seenHarnessComparisonSuiteIds = new Set();
 const seenHarnessComparisonExecutionIdentities = new Set();
 let harnessComparisonPackCount = 0;
 let deterministicAgentFaultPackCount = 0;
+let postDispatchDeadlineFaultPackCount = 0;
 
 function verifyHarnessComparison(task, relative) {
   const comparison = task.harnessComparison;
@@ -1644,6 +1773,264 @@ function verifyDeterministicAgentFault(task, relative) {
   }
 }
 
+function verifyPostDispatchDeadlineFault(task, relative) {
+  const expectedPath =
+    "evals/task-packs/synthetic/006-offline-read-only-tool-post-dispatch-deadline.json";
+  const raw = fs.readFileSync(path.join(repoRoot, relative));
+  const rawHash = crypto.createHash("sha256").update(raw).digest("hex");
+  if (
+    relative !== expectedPath
+    || raw.length > 65_536
+    || rawHash
+      !== "ada80a0f05bffb907408cb9d877b039dbb46253ab09904404570f4c721b53f22"
+  ) {
+    throw new Error(
+      `${relative}: post-dispatch deadline fault must use the frozen Pack 006 path, byte bound and raw SHA-256`
+    );
+  }
+  const suite = task.postDispatchDeadlineFault;
+  assertExactObjectKeys(
+    task,
+    [
+      "schemaVersion",
+      "taskId",
+      "title",
+      "principalRef",
+      "seed",
+      "requiredConstraints",
+      "forbiddenActions",
+      "acceptanceChecks",
+      "humanReviewQuestions",
+      "risk",
+      "expectedArtifactKind",
+      "faultPlan",
+      "postDispatchDeadlineFault"
+    ],
+    relative
+  );
+  assertExactObjectKeys(
+    task.seed,
+    ["sourceType", "sourceRef", "dataClass", "content"],
+    `${relative}: seed`
+  );
+  assertExactObjectKeys(
+    suite,
+    ["suiteId", "variable", "provenance", "frozen", "control", "fault"],
+    `${relative}: postDispatchDeadlineFault`
+  );
+  if (
+    task.schemaVersion !== "0.5"
+    || task.taskId
+      !== "synthetic-offline-read-only-tool-post-dispatch-deadline-006"
+    || task.principalRef !== "synthetic-tool-deadline-owner"
+    || task.seed.sourceType !== "TEXT"
+    || task.seed.sourceRef !== "synthetic://eval/s4-f2-tool-deadline-006"
+    || task.seed.dataClass !== "PUBLIC"
+    || task.risk !== "REVERSIBLE"
+    || task.expectedArtifactKind !== "ARTICLE_DRAFT"
+    || suite.suiteId
+      !== "offline-read-only-tool-post-dispatch-deadline-v1"
+    || suite.variable !== "capture-read-completion-latency-ms"
+    || task.modelEval !== undefined
+    || task.syntheticProvenance !== undefined
+    || task.offlineReplay !== undefined
+    || task.expectedReplay !== undefined
+    || task.replayVersions !== undefined
+    || task.harnessComparison !== undefined
+    || task.deterministicAgentFault !== undefined
+  ) {
+    throw new Error(
+      `${relative}: post-dispatch deadline fault identity or isolation drifted`
+    );
+  }
+  assertExactObjectKeys(
+    suite.provenance,
+    [
+      "kind",
+      "containsRealUserData",
+      "containsRealAccount",
+      "networkAllowed",
+      "realModelAllowed",
+      "connectorAllowed"
+    ],
+    `${relative}: postDispatchDeadlineFault.provenance`
+  );
+  if (
+    suite.provenance.kind !== "LITERAL_CHECKED_IN_SYNTHETIC"
+    || suite.provenance.containsRealUserData !== false
+    || suite.provenance.containsRealAccount !== false
+    || suite.provenance.networkAllowed !== false
+    || suite.provenance.realModelAllowed !== false
+    || suite.provenance.connectorAllowed !== false
+  ) {
+    throw new Error(
+      `${relative}: post-dispatch deadline provenance must disable real data, model, network and Connector`
+    );
+  }
+
+  const frozen = suite.frozen;
+  const expectedFrozen = {
+    principalId: "synthetic-tool-deadline-owner",
+    captureId: "capture-tool-deadline-006",
+    clientNonce: "tool-deadline-006",
+    sourceType: "TEXT",
+    sourceRef: "synthetic://eval/s4-f2-tool-deadline-006",
+    dataClass: "PUBLIC",
+    content:
+      "这是公开、虚构、仅用于离线验证 post-dispatch deadline truth 的测试素材。",
+    intent: "把公开的虚构测试素材整理成一段短文",
+    runId: "run-tool-deadline-006",
+    taskId: "task-tool-deadline-006",
+    artifactId: "art-tool-deadline-006",
+    frozenTime: "2026-07-31T00:00:00Z",
+    taskSchemaVersion: "1.0",
+    budgetUsd: "0.000000",
+    maxModelSteps: 2,
+    maxToolCalls: 1,
+    taskDeadlineMs: 5,
+    executionProfile: "offline-tool-deadline-fault-v1",
+    model: "scripted-tool-deadline-fault-v1",
+    harness: "framework-free-agent-kernel-v1",
+    agent: "agent-draft-service-v1",
+    verifier: "agent-draft-verifier-v1",
+    policy: "agent-draft-policy-v1",
+    state: "stage2-s4-f2",
+    contextPolicy: "ref-only-v1",
+    toolRegistry: "agent-tools-v2",
+    traceIntegrity: INTEGRITY_PROFILE
+  };
+  assertExactObjectKeys(
+    frozen,
+    Object.keys(expectedFrozen),
+    `${relative}: postDispatchDeadlineFault.frozen`
+  );
+  if (JSON.stringify(frozen) !== JSON.stringify(expectedFrozen)) {
+    throw new Error(
+      `${relative}: post-dispatch deadline frozen inputs or component versions drifted`
+    );
+  }
+
+  const expectedKeys = [
+    "status",
+    "failureReason",
+    "traceTypes",
+    "traceStatuses",
+    "modelCallCount",
+    "validationCount",
+    "toolExecuteCount",
+    "totalFindOwnedCount",
+    "toolBackedReadCount",
+    "runStartCount",
+    "runCompleteCount",
+    "artifactCount",
+    "evidenceRefCount",
+    "resourceBindingCount",
+    "uncertaintyCount",
+    "consumedIdPrefixes",
+    "taskIntegrityHash",
+    "traceRootHash",
+    "bundleIntegrityHash"
+  ];
+  const expectedCases = {
+    control: {
+      id: "within-deadline-control",
+      completionLatencyMs: 4,
+      expected: {
+        status: "SUCCEEDED",
+        failureReason: null,
+        traceTypes: [
+          "MODEL_STEP",
+          "TOOL_REQUEST",
+          "TOOL_RESULT",
+          "MODEL_STEP",
+          "STRUCTURED_FINAL",
+          "ARTIFACT_COMMITTED"
+        ],
+        traceStatuses: [
+          "COMPLETED",
+          "REQUESTED",
+          "SUCCEEDED",
+          "COMPLETED",
+          "PROPOSED",
+          "SUCCEEDED"
+        ],
+        modelCallCount: 2,
+        validationCount: 1,
+        toolExecuteCount: 1,
+        totalFindOwnedCount: 2,
+        toolBackedReadCount: 1,
+        runStartCount: 1,
+        runCompleteCount: 1,
+        artifactCount: 1,
+        evidenceRefCount: 1,
+        resourceBindingCount: 2,
+        uncertaintyCount: 0,
+        consumedIdPrefixes: ["run", "task", "art"],
+        taskIntegrityHash:
+          "da267ac640654eeae9e83e485a90f4cfd9496ea2ab95a4e3358f29b002696489",
+        traceRootHash:
+          "e3e72b87f00047a6a4c455b5ffe3698d75619d0174550359e88f62a7db8f18a9",
+        bundleIntegrityHash:
+          "ebb982e652777f176b3ae1786ca4a28d066eb58e82e21aaacfebbc08bdc45451"
+      }
+    },
+    fault: {
+      id: "deadline-exceeded-after-dispatch",
+      completionLatencyMs: 7,
+      expected: {
+        status: "FAILED",
+        failureReason: "TOOL_DEADLINE_EXCEEDED_AFTER_DISPATCH",
+        traceTypes: ["MODEL_STEP", "TOOL_REQUEST", "TOOL_REJECTED"],
+        traceStatuses: ["COMPLETED", "REQUESTED", "DEADLINE_EXCEEDED"],
+        modelCallCount: 1,
+        validationCount: 1,
+        toolExecuteCount: 1,
+        totalFindOwnedCount: 2,
+        toolBackedReadCount: 1,
+        runStartCount: 1,
+        runCompleteCount: 1,
+        artifactCount: 0,
+        evidenceRefCount: 0,
+        resourceBindingCount: 0,
+        uncertaintyCount: 0,
+        consumedIdPrefixes: ["run", "task"],
+        taskIntegrityHash:
+          "da267ac640654eeae9e83e485a90f4cfd9496ea2ab95a4e3358f29b002696489",
+        traceRootHash:
+          "d081324187b38e962ca14876a1b4fa9da762cdbb0823e90d44dc061763edadd0",
+        bundleIntegrityHash:
+          "71ce0d367459bbe5a55f1da713d9311c71ba06f33815f05b8f5017b3b9438f3a"
+      }
+    }
+  };
+  for (const [name, expectedCase] of Object.entries(expectedCases)) {
+    const actual = suite[name];
+    assertExactObjectKeys(
+      actual,
+      ["id", "completionLatencyMs", "expected"],
+      `${relative}: postDispatchDeadlineFault.${name}`
+    );
+    assertExactObjectKeys(
+      actual.expected,
+      expectedKeys,
+      `${relative}: postDispatchDeadlineFault.${name}.expected`
+    );
+    if (JSON.stringify(actual) !== JSON.stringify(expectedCase)) {
+      throw new Error(
+        `${relative}: post-dispatch deadline ${name} receipt drifted`
+      );
+    }
+  }
+  if (
+    suite.control.completionLatencyMs >= frozen.taskDeadlineMs
+    || suite.fault.completionLatencyMs <= frozen.taskDeadlineMs
+  ) {
+    throw new Error(
+      `${relative}: control and fault must straddle the frozen Task deadline`
+    );
+  }
+}
+
 for (const file of taskPackFiles) {
   const task = readJson(file);
   const relative = path.relative(repoRoot, file);
@@ -1695,6 +2082,11 @@ for (const file of taskPackFiles) {
   if (task.deterministicAgentFault !== undefined) {
     verifyDeterministicAgentFault(task, relative);
     deterministicAgentFaultPackCount += 1;
+  }
+
+  if (task.postDispatchDeadlineFault !== undefined) {
+    verifyPostDispatchDeadlineFault(task, relative);
+    postDispatchDeadlineFaultPackCount += 1;
   }
 
   if (task.offlineReplay !== undefined || task.expectedReplay !== undefined) {
@@ -1867,6 +2259,9 @@ if (harnessComparisonPackCount === 0) {
 }
 if (deterministicAgentFaultPackCount !== 1) {
   throw new Error("Exactly one deterministic Agent fault Task Pack is required");
+}
+if (postDispatchDeadlineFaultPackCount !== 1) {
+  throw new Error("Exactly one post-dispatch deadline fault Task Pack is required");
 }
 
 process.stdout.write(`Validated ${taskPackFiles.length} synthetic evaluation task packs with unique task IDs.\n`);
