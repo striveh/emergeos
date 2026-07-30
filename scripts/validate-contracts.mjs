@@ -810,6 +810,7 @@ function verifyHarnessComparison(task, relative) {
       "state",
       "contextPolicy",
       "toolRegistry",
+      "candidateGeneratorVersion",
       "traceIntegrity"
     ],
     `${relative}: harnessComparison.frozen`
@@ -831,6 +832,7 @@ function verifyHarnessComparison(task, relative) {
     "state",
     "contextPolicy",
     "toolRegistry",
+    "candidateGeneratorVersion",
     "traceIntegrity"
   ]) {
     if (typeof frozen[field] !== "string" || frozen[field].trim() === "") {
@@ -877,6 +879,7 @@ function verifyHarnessComparison(task, relative) {
     || frozen.state !== "stage2-s4-o1"
     || frozen.contextPolicy !== "ref-only-v1"
     || frozen.toolRegistry !== "agent-tools-v1"
+    || frozen.candidateGeneratorVersion !== "literal-reference-candidate-fixture-v1"
     || frozen.traceIntegrity !== INTEGRITY_PROFILE
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(frozen.frozenTime)
     || frozenTimeCanonical !== frozen.frozenTime

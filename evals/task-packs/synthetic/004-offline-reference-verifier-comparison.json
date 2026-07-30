@@ -74,6 +74,7 @@
       "state": "stage2-s4-o1",
       "contextPolicy": "ref-only-v1",
       "toolRegistry": "agent-tools-v1",
+      "candidateGeneratorVersion": "literal-reference-candidate-fixture-v1",
       "traceIntegrity": "emergeos-length-prefixed-sha256-v1"
     },
     "arms": [
