@@ -32,3 +32,20 @@ Do not commit real conversations, voice, Self Model records, complete production
 Before changing a model, Prompt, Skill or Harness, record the baseline task set, repetitions, grader,
 budget and decision threshold. A new version is not better because it is newer, and a Critic model is
 not ground truth.
+
+## 当前 Offline baseline
+
+`task-packs/synthetic/002-fake-agent-draft-replay.json` 由
+`OfflineFakeAgentRunnerTest` 在两个 fresh in-memory runner 中执行，并比较 exact
+Artifact、Result、Safe Trace 和 HarnessRunBundle hashes：
+
+```bash
+./mvnw --batch-mode --no-transfer-progress \
+  -pl adapters/inmemory -am \
+  -Dtest=OfflineFakeAgentRunnerTest \
+  -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+该 runner 是 test fixture，不是 CLI 或 product replay API；它不能读取 shared
+store、真实用户数据，也不能产生外部副作用。当前结果只证明 frozen synthetic Fake
+success 的确定性，不证明真实模型质量或 H0/H1 指标。

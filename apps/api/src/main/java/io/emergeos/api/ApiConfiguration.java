@@ -14,6 +14,7 @@ import io.emergeos.adapters.inmemory.agent.ScriptedFakeModel;
 import io.emergeos.adapters.postgres.PostgresActionAttemptStore;
 import io.emergeos.adapters.postgres.PostgresArtifactLineageStore;
 import io.emergeos.adapters.postgres.PostgresCaptureStore;
+import io.emergeos.adapters.postgres.PostgresAgentRunStore;
 import io.emergeos.adapters.postgres.PostgresStage1OperationsProbe;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.application.AgentDraftService;
@@ -89,9 +90,20 @@ class ApiConfiguration {
   @Bean
   AgentDraftService agentDraftService(
       AgentKernel agentKernel,
-      ArtifactLineageService artifactLineageService,
-      IdGenerator idGenerator) {
-    return new AgentDraftService(agentKernel, artifactLineageService, idGenerator);
+      PostgresAgentRunStore agentRunStore,
+      PostgresCaptureStore captureStore,
+      IdGenerator idGenerator,
+      Clock clock) {
+    return new AgentDraftService(agentKernel, agentRunStore, captureStore, idGenerator, clock);
+  }
+
+  @Bean
+  PostgresAgentRunStore agentRunStore(
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager,
+      PostgresArtifactLineageStore artifactLineageStore) {
+    return new PostgresAgentRunStore(
+        dataSource, transactionManager, artifactLineageStore);
   }
 
   @Bean

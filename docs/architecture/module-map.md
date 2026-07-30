@@ -4,7 +4,7 @@
 
 ```text
 modules/contracts
-  跨进程与跨参与者稳定契约
+  跨进程与跨参与者稳定契约、safe Trace、Result 与 HarnessRunBundle 完整性规则
 
 modules/core
   domain       领域实体、值对象、状态机、不变量
@@ -13,14 +13,16 @@ modules/core
 
 adapters/inmemory
   内存 Ledger、确定性草稿生成、Policy、Action Stub
-  framework-free 有限工具循环、脚本 Fake Model、工具注册表与 capture.read
+  framework-free 有限工具循环、脚本 Fake Model、工具注册表、capture.read
+  与 frozen synthetic Offline golden runner
 
 adapters/postgres
-  S1 Capture、S2 Artifact lineage、S3 local Action 的 JdbcClient 适配器与前向 Flyway migrations
+  Capture、Artifact lineage、local Action 与 AgentRun 的 JdbcClient 适配器
+  以及前向 Flyway migrations
 
 apps/api
   HTTP DTO、Controller、异常映射、loopback 启动保护、Agent draft 入口、
-  S3 模拟 Provider HTTP adapter、依赖装配
+  owner-scoped Run/Trace/Bundle 查询、S3 模拟 Provider HTTP adapter、依赖装配
 ```
 
 ## 依赖规则
@@ -70,7 +72,8 @@ flowchart RL
 
 ```text
 adapters/inmemory/agent    # 已实现：有界 Fake Agent 基线，不含真实模型 SDK
-adapters/postgres            # 已实现：S1 Capture、S2 Artifact lineage、S3 local Action
+adapters/postgres          # 已实现：Capture、Artifact、local Action、AgentRun/Trace
+adapters/openai
 adapters/object-storage
 adapters/agent-agentscope
 adapters/agent-pi
@@ -78,7 +81,7 @@ adapters/temporal
 adapters/connectors/*
 ```
 
-除已标记的 in-memory Agent 基线与 PostgreSQL Capture/Artifact/local Action 适配器外，其余
-都是计划，不应在存在真实实现前创建空目录。S3 模拟 Provider 属于 API 外层的 test-only
-协议，不代表真实 Connector。S1 Agent Trace 只投影到当前 HTTP 响应，尚无持久化 run/Trace
-绑定。
+除已标记的 in-memory Agent/Offline baseline 与 PostgreSQL 持久适配器外，其余都是计划，
+不应在存在真实实现前创建空目录。S3 模拟 Provider 属于 API 外层的 test-only 协议，不代表
+真实 Connector。当前 safe Trace 已持久化并与 owner-scoped AgentRun、Result、Artifact
+version 和 HarnessRunBundle 绑定；它不是原始模型 transcript。

@@ -4,8 +4,51 @@
   "title": "ResultEnvelope",
   "type": "object",
   "additionalProperties": false,
+  "$defs": {
+    "safeText2048": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    },
+    "safeName200": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    },
+    "safeModel512": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"status": {"const": "SUCCEEDED"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "failureReason": {"type": "null"},
+          "resolvedModel": {"$ref": "#/$defs/safeModel512"}
+        }
+      },
+      "else": {
+        "properties": {
+          "failureReason": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+          }
+        }
+      }
+    }
+  ],
   "required": [
     "schemaVersion",
+    "runId",
     "taskId",
     "status",
     "artifactRefs",
@@ -13,17 +56,28 @@
     "claims",
     "uncertainty",
     "receiptRefs",
+    "resolvedModel",
     "agentVersion",
     "verifierVersion",
     "costUsd",
-    "latencyMs"
+    "tokenCount",
+    "latencyMs",
+    "traceRef",
+    "failureReason"
   ],
   "properties": {
     "schemaVersion": {"const": "1.0"},
-    "taskId": {"type": "string", "minLength": 1},
+    "runId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+    },
+    "taskId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+    },
     "status": {"enum": ["SUCCEEDED", "FAILED", "NEEDS_INPUT", "BLOCKED", "CANCELLED"]},
-    "artifactRefs": {"type": "array", "items": {"type": "string"}},
-    "evidenceRefs": {"type": "array", "items": {"type": "string"}},
+    "artifactRefs": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
+    "evidenceRefs": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
     "claims": {
       "type": "array",
       "items": {
@@ -31,20 +85,46 @@
         "additionalProperties": false,
         "required": ["text", "evidenceRefs", "confidence"],
         "properties": {
-          "text": {"type": "string", "minLength": 1},
-          "evidenceRefs": {"type": "array", "items": {"type": "string"}},
-          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+          "text": {"$ref": "#/$defs/safeText2048"},
+          "evidenceRefs": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/safeText2048"}
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "multipleOf": 0.000001
+          }
         }
       }
     },
-    "uncertainty": {"type": "array", "items": {"type": "string"}},
-    "receiptRefs": {"type": "array", "items": {"type": "string"}},
-    "resolvedModel": {"type": ["string", "null"]},
-    "agentVersion": {"type": "string", "minLength": 1},
-    "verifierVersion": {"type": "string", "minLength": 1},
-    "costUsd": {"type": "number", "minimum": 0},
-    "latencyMs": {"type": "integer", "minimum": 0},
-    "traceRef": {"type": ["string", "null"]},
-    "failureReason": {"type": ["string", "null"]}
+    "uncertainty": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
+    "receiptRefs": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
+    "resolvedModel": {
+      "oneOf": [{"$ref": "#/$defs/safeModel512"}, {"type": "null"}]
+    },
+    "agentVersion": {"$ref": "#/$defs/safeName200"},
+    "verifierVersion": {"$ref": "#/$defs/safeName200"},
+    "costUsd": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 999999.999999,
+      "multipleOf": 0.000001
+    },
+    "tokenCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "latencyMs": {"type": "integer", "minimum": 0, "maximum": 86400000},
+    "traceRef": {
+      "type": "string",
+      "pattern": "^/api/v1/agent-runs/[A-Za-z0-9][A-Za-z0-9._~-]{0,127}/trace$"
+    },
+    "failureReason": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+    }
   }
 }

@@ -13,6 +13,7 @@
 | ReflectionCandidate | 从用户修改和真实结果中提出的记忆、偏好或技能候选；默认不生效 |
 | Harness | 把模型调用变成受约束、可恢复、可观察、可验证执行的系统 |
 | AgentKernel | 可替换的模型—工具循环接口，不拥有产品真相 |
+| AgentRun | 一次 server-owned Agent 执行的持久产品真相，绑定 Task、terminal Result、Safe Trace 与实际资源 |
+| Safe Trace | 只含 allowlisted 结构事件、状态、用量和 resource ref 的 hash-chain 执行证据；不是 transcript 或 chain-of-thought |
 | Durable Runtime | 跨崩溃、等待和重试继续任务的粗粒度执行系统 |
 | HarnessRunBundle | 一次运行的任务、版本、状态、权限、Trace、Artifact、Receipt 与验证证据包 |
-

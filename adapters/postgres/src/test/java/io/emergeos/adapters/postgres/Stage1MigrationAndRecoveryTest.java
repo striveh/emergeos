@@ -110,11 +110,11 @@ class Stage1MigrationAndRecoveryTest {
     Flyway freshCurrent = flyway(fresh, "fresh_current", null);
     freshCurrent.migrate();
     assertCurrent(freshCurrent);
-    assertEquals(6, businessTableCount(fresh));
+    assertEquals(9, businessTableCount(fresh));
 
     System.out.println(
-        "S4_MIGRATION_RECEIPT fromV1=V3-stable fromV2=V3-stable "
-            + "fromV3=V3-stable fresh=V3 tables=6 synthetic=true");
+        "S2_V4_MIGRATION_RECEIPT fromV1=V4-stable fromV2=V4-stable "
+            + "fromV3=V4-stable fresh=V4 tables=9 synthetic=true");
   }
 
   @Test
@@ -387,7 +387,7 @@ class Stage1MigrationAndRecoveryTest {
   private static void assertCurrent(Flyway flyway) {
     assertTrue(flyway.validateWithResult().validationSuccessful);
     assertEquals(
-        MigrationVersion.fromVersion("3"),
+        MigrationVersion.fromVersion("4"),
         flyway.info().current().getVersion());
     assertEquals(0, flyway.info().pending().length);
   }
@@ -417,7 +417,8 @@ class Stage1MigrationAndRecoveryTest {
             WHERE table_schema = current_schema()
               AND table_name IN (
                 'captures', 'artifacts', 'artifact_versions',
-                'action_attempts', 'action_attempt_transitions', 'action_receipts'
+                'action_attempts', 'action_attempt_transitions', 'action_receipts',
+                'agent_runs', 'agent_trace_events', 'agent_run_resource_bindings'
               )
             """)
         .query(Integer.class)

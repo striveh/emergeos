@@ -16,6 +16,8 @@
   "outputSchema": "urn:emergeos:output:article-draft:v1",
   "acceptanceChecks": ["draft preserves the original thought"],
   "allowParallel": false,
+  "maxModelSteps": 2,
+  "maxToolCalls": 1,
   "deadlineMs": 30000,
   "budgetUsd": 0,
   "idempotencyKey": "task-001-attempt-001",

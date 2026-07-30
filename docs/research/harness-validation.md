@@ -23,6 +23,13 @@
 
 Critic 即使使用隔离上下文，也不是实验真值。最终评分来自确定性检查、证据审查和盲化用户评审。
 
+## 当前实现状态
+
+Stage 2 S2 只完成 deterministic Fake Agent 的 synthetic success baseline：同一
+Task Pack 可以在 Offline runner 中得到一致的 Artifact、safe Trace 与
+HarnessRunBundle hashes。H0/H1 的 60 次运行、真实模型、真实任务、人工盲评和下面的
+故障注入尚未执行，因此这里仍是可证伪的评测计划，不是实验结论。
+
 ## 最小任务集
 
 10 个真实但可安全回放的 Thought-to-Outcome Task Pack：
@@ -72,16 +79,18 @@ Critic 即使使用隔离上下文，也不是实验真值。最终评分来自�
 
 | 维度 | v1 字段 |
 | --- | --- |
-| 协议与运行身份 | `schemaVersion`, `runId`, `taskId`, `experimentArm`, `repetition` |
+| 协议与运行身份 | `schemaVersion`, `runId`, `taskId`, `experiment`（内含 `arm`, `repetition`） |
 | 模型与 Harness | `modelResolved`, `harnessVersion`, `componentVersions` |
 | 环境与工具 | `environmentSnapshotRef`, `toolRegistryVersion` |
-| 输入与 Working Self | `task`, `workingSelfRef` |
-| 执行证据 | `traceRefs`, `handoffRefs`, `checkpointRefs`, `artifactRefs`, `receiptRefs` |
+| 输入、结果与 Working Self | `task`, `result`, `workingSelfRef` |
+| 执行证据 | `traceRef`, `traceRootHash`, `handoffRefs`, `checkpointRefs`, `resourceBindings` |
 | 验证与结果 | `verificationRef`, `failureAttribution`, `outcome` |
-| 资源与完整性 | `costUsd`, `tokenCount`, `latencyMs`, `integrityHash` |
+| 用量与完整性 | `costUsd`, `tokenCount`, `latencyMs`, `integrityProfile`, `integrityHash` |
 
-早期设计中的 `agentSpec`、prompt、skill 和 verifier 版本目前记录在
-`componentVersions`；principal、delegation、policy、state、context、Evidence、
-fault plan、idempotency 和 recovery 只能通过 `task`、环境快照或各类引用所指向的
-版本化记录承载。它们不是 v1 的独立顶层字段；若实验需要直接查询，必须先通过
-契约变更加入，不能把设计意图当成已实现字段。
+当前 `componentVersions` 明确记录 `agent`、`verifier` 和 `trace-integrity`；
+`modelResolved`、`harnessVersion` 与 `toolRegistryVersion` 分别是独立字段。prompt、
+skill 和独立 `agentSpec` 版本尚未显式记录，不能从现有 Bundle 反推。
+principal、delegation、policy、state、context、fault plan、idempotency 和 recovery
+由内嵌 `task` 承载；Evidence、Artifact、Receipt、handoff、checkpoint 与 verification
+通过 Result 和 typed `resourceBindings` 绑定。若实验需要新的独立字段，必须先做契约
+变更，不能把设计意图当成已实现字段。

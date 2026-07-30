@@ -106,11 +106,12 @@ Run the real PostgreSQL upgrade and restore game day:
   -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
-The test creates independent populated V1, V2 and V3 schemas plus a fresh
-install. It compares every column of the stable business rows before and after
-upgrade: S1 Capture/request/content hashes; S2 Artifact head, version and
-lineage; and S3 Action plan/artifact hashes, budget, transitions and Receipt.
-All paths end on V3 with six business tables.
+该测试创建独立的 populated V1、V2、V3 schema 和一个 fresh install，再全部升级到
+V4。升级前后逐列比较既有稳定业务 truth：S1 Capture/request/content hash、S2
+Artifact head/version/lineage，以及 S3 Action plan/artifact hash、budget、transition
+和 Receipt。所有路径最终都在 V4；fresh schema 有九张业务表，旧六张表的数据保持
+不变，新增三张 AgentRun/Trace/binding 表；V4 还为 Capture identity/request hash
+增加 composite unique constraint。
 
 Run the incompatible migration process check:
 
@@ -121,10 +122,9 @@ Run the incompatible migration process check:
   -Dfailsafe.failIfNoSpecifiedTests=false
 ```
 
-This applies V1–V3, deliberately changes the applied V3 checksum, then starts
-the packaged application. Flyway validation must make the process exit non-zero
-before readiness is ever `UP`. The test also checks that its synthetic database
-password is absent from the failure log.
+该测试先应用 V1–V4，再故意修改已应用 V3 的 checksum，然后启动 packaged
+application。Flyway validation 必须让进程在 readiness 变成 `UP` 之前 non-zero
+退出；测试同时确认 synthetic database password 不会出现在失败日志。
 
 Migrations are forward-only. This runbook does not promise a generic down
 migration. An incompatible history is a fail-fast incident that needs a reviewed
@@ -152,7 +152,11 @@ The destructive injection affects only synthetic container data. Restore goes
 to a new database. The test re-validates Flyway and compares all six Stage 1
 business tables to the pre-fault snapshot. One 2026-07-29 local run measured
 229 ms from recovery start through verified comparison. That is one observation,
-not an RTO, RPO, capacity result or SLA.
+not an RTO, RPO, capacity result or SLA. 这份 game day 没有写入 populated
+AgentRun，因此也没有证明 populated AgentRun/Trace/Bundle 的 backup/restore；
+S2 的 durable evidence 由独立 packaged restart acceptance 覆盖。
+该验收的命令、断言和限制见
+[Stage 2 S2 Build Note](./build-notes/2026-07-30-s2-persistent-agent-run-trace.md)。
 
 ## Fault matrix
 
@@ -168,8 +172,9 @@ not an RTO, RPO, capacity result or SLA.
 ## Scope and open Gates
 
 - Fake Provider objects are simulated and contain no real user data.
-- There is no real Connector, authentication, LAN/public listener, Temporal,
-  AgentKernel, model, UI, general outbox or metrics platform.
+- 当前已有 framework-free `AgentKernel`、scripted Fake Model，以及 V4 持久
+  AgentRun/Safe Trace；仍没有 real model、real Connector、authentication、
+  LAN/public listener、Temporal、正式 UI、general outbox 或 metrics platform。
 - ADR-0004 is `Proposed`: S3 proves recovery after durable `UNKNOWN`, but not
   safe takeover from a crash that leaves `DISPATCHING`.
 - The real-Connector Gate remains blocked.

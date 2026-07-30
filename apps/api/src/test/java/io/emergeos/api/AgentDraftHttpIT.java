@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.jayway.jsonpath.JsonPath;
@@ -92,7 +91,7 @@ class AgentDraftHttpIT {
       assertEquals("1.0", JsonPath.read(drafted.body(), "$.result.schemaVersion"));
       assertEquals("SUCCEEDED", JsonPath.read(drafted.body(), "$.result.status"));
       assertEquals(
-          List.of("artifact://" + artifactId),
+          List.of("artifact-version://" + artifactId + "/1"),
           JsonPath.read(drafted.body(), "$.result.artifactRefs"));
       assertEquals(
           List.of("capture://" + captureId),
@@ -102,7 +101,11 @@ class AgentDraftHttpIT {
           JsonPath.read(drafted.body(), "$.result.resolvedModel"));
       assertEquals(0.0, JsonPath.<Number>read(drafted.body(), "$.result.costUsd").doubleValue());
       assertEquals(List.of(), JsonPath.read(drafted.body(), "$.result.receiptRefs"));
-      assertNull(JsonPath.read(drafted.body(), "$.result.traceRef"));
+      String runId = JsonPath.read(drafted.body(), "$.runId");
+      assertEquals(runId, JsonPath.read(drafted.body(), "$.result.runId"));
+      assertEquals(
+          "/api/v1/agent-runs/" + runId + "/trace",
+          JsonPath.read(drafted.body(), "$.result.traceRef"));
 
       List<String> eventTypes = JsonPath.read(drafted.body(), "$.trace[*].type");
       assertEquals(

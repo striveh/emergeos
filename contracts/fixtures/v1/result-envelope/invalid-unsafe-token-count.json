@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "run-unsafe-count",
+  "taskId": "task-unsafe-count",
+  "status": "SUCCEEDED",
+  "artifactRefs": [],
+  "evidenceRefs": [],
+  "claims": [],
+  "uncertainty": [],
+  "receiptRefs": [],
+  "resolvedModel": null,
+  "agentVersion": "agent-fixture-001",
+  "verifierVersion": "verifier-fixture-001",
+  "costUsd": 0,
+  "tokenCount": 9007199254740992,
+  "latencyMs": 0,
+  "traceRef": "/api/v1/agent-runs/run-unsafe-count/trace",
+  "failureReason": null
+}

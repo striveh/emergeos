@@ -49,7 +49,8 @@ class ArtifactHttpTest extends PostgresApiTest {
     mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
     JdbcClient.create(dataSource)
         .sql(
-            "TRUNCATE TABLE action_receipts, action_attempt_transitions, action_attempts, "
+            "TRUNCATE TABLE agent_trace_events, agent_run_resource_bindings, agent_runs, "
+                + "action_receipts, action_attempt_transitions, action_attempts, "
                 + "artifact_versions, artifacts, captures")
         .update();
   }

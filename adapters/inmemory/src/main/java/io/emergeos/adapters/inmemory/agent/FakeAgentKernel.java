@@ -19,8 +19,8 @@ public final class FakeAgentKernel implements AgentKernel {
 
   private final AgentModel model;
   private final InMemoryToolRegistry tools;
-  private final int maxModelSteps;
-  private final int maxToolCalls;
+  private final int modelStepCeiling;
+  private final int toolCallCeiling;
   private final LongSupplier nanoTime;
 
   public FakeAgentKernel(
@@ -42,8 +42,8 @@ public final class FakeAgentKernel implements AgentKernel {
     if (maxModelSteps < 1 || maxToolCalls < 1) {
       throw new IllegalArgumentException("model and tool limits must be positive");
     }
-    this.maxModelSteps = maxModelSteps;
-    this.maxToolCalls = maxToolCalls;
+    this.modelStepCeiling = maxModelSteps;
+    this.toolCallCeiling = maxToolCalls;
     this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
   }
 
@@ -57,8 +57,13 @@ public final class FakeAgentKernel implements AgentKernel {
     List<AgentTraceEvent> trace = new ArrayList<>();
     List<AgentModel.ToolResult> toolResults = new ArrayList<>();
     int toolCalls = 0;
+    if (task.maxModelSteps() > modelStepCeiling
+        || task.maxToolCalls() > toolCallCeiling) {
+      return outcome(
+          RunStatus.BLOCKED, null, trace, "HARNESS_LIMIT_MISMATCH", startedNanos);
+    }
 
-    for (int modelStep = 0; modelStep < maxModelSteps; modelStep++) {
+    for (int modelStep = 0; modelStep < task.maxModelSteps(); modelStep++) {
       if (cancellation.isCancelled()) {
         return outcome(
             RunStatus.CANCELLED, null, trace, "CANCELLED", startedNanos);
@@ -117,7 +122,7 @@ public final class FakeAgentKernel implements AgentKernel {
                 call.toolName(),
                 "REQUESTED",
                 call.reference()));
-        if (toolCalls >= maxToolCalls) {
+        if (toolCalls >= task.maxToolCalls()) {
           trace.add(
               event(
                   trace,
@@ -240,6 +245,7 @@ public final class FakeAgentKernel implements AgentKernel {
         trace,
         model.modelId(),
         BigDecimal.ZERO,
+        0,
         elapsedMillis(startedNanos),
         failureReason);
   }

@@ -1,14 +1,13 @@
 # ExecPlan: Stage 2 AgentKernel and Eval-Driven Development
 
-Status: active; S1 engineering complete, S2 not started
+状态：进行中；S1、S2 工程完成，下一步进入 S3 real model adapter
 
-Owner: project owner + main Codex agent
+Owner：项目所有者 + main Codex agent
 
-Entry gate: Stage 1 engineering is complete, but its human-learning and market
-decisions remain open. On 2026-07-30 the owner explicitly paused the learning
-plan and authorized the Stage 2 technical lane to proceed while Stage 1 remains
-incomplete. This is the Roadmap exception; it does not convert missing human,
-market or stale-`DISPATCHING` evidence into completed Gates.
+进入条件：Stage 1 工程切片已完成，但 human-learning 与市场决策仍然开放。
+2026-07-30，项目所有者明确暂停学习计划，并授权 Stage 2 技术主线在 Stage 1 总 Gate
+尚未关闭时继续。这是 Roadmap 顺序例外，不会把缺失的人类、市场或
+stale-`DISPATCHING` 证据改写成已完成 Gate。
 
 ## Five-outcome alignment
 
@@ -32,6 +31,10 @@ tool registry, tool loop, Agent Trace or evaluation runner. S1 now adds the
 bounded Fake Agent product loop described below. It still has no real-model
 adapter, persistent run/Trace binding or evaluation runner. The older
 `TemplateArtifactGenerator` remains deterministic Stage 0 scaffolding.
+
+S2 已补齐 durable AgentRun、Safe Trace、HarnessRunBundle integrity binding 与
+deterministic Offline golden runner；仍没有 real model、mid-run checkpoint/resume
+或 stochastic Harness experiment。上段保留的是 S1 baseline，不代表当前能力上限。
 
 The first user-visible result is:
 
@@ -171,6 +174,37 @@ then locate it from the Trace.
   reproducible Fake runs.
 - Promote S1 failures into regression Task Packs.
 
+#### S2 start delta · 2026-07-30
+
+- 基线是干净的 `main@d88ece3`。S1 已能让 Artifact 跨真实 JVM 重启存活，但
+  `ResultEnvelope.traceRef` 仍为 `null`，也没有 durable AgentRun、Trace 查询、
+  Bundle verifier 或 replay runner。
+- [RFC-0001](../rfcs/0001-persistent-agent-run-trace-and-bundle.md) 冻结了一次
+  unpublished-v1 协同修正：产品 `AgentRun` 是持久执行真相；
+  `HarnessRunBundle` 是从 terminal Run 生成的自包含 Eval projection。
+- 第一条 Acceptance Red 是 `AgentRunPersistenceHttpIT`：packaged JVM A 创建
+  owner-scoped Capture 与 Agent draft，读取同一份 safe Run/Trace/Bundle，然后强制
+  终止 A；JVM B 使用同一 PostgreSQL 启动后，必须取回相同的 integrity-bound
+  aggregate。基线先因缺少 `runRef`、`traceRef` 和 Run route 而失败。
+- Transaction invariant：server 在调用 AgentKernel 前提交 `RUNNING`；成功终态把
+  Artifact v1、immutable Artifact binding、最后一个 safe Trace event、Result、
+  Bundle 与 terminal Run 原子提交。Artifact insert 与 terminal update 之间的失败
+  必须整体回滚，不能产生 ghost success。
+- Privacy boundary：persistent Trace 只保存 typed、allowlisted metadata 和 hash，
+  不保存 prompt、Capture/Artifact 内容、tool arguments/raw results、exception
+  message、stack trace、reasoning 或 chain-of-thought。
+- Replay boundary：S2 支持 verified read，以及在 fresh 隔离 store 中执行 frozen
+  synthetic Task Pack。它不声称恢复 stale `RUNNING`、恢复 checkpoint、导出真实用户
+  Evidence 或提供 production authenticity。
+- Integrity boundary：`emergeos-length-prefixed-sha256-v1` 使用版本化 domain
+  separation、确定性 UTF-8 length-prefixed encoding 和 Java/Node golden vector。
+  它能检测 corruption 与未同步 tampering，但不是 signature。
+- Work ownership：一个 writer 负责 contract、Core、PostgreSQL 与 API 的协同变更；
+  read-only Agent 并发审查 migration、API/security 与 S3 provider Adapter。
+- Receipt 目标：contract/hash Red/Green、V4 populated upgrade rehearsal、原子回滚、
+  packaged forced restart、offline replay、独立 privacy/transaction review、全仓验证
+  和中文 Build Note。
+
 ### S3 · One real model adapter and fixed baseline
 
 - Verify exact provider/API behavior from installed versions and official
@@ -296,6 +330,47 @@ baseline.
   closed at `P0=0`, `P1=0`, `P2=0`. Full `./mvnw verify` passed 98 tests;
   contracts passed 4 Schemas, 8 fixtures and 1 Task Pack; all 63 Markdown links
   and `git diff --check` passed.
+- [x] 2026-07-30: S2 began with three independent read-only contract/data,
+  architecture/replay and test/threat audits. Their common P0 is the atomic
+  Artifact + terminal AgentRun boundary; their common contract finding is that
+  Run、Result、Trace、immutable resource binding 和 Bundle 必须形成同一个
+  owner-scoped aggregate。
+- [x] 2026-07-30: RFC-0001 accepted the durable AgentRun truth boundary,
+  safe hashed Trace, embedded Result, immutable Artifact binding, V4 migration,
+  exact owner-scoped query API and frozen synthetic replay semantics before
+  production implementation.
+- [x] 2026-07-30：packaged Acceptance 已转为 Green。JVM A 写入 terminal
+  AgentRun/Trace/Bundle 后被真实强制终止；不同 PID 的 JVM B 使用同一 PostgreSQL
+  读取出语义一致的三份 representation。
+- [x] 2026-07-30：Task 的 `maxModelSteps/maxToolCalls`、有界 USD/整数/时长域、
+  explicit nullable keys、Unicode scalar string 和 canonical ResourceBinding 顺序已
+  同步到 Java、JSON Schema、Node verifier 与 PostgreSQL。
+- [x] 2026-07-30：hostile Kernel outcome 会先经过字段 allowlist，再经过确定性的
+  Trace state machine；孤立或错配的 Tool Result、超 Task model/tool limit、
+  failure 后继续 success、超 budget/deadline，以及 success 但缺 resolved model
+  都会被收敛为固定 terminal failure，不泄漏 metadata，也不遗留永久 `RUNNING`。
+- [x] 2026-07-30：PostgreSQL focused evidence 已证明成功 Artifact 与 terminal Run
+  原子回滚、FAILED + Evidence/no Artifact round-trip、双线程 terminal completion
+  恰好一个赢家、Artifact head 到 v2 后历史 Run 仍绑定 exact v1，以及 forged
+  Evidence hash 被 composite FK 拒绝。
+- [x] 2026-07-30：Agent API 的 malformed JSON、unsupported media type、method not
+  allowed、owner success、foreign/missing 和 owned corruption 都使用
+  `Cache-Control: private, no-store`，且不返回 ETag。
+- [x] 2026-07-30：`ContractText` 把 Java、JSON Schema 与 Node 的字符串域统一为
+  有界 Unicode scalar、no NUL 和 frozen Unicode whitespace 语义；长度按 code
+  point 计算。single-variable fixtures 固定 success-without-model、NUL、
+  全空白和 typed Evidence binding 等反例，Task Pack 的长 Seed 不套用 2048 限制。
+- [x] 2026-07-30：ghost success 已在 Bundle、AgentRun aggregate 和 PostgreSQL
+  Store 三层封死：`CREATE_ARTICLE_DRAFT + SUCCEEDED` 必须有且只有一个 immutable
+  Artifact binding 和 trailing `ARTIFACT_COMMITTED`，Store 必须收到同一 transaction
+  的 proposed Artifact。
+- [x] 2026-07-30：PostgreSQL numeric boundary test 真实 round-trip 共同最大合法
+  cost/token/latency，并以 raw SQL 证明 7 位小数、超 JavaScript-safe token 和超
+  24 小时 latency 被 DB constraint 拒绝。
+- [x] 2026-07-30：S2 最终 Merge Gate 通过。稳定快照完成 full Maven verify、
+  contracts、doc links、packaged forced-restart、两轮独立复审与中文
+  [Build Note](../operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)；
+  下一步自动进入 S3。
 
 ## Decisions
 
@@ -313,14 +388,23 @@ baseline.
 - 2026-07-30: supersede the freeze above for sequencing only. Begin Stage 2 S1
   under an explicit owner-authorized technical-lane exception while preserving
   every unfinished Stage 1 claim and keeping the learning exercise paused.
+- 2026-07-30：产品 `AgentRun` 作为 durable execution truth；
+  `HarnessRunBundle` 只作为 terminal Run 的 Eval projection。两者交叉绑定，但不互相
+  冒充。
+- 2026-07-30：S2 使用项目自有、版本化的
+  `emergeos-length-prefixed-sha256-v1` 做 Java/Node golden parity；它提供
+  corruption detection，不宣称 signature 或 authenticity。
+- 2026-07-30：Trace 必须证明事件顺序、Tool request/result 配对、Task limit 和
+  terminal sequence；“每个字段都在 allowlist”不是执行真实性。
+- 2026-07-30：V4 是 additive migration，但除了三张新表，还为 Capture
+  identity/request hash 添加 composite unique constraint，以便 Evidence binding
+  由 owner-scoped FK 约束。
 
 ## Surprises and failures
 
-- The current public contracts have more fields than the executable system:
-  they must not be mistaken for a working Harness.
-- `HarnessRunBundle` does not directly bind a result/run in the way repeated
-  experiments may require. S2 must prove the need and use an RFC before changing
-  the public schema.
+- S2 开始时 public contracts 的字段多于 executable system，且
+  `HarnessRunBundle` 没有直接绑定 Result/Run。RFC-0001 与 unpublished-v1 协同修正
+  已把它们变成可执行、可 golden-test 的 contract；这仍不是完整 Harness 实验。
 - The Stage 1 plan blocks automatic Stage 2 expansion while human and market
   gates remain undecided. The 2026-07-30 owner decision is an explicit
   exception, not an automatic interpretation of engineering completion.
@@ -340,53 +424,75 @@ baseline.
   process-death evidence did not explicitly assert liveness, death and distinct
   PIDs. Tightening those assertions closed the final P2 without changing
   production code.
+- S2 第一版只验证每个 Trace event 的字段 allowlist；独立审查证明孤立
+  `TOOL_RESULT`、超 Task limit 和 failure 后继续 success 仍可能伪造执行证据。修复后
+  同一 state machine 同时守住 adapter outcome 与 durable aggregate。
+- `SUCCEEDED + artifactRefs=[]` 曾因空列表彼此相等而形成 ghost success。对当前
+  `CREATE_ARTICLE_DRAFT` 明确要求 exactly one Artifact，比全局禁止“无 Artifact 的
+  success”更能兼容未来 read-only Agent。
+- SafeText parity 暴露了三个容易忽略的跨语言差异：Java UTF-16 `.length()` 与
+  JSON Schema code-point 计数不同；不同 runtime 的 `isBlank/trim` 不同；ECMAScript
+  lookahead 中 `.` 默认不跨换行。v1 因此冻结 whitespace code points，并用
+  `[\s\S]` 保持多行中文合法。
+- typed ResourceBinding 不能只靠 Java constructor。Schema、Node semantic
+  verifier 与 PostgreSQL typed shape 必须共同约束 `capture://...` 和
+  `artifact-version://...`。
 
 ## Verification receipts
 
-- Acceptance Red/Green and the focused Green commands are recorded in Progress.
-- S1 adds no contract fixture, migration, runtime framework, model SDK,
-  credential or external action. PostgreSQL Capture and Artifact truth are
-  reused.
-- Independent review closed at `P0=0`, `P1=0`, `P2=0`.
-- `./mvnw --batch-mode --no-transfer-progress verify` passed 98 tests: Core 28,
-  in-memory 19, PostgreSQL 22, API unit 22 and packaged integration 7.
-- After tightening the process assertions, the focused packaged
-  `AgentDraftHttpIT` verification passed again with a confirmed forced stop and
-  distinct restart PID.
-- `verify-contracts.sh` passed 4 Schemas, 8 fixtures and 1 Task Pack;
-  `verify-doc-links.sh` passed 63 Markdown files; `git diff --check` passed.
+S1 的历史回执保留在对应 Build Note，不再用它冒充 S2 结果。
+
+S2 当前已确认：
+
+- Acceptance Red/Green、atomic rollback、FAILED + Evidence、并发 terminal CAS、
+  exact Artifact v1 after v2、forged Evidence FK、owner/security/cache 与 offline
+  replay 的 focused checks 均已记录在 Progress；
+- contract verifier 当前通过 5 个 Schema、25 个 fixture 和 2 个 synthetic Task
+  Pack；
+- `PostgresAgentRunStoreTest` 12 个案例通过，包含共同数值上界 round-trip 与 raw
+  invalid write rejection；
+- `./mvnw test`、`verify-contracts.sh` 与 `git diff --check` 已通过；
+- final `clean verify` 共 147 tests（Contracts 16、Core 43、In-memory 21、
+  PostgreSQL 35、API 32），0 failure/error/skipped；packaged forced-restart 包含在
+  其中；
+- doc links 通过 66 个 Markdown file，`git diff --check` 通过；
+- transaction/replay 独立复审为 `P0=0`、`P1=0`；最终 Merge Audit 为
+  `P0=0`、`P1=0`、`P2=1`，P2 是已记录的非阻塞 exception layering debt；
+- 完整证据与 non-claims 见
+  [S2 Build Note](../operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)。
 
 ## AI Coding receipt
 
-Two read-only agents inspected the proposed behavior and code gaps before Red.
-Implementation then followed packaged Acceptance Red → focused Red → minimum
-Green → real-process Green → adversarial review → regression Green. Two
-independent read-only review passes closed at `P0=0`, `P1=0`, `P2=0`.
+本切片继续使用单 writer + 多个 read-only reviewer。流程是 packaged Acceptance
+Red → focused Red → minimum Green → real-process Green → adversarial review →
+regression Green。审查不是“看代码觉得可以”，而是持续提交可复现 P1：ghost
+success、Trace 配对、SafeText parity、typed binding 和 DB numeric evidence，再由
+主线逐项转成测试与不变量。
 
 ## Agent Engineering receipt
 
-The executable mechanism is now bounded: model decision, registry plus Task
-authorization, owner-scoped tool result, structured proposal, deterministic
-evidence validation, Artifact commit and safe Trace projection. Cancellation
-and deadline checks occur between steps. There is still no durable checkpoint,
-real model, stochastic evaluation or persistent Trace.
+当前机制已经从 inline summary 进化为 durable Agent execution truth：server-owned
+Task、adapter outcome、Trace state machine、owner-scoped Evidence、structured
+proposal、deterministic verification、atomic Artifact commit、Result、safe
+hash-chain Trace 与 HarnessRunBundle 可以跨 JVM verified read。仍没有 durable
+checkpoint/resume、real model 或 stochastic Harness experiment。
 
 ## Career receipt
 
-The repository now contains a replayable tool-loop implementation, failing/green
-acceptance and safe Trace evidence. Owner-led diagnosis, no-notes explanation
-and framework trade-off defense remain deferred with the paused learning plan.
+仓库现在能展示一个生产级面试故事：为什么“模型声称读过”不是 Evidence、为什么
+allowlist 不是 Trace state machine、怎样防止 ghost success，以及怎样用 PostgreSQL
+transaction/FK/CAS 与跨语言 golden hash 形成可审计 Run。owner-led diagnosis、
+脱稿讲解和 framework trade-off defense 随暂停的学习计划继续延期，不虚报已掌握。
 
 ## Business receipt
 
-No new interview, real Seed, reuse, price request or payment was created by
-this slice. Those Stage 1 facts remain open.
+本切片没有新增访谈、真实 Seed、复用、报价、付款或收入证据；这些 Stage 1 商业事实
+仍然开放。
 
 ## Outcome and next hypothesis
 
-The first Agent slice now works without a framework: one Fake Model, one read
-tool, one validated structured draft, a PostgreSQL Artifact and zero external
-effects. The next falsifiable hypothesis is S2: a persisted, integrity-bound
-run/Trace and `HarnessRunBundle` can improve replay and failure attribution
-without letting SDK types or model proposals own product truth. Learning and
-market work remain paused and incomplete.
+S2 的工程假设已在 focused evidence 中成立：不引入 Runtime framework、real model
+或外部动作，也能形成持久、完整性绑定、可离线重执行的 AgentRun truth。最终 Merge
+Gate 已在稳定快照中重复全部证据。下一条可证伪假设进入 S3：
+一个 real provider adapter 能否在保持相同 Task/Trace/Result 边界、默认零 live call
+和无 credential 落盘的前提下，产生固定 baseline。学习与市场工作仍暂停且未完成。

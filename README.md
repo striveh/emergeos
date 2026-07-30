@@ -16,7 +16,13 @@ backup/restore 已有可重放证据。但 provider success 后、local outcome 
 Gate 保持关闭。
 Stage 2 S1 另增加一条无框架 Fake Agent 草稿闭环：脚本 Fake Model 必须通过声明的
 `capture.read` 工具读取 owner-scoped Capture，结构化结果经确定性校验后才能写入 Artifact；
-响应只返回不含原文的安全 Trace 摘要。它是 Agent Runtime 基线，不是真实模型质量证明。
+Stage 2 S2 又把 AgentRun、safe hashed Trace、Result、immutable resource binding 与
+HarnessRunBundle 写入 PostgreSQL；成功 Artifact 与 terminal Run 在同一个 transaction
+提交，JVM 重启后仍能 verified read。冻结的 synthetic Task Pack 可以在无网络 Offline
+runner 中重复得到 exact golden hashes。它们是 Agent Runtime/Harness 的确定性基线，
+不是真实模型质量证明，也不是可对真实用户数据执行的 product replay API。
+完整工程回执见
+[Stage 2 S2 Build Note](./docs/operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)。
 真实模型、Temporal、生产认证、加密存储和平台连接器尚未接入，不应将演示结果理解为生产
 自治能力或真实平台结果。
 
@@ -51,9 +57,11 @@ Secret Broker 落地前，持久化 Capture 会拒绝 `SENSITIVE` 和 `SECRET` �
 Stage 0 Manifestation 闭环仍刻意使用内存存储和确定性 Stub。Stage 1 已把独立的 Capture、
 Artifact lineage 和 local ActionAttempt/Receipt 边界替换为 PostgreSQL；S3 Action 只连接
 loopback-only 模拟 Provider；S4 只增加薄 operations/readiness 边界和迁移/恢复证据，没有
-增加新的领域状态、V4 schema 或通用运维平台。
+增加通用运维平台。Stage 2 S2 的 additive V4 新增三张 AgentRun/Trace/binding 表，并通过
+V1/V2/V3 → V4 升级与恢复演练保持旧 truth；V4 同时为 Capture identity/request hash
+增加 composite unique constraint。
 
-当前 Stage 2 S1 Agent 路径是：
+当前 Stage 2 S1 + S2 Agent 路径是：
 
 ```text
 PostgreSQL Capture reference
@@ -62,7 +70,8 @@ PostgreSQL Capture reference
   → capture.read
   → structured draft proposal
   → deterministic evidence validation
-  → PostgreSQL Artifact v1 + safe inline Trace
+  → PostgreSQL Artifact v1 + terminal AgentRun（同一 transaction）
+  → verified Result + safe hashed Trace + HarnessRunBundle
 ```
 
 ## 快速开始
@@ -123,6 +132,11 @@ curl -s \
   }' \
   http://localhost:8080/api/v1/agent-drafts
 
+# 使用 POST response 的 runId 读取持久执行真相
+curl -s http://localhost:8080/api/v1/agent-runs/{runId}
+curl -s http://localhost:8080/api/v1/agent-runs/{runId}/trace
+curl -s http://localhost:8080/api/v1/agent-runs/{runId}/bundle
+
 # 也可以绕过 Fake Agent，直接用确定性内容创建 Artifact v1
 curl -s \
   -H 'Content-Type: application/json' \
@@ -166,8 +180,8 @@ curl -s \
   http://localhost:8080/api/v1/manifestations/{manifestationId}/approve
 ```
 
-Capture、Agent 生成的 Artifact 与独立 Artifact lineage 写入本机 PostgreSQL；Agent Trace
-在 S1 只随响应返回，不持久化。Manifestation 仍只写入应用进程内存中的草稿回执。独立 local
+Capture、Agent 生成的 Artifact、AgentRun、safe Trace、HarnessRunBundle 与独立 Artifact
+lineage 写入本机 PostgreSQL。Manifestation 仍只写入应用进程内存中的草稿回执。独立 local
 ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问 loopback Fake Provider 并产生
 模拟对象。它们都不会访问或发布到任何真实外部平台。
 
@@ -180,8 +194,8 @@ ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问 loopback F
 apps/api/                 HTTP 入口与依赖装配
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例、AgentKernel 与端口
-adapters/inmemory/        本地适配器、有限 Fake Agent 循环与脚本模型
-adapters/postgres/        S1 Capture、S2 Artifact、S3 local Action 的薄 PostgreSQL 适配器
+adapters/inmemory/        本地适配器、有限 Fake Agent 循环与 Offline golden runner
+adapters/postgres/        Capture、Artifact、local Action、AgentRun/Trace 的 PostgreSQL 适配器
 contracts/                跨语言 JSON Schema
 evals/                    合成任务与回归证据
 docs/                     产品、架构、研究、运营和共同治理

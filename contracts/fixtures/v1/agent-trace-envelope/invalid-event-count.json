@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "run-001",
+  "taskId": "task-001",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "events": [],
+  "eventCount": -1,
+  "rootHash": "0000000000000000000000000000000000000000000000000000000000000000"
+}

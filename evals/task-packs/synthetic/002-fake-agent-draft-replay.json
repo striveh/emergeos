@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "0.1",
+  "taskId": "synthetic-fake-agent-draft-replay-002",
+  "title": "离线重放同一条 Fake Agent 草稿任务",
+  "principalRef": "synthetic-persona-builder",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic://stage2/replay-002",
+    "dataClass": "PERSONAL",
+    "content": "Prompt engineering 的本质不是寻找神秘咒语，而是给一个概率程序构造运行时状态。"
+  },
+  "requiredConstraints": [
+    "同一 frozen input 在两个 fresh runner 中产生相同 Result、safe Trace、Artifact hash 与 Bundle hash",
+    "Evidence 与 Artifact 都通过 immutable content hash 绑定",
+    "Trace 不包含原始 Capture、Prompt、tool arguments、model response 或 chain-of-thought"
+  ],
+  "forbiddenActions": [
+    "访问真实模型或互联网",
+    "访问真实社交账号",
+    "执行任何外部副作用"
+  ],
+  "acceptanceChecks": [
+    "Result status 为 SUCCEEDED",
+    "safe Trace 恰好包含 6 个结构事件",
+    "fresh replay 的 Trace rootHash 完全一致",
+    "fresh replay 的 Artifact contentHash 完全一致",
+    "fresh replay 的 HarnessRunBundle integrityHash 完全一致",
+    "输入 Evidence 漂移时 Bundle 与 Artifact hash 必须变化"
+  ],
+  "humanReviewQuestions": [
+    "这条离线 baseline 是否完整表达了当前 Fake Agent 的执行边界？",
+    "当 Trace 结构不变而输入内容变化时，resource binding 与 Bundle hash 的差异是否足以解释漂移？"
+  ],
+  "risk": "REVERSIBLE",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "修改 frozen Evidence 内容但保持 IDs 与控制流不变",
+    "验证结构 Trace 可相同，而资源绑定与 Bundle integrityHash 能检测语义漂移"
+  ],
+  "offlineReplay": {
+    "principalId": "synthetic-persona-builder",
+    "captureId": "capture-replay-002",
+    "clientNonce": "offline-replay-002",
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic://stage2/replay-002",
+    "dataClass": "PERSONAL",
+    "content": "Prompt engineering 的本质不是寻找神秘咒语，而是给一个概率程序构造运行时状态。",
+    "intent": "整理成一篇让技术从业者一眼理解的短文",
+    "runId": "run-replay-002",
+    "taskId": "task-replay-002",
+    "artifactId": "art-replay-002",
+    "frozenTime": "2026-07-30T00:00:00Z",
+    "kernelLatencyMs": 7,
+    "maxModelSteps": 2,
+    "maxToolCalls": 1,
+    "taskDeadlineMs": 5000
+  },
+  "replayVersions": {
+    "model": "scripted-fake-draft-v1",
+    "harness": "framework-free-agent-kernel-v1",
+    "agent": "agent-draft-service-v1",
+    "verifier": "agent-draft-verifier-v1",
+    "policy": "agent-draft-policy-v1",
+    "state": "stage2-s2",
+    "contextPolicy": "ref-only-v1",
+    "toolRegistry": "agent-tools-v1",
+    "traceIntegrity": "emergeos-length-prefixed-sha256-v1"
+  },
+  "expectedReplay": {
+    "status": "SUCCEEDED",
+    "traceEventCount": 6,
+    "captureRequestHash": "0c6e36fbdee828aad317bceb6876c4cb5defbe24910496a145ceef6db2aa0415",
+    "traceRootHash": "d1ee51bd7f77ccfe02de944213c8cb18259f86497c533363bcad6e0b14ae55b9",
+    "artifactContentHash": "50995216bfbbda3efaa86d6b84737d958037383049bd07cdd2a80bd0309980ee",
+    "bundleIntegrityHash": "fe00230548bdd67ad6d4a88f12e74f3314027c92d00ad908ef00fba1c605e012"
+  }
+}

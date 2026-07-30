@@ -3,15 +3,48 @@ package io.emergeos.api;
 import io.emergeos.core.application.ActionIdempotencyConflictException;
 import io.emergeos.core.application.CaptureNonceConflictException;
 import io.emergeos.core.application.ArtifactRevisionConflictException;
+import io.emergeos.adapters.postgres.AgentRunConflictException;
+import io.emergeos.adapters.postgres.AgentRunIntegrityException;
 import java.net.URI;
 import java.util.NoSuchElementException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 class ApiExceptionHandler {
+
+  private static final String PRIVATE_NO_STORE = "private, no-store";
+
+  @ExceptionHandler(AgentRunNotFoundException.class)
+  ResponseEntity<ProblemDetail> agentRunNotFound() {
+    return privateProblem(
+        HttpStatus.NOT_FOUND,
+        "urn:emergeos:problem:agent-run-not-found",
+        "Agent run not found",
+        "Agent run was not found.");
+  }
+
+  @ExceptionHandler(AgentRunIntegrityException.class)
+  ResponseEntity<ProblemDetail> agentRunIntegrity() {
+    return privateProblem(
+        HttpStatus.CONFLICT,
+        "urn:emergeos:problem:agent-run-integrity",
+        "Agent run integrity conflict",
+        "Stored agent run cannot be verified.");
+  }
+
+  @ExceptionHandler({AgentRunIncompleteException.class, AgentRunConflictException.class})
+  ResponseEntity<ProblemDetail> agentRunIncompleteOrConflict() {
+    return privateProblem(
+        HttpStatus.CONFLICT,
+        "urn:emergeos:problem:agent-run-incomplete",
+        "Agent run incomplete",
+        "Agent run has no completed representation.");
+  }
 
   @ExceptionHandler(ActionIdempotencyConflictException.class)
   ProblemDetail actionIdempotencyConflict(ActionIdempotencyConflictException exception) {
@@ -61,5 +94,15 @@ class ApiExceptionHandler {
     problem.setTitle(title);
     problem.setType(URI.create("urn:emergeos:problem:" + status.value()));
     return problem;
+  }
+
+  private static ResponseEntity<ProblemDetail> privateProblem(
+      HttpStatus status, String type, String title, String detail) {
+    ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+    problem.setType(URI.create(type));
+    problem.setTitle(title);
+    return ResponseEntity.status(status)
+        .header(HttpHeaders.CACHE_CONTROL, PRIVATE_NO_STORE)
+        .body(problem);
   }
 }

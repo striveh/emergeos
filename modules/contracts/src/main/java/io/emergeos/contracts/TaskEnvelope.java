@@ -23,6 +23,8 @@ public record TaskEnvelope(
     String outputSchema,
     List<String> acceptanceChecks,
     boolean allowParallel,
+    int maxModelSteps,
+    int maxToolCalls,
     long deadlineMs,
     BigDecimal budgetUsd,
     String idempotencyKey,
@@ -36,52 +38,62 @@ public record TaskEnvelope(
     String returnControlWhen) {
 
   public TaskEnvelope {
-    requireText(schemaVersion, "schemaVersion");
+    ContractText.require(schemaVersion, "schemaVersion", ContractText.MAX_NAME_LENGTH);
     if (!"1.0".equals(schemaVersion)) {
       throw new IllegalArgumentException("TaskEnvelope supports schemaVersion 1.0");
     }
-    requireText(id, "id");
-    requireText(principalRef, "principalRef");
-    requireText(kind, "kind");
-    requireText(intent, "intent");
+    requireId(id, "id");
+    requireOptionalId(parentId, "parentId");
+    ContractText.require(principalRef, "principalRef", ContractText.MAX_NAME_LENGTH);
+    ContractText.require(kind, "kind", ContractText.MAX_NAME_LENGTH);
+    ContractText.require(intent, "intent");
     Objects.requireNonNull(dataClass, "dataClass");
     Objects.requireNonNull(risk, "risk");
-    requireText(latencyClass, "latencyClass");
-    requireText(outputSchema, "outputSchema");
-    requireText(policyVersion, "policyVersion");
-    requireText(stateVersion, "stateVersion");
-    requireText(contextPolicyVersion, "contextPolicyVersion");
-    requireText(toolRegistryVersion, "toolRegistryVersion");
-    requireText(returnControlWhen, "returnControlWhen");
-    if (deadlineMs <= 0) {
-      throw new IllegalArgumentException("deadlineMs must be positive");
-    }
-    if (Objects.requireNonNull(budgetUsd, "budgetUsd").signum() < 0) {
-      throw new IllegalArgumentException("budgetUsd must not be negative");
-    }
-    delegationChain = copy(delegationChain, "delegationChain");
-    inputRefs = copy(inputRefs, "inputRefs");
-    evidenceRefs = copy(evidenceRefs, "evidenceRefs");
-    modalities = copy(modalities, "modalities");
+    ContractText.require(latencyClass, "latencyClass", ContractText.MAX_NAME_LENGTH);
+    ContractText.require(outputSchema, "outputSchema");
+    ContractText.require(policyVersion, "policyVersion", ContractText.MAX_NAME_LENGTH);
+    ContractText.require(stateVersion, "stateVersion", ContractText.MAX_NAME_LENGTH);
+    ContractText.require(
+        contextPolicyVersion, "contextPolicyVersion", ContractText.MAX_NAME_LENGTH);
+    ContractText.require(
+        toolRegistryVersion, "toolRegistryVersion", ContractText.MAX_NAME_LENGTH);
+    ContractText.requireOptional(
+        idempotencyKey, "idempotencyKey", ContractText.MAX_NAME_LENGTH);
+    ContractText.requireOptional(environmentSnapshotRef, "environmentSnapshotRef");
+    ContractText.require(returnControlWhen, "returnControlWhen");
+    ContractValueDomains.requireExecutionLimit(maxModelSteps, "maxModelSteps");
+    ContractValueDomains.requireExecutionLimit(maxToolCalls, "maxToolCalls");
+    ContractValueDomains.requireDuration(deadlineMs, "deadlineMs", false);
+    ContractValueDomains.requireUsd(budgetUsd, "budgetUsd");
+    delegationChain = ContractText.copyStrings(delegationChain, "delegationChain");
+    inputRefs = ContractText.copyStrings(inputRefs, "inputRefs");
+    evidenceRefs = ContractText.copyStrings(evidenceRefs, "evidenceRefs");
+    modalities =
+        ContractText.copyStrings(modalities, "modalities", ContractText.MAX_NAME_LENGTH);
     if (!Set.of("text", "image", "audio", "video").containsAll(modalities)) {
       throw new IllegalArgumentException("modalities contains an unsupported value");
     }
     if (!Set.of("REALTIME", "INTERACTIVE", "DEEP", "ASYNC").contains(latencyClass)) {
       throw new IllegalArgumentException("latencyClass contains an unsupported value");
     }
-    requiredTools = copy(requiredTools, "requiredTools");
-    acceptanceChecks = copy(acceptanceChecks, "acceptanceChecks");
-    capabilityRefs = copy(capabilityRefs, "capabilityRefs");
-    unresolvedDecisions = copy(unresolvedDecisions, "unresolvedDecisions");
+    requiredTools =
+        ContractText.copyStrings(requiredTools, "requiredTools", ContractText.MAX_NAME_LENGTH);
+    acceptanceChecks = ContractText.copyStrings(acceptanceChecks, "acceptanceChecks");
+    capabilityRefs = ContractText.copyStrings(capabilityRefs, "capabilityRefs");
+    unresolvedDecisions =
+        ContractText.copyStrings(unresolvedDecisions, "unresolvedDecisions");
   }
 
-  private static List<String> copy(List<String> value, String name) {
-    return List.copyOf(Objects.requireNonNull(value, name));
-  }
-
-  private static void requireText(String value, String name) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(name + " must not be blank");
+  private static void requireId(String value, String name) {
+    if (value == null || !value.matches("[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")) {
+      throw new IllegalArgumentException(name + " has an invalid identifier");
     }
   }
+
+  private static void requireOptionalId(String value, String name) {
+    if (value != null) {
+      requireId(value, name);
+    }
+  }
+
 }

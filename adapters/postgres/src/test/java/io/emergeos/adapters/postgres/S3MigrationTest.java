@@ -141,6 +141,7 @@ class S3MigrationTest {
         .schemas(schema)
         .defaultSchema(schema)
         .createSchemas(true)
+        .target(MigrationVersion.fromVersion("3"))
         .load();
   }
 

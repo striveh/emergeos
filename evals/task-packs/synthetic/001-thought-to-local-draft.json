@@ -27,6 +27,10 @@
     "approval replay returns the same receipt",
     "reflection.appliedToSelfModel is false"
   ],
+  "humanReviewQuestions": [
+    "Artifact 是否保留了原始 thought seed，同时形成了可继续编辑的成果？",
+    "Approval、Receipt 与 Reflection 的边界对用户是否清晰可解释？"
+  ],
   "risk": "REVERSIBLE",
   "expectedArtifactKind": "ARTICLE_DRAFT",
   "faultPlan": [
@@ -34,4 +38,3 @@
     "approve with the generated artifact hash after revision"
   ]
 }
-

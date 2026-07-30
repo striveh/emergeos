@@ -14,7 +14,8 @@
 → 产品叙事与探索记录
 ```
 
-RFC 表示“正在提议”；ADR 表示“已经决定”。ADR 接受后不改写历史，只能由新 ADR 替代。
+RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR 记录已经采用的
+决定。ADR 接受后不改写历史，只能由新 ADR 替代。
 
 ## 阅读路线
 
@@ -46,6 +47,8 @@ RFC 表示“正在提议”；ADR 表示“已经决定”。ADR 接受后不�
 - [外部副作用 ADR](./architecture/decisions/0003-durable-side-effects.md)
 - [ActionAttempt 与对账决策](./architecture/decisions/0004-action-attempt-reconciliation.md)
 - [五结果研发制度 ADR](./architecture/decisions/0005-five-outcome-development-system.md)
+- [持久 AgentRun 真相 ADR](./architecture/decisions/0006-persistent-agent-run-truth.md)
+- [RFC-0001：持久 AgentRun、Safe Trace 与 HarnessRunBundle](./rfcs/0001-persistent-agent-run-trace-and-bundle.md)
 
 ### 想参与研究与共同进化
 
@@ -68,6 +71,7 @@ RFC 表示“正在提议”；ADR 表示“已经决定”。ADR 接受后不�
 - [S3 Recoverable local Action Build Note](./operations/build-notes/2026-07-28-s3-recoverable-local-action.md)
 - [S4 Operating and Gate-Closure Build Note](./operations/build-notes/2026-07-29-s4-operating-gate-closure.md)
 - [Stage 2 S1 Fake Agent Draft Build Note](./operations/build-notes/2026-07-30-s2-s1-fake-agent-draft-loop.md)
+- [Stage 2 S2 持久 AgentRun Build Note](./operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)
 - [Stage 1 Operating Runbook](./operations/stage1-operating-runbook.md)
 - [S4 Durable Operations Case Card](./interview/case-cards/2026-07-29-stage1-durable-operations.md)
 - [商业验证路线](./business/validation-roadmap.md)

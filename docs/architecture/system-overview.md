@@ -74,7 +74,12 @@ flowchart TB
 - 内存适配器保留 Stage 0 确定性演示；
 - Stage 2 S1 已有 framework-free、固定步数/工具预算的 Fake Agent 循环；它只注册
   `capture.read`，结果仍由 Core 校验和提交；
-- PostgreSQL 已持有独立的 S1 Capture、S2 Artifact lineage 和 S3 local ActionAttempt/Receipt；
+- Stage 2 S2 已把 AgentRun、safe hashed Trace、immutable resource binding、
+  Result 与 HarnessRunBundle 持久化；成功 Artifact 与 terminal Run 原子提交；
+- frozen synthetic Task Pack 可通过 fresh、无网络的 Offline runner 得到 exact
+  Trace/Artifact/Bundle golden hashes；
+- PostgreSQL 已持有 Capture、Artifact lineage、local ActionAttempt/Receipt 与
+  AgentRun truth；
 - S3 仅通过 loopback HTTP 调用独立、文件持久化的 Fake Provider；
 - 真实模型、Temporal、AgentScope 和真实 Connector 仍是后续外层适配器，不是当前实现。
 

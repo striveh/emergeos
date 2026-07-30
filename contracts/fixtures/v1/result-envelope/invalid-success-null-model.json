@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "run-001",
+  "taskId": "task-001",
+  "status": "SUCCEEDED",
+  "artifactRefs": ["artifact-version://artifact-001/1"],
+  "evidenceRefs": ["capture://capture-001"],
+  "claims": [
+    {
+      "text": "A local draft was created.",
+      "evidenceRefs": ["capture://capture-001"],
+      "confidence": 1
+    }
+  ],
+  "uncertainty": [],
+  "receiptRefs": [],
+  "resolvedModel": null,
+  "agentVersion": "agent-fixture-001",
+  "verifierVersion": "verifier-fixture-001",
+  "costUsd": 0,
+  "tokenCount": 300,
+  "latencyMs": 125,
+  "traceRef": "/api/v1/agent-runs/run-001/trace",
+  "failureReason": null
+}

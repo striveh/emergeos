@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "run-decimal-cost",
+  "taskId": "task-decimal-cost",
+  "status": "SUCCEEDED",
+  "artifactRefs": ["artifact-version://artifact-decimal-cost/1"],
+  "evidenceRefs": ["capture://capture-decimal-cost"],
+  "claims": [
+    {
+      "text": "A decimal-cost run remained inside the shared USD domain.",
+      "evidenceRefs": ["capture://capture-decimal-cost"],
+      "confidence": 1
+    }
+  ],
+  "uncertainty": [],
+  "receiptRefs": [],
+  "resolvedModel": "model-fixture-decimal-cost",
+  "agentVersion": "agent-fixture-001",
+  "verifierVersion": "verifier-fixture-001",
+  "costUsd": 100.0000000001,
+  "tokenCount": 1,
+  "latencyMs": 1,
+  "traceRef": "/api/v1/agent-runs/run-decimal-cost/trace",
+  "failureReason": null
+}

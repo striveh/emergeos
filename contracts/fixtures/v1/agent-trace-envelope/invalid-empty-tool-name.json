@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "run-empty-tool",
+  "taskId": "task-empty-tool",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "TOOL_REQUEST",
+      "toolName": "",
+      "status": "REQUESTED",
+      "reference": "capture://capture-001",
+      "previousRootHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "eventHash": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  ],
+  "eventCount": 1,
+  "rootHash": "2222222222222222222222222222222222222222222222222222222222222222"
+}

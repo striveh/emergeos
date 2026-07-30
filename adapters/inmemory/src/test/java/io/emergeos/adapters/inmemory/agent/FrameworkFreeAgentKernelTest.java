@@ -198,7 +198,7 @@ class FrameworkFreeAgentKernelTest {
             now::get);
 
     var outcome =
-        kernel.run(task(List.of(), 1), CancellationSignal.never());
+        kernel.run(task(List.of(), 1, 1, 1), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("DEADLINE_EXHAUSTED", outcome.failureReason());
@@ -228,7 +228,7 @@ class FrameworkFreeAgentKernelTest {
             1,
             1);
 
-    var outcome = kernel.run(task(List.of()), cancelled::get);
+    var outcome = kernel.run(task(List.of(), 5_000, 1, 1), cancelled::get);
 
     assertEquals(RunStatus.CANCELLED, outcome.status());
     assertEquals("CANCELLED", outcome.failureReason());
@@ -324,7 +324,10 @@ class FrameworkFreeAgentKernelTest {
             1,
             1);
 
-    var outcome = kernel.run(task(List.of("capture.read")), CancellationSignal.never());
+    var outcome =
+        kernel.run(
+            task(List.of("capture.read"), 5_000, 1, 1),
+            CancellationSignal.never());
 
     assertEquals(RunStatus.BLOCKED, outcome.status());
     assertEquals("TOOL_NOT_ALLOWED", outcome.failureReason());
@@ -341,7 +344,10 @@ class FrameworkFreeAgentKernelTest {
             1,
             1);
 
-    var outcome = kernel.run(task(List.of("capture.read")), CancellationSignal.never());
+    var outcome =
+        kernel.run(
+            task(List.of("capture.read"), 5_000, 1, 1),
+            CancellationSignal.never());
 
     assertEquals(RunStatus.BLOCKED, outcome.status());
     assertEquals("TOOL_NOT_ALLOWED", outcome.failureReason());
@@ -399,7 +405,10 @@ class FrameworkFreeAgentKernelTest {
             2,
             3);
 
-    var outcome = kernel.run(task(List.of("capture.read")), CancellationSignal.never());
+    var outcome =
+        kernel.run(
+            task(List.of("capture.read"), 5_000, 2, 3),
+            CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("MODEL_STEP_LIMIT_EXHAUSTED", outcome.failureReason());
@@ -411,6 +420,14 @@ class FrameworkFreeAgentKernelTest {
   }
 
   private static TaskEnvelope task(List<String> requiredTools, long deadlineMs) {
+    return task(requiredTools, deadlineMs, 2, 1);
+  }
+
+  private static TaskEnvelope task(
+      List<String> requiredTools,
+      long deadlineMs,
+      int maxModelSteps,
+      int maxToolCalls) {
     return new TaskEnvelope(
         "1.0",
         "task-agent-kernel",
@@ -429,6 +446,8 @@ class FrameworkFreeAgentKernelTest {
         "urn:emergeos:schema:internal:agent-draft-proposal:v1",
         List.of("draft cites the source Capture"),
         false,
+        maxModelSteps,
+        maxToolCalls,
         deadlineMs,
         BigDecimal.ZERO,
         null,

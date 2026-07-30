@@ -5,10 +5,14 @@
 | 状态 | 例子 | 真相位置 |
 |---|---|---|
 | 领域真相 | Evidence、Self Model、Artifact、Approval、Receipt | PostgreSQL / Object Storage |
+| 产品执行证据 | Task、terminal Result、safe Trace、resource binding、HarnessRunBundle | PostgreSQL |
 | 运行状态 | 当前步骤、重试、等待、Child Workflow | Durable Runtime |
 | 模型上下文 | Working Self、工具结果、摘要 | 可重建临时投影 |
 
 模型上下文丢失不应导致人格或任务真相丢失；Durable Runtime 也不能成为用户人格数据库。
+Stage 2 S2 中持久化的 `RUNNING` AgentRun 只证明一次运行已经开始但尚无 terminal
+事实；它不是 durable checkpoint，也不承诺从中间步骤 resume。安全恢复策略必须在
+后续 Runtime 切片中以新契约实现。
 
 ## 关键不变量
 

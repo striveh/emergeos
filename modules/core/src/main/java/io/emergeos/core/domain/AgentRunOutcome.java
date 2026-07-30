@@ -1,6 +1,7 @@
 package io.emergeos.core.domain;
 
 import io.emergeos.contracts.RunStatus;
+import io.emergeos.contracts.ContractValueDomains;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
@@ -12,6 +13,7 @@ public record AgentRunOutcome(
     List<AgentTraceEvent> trace,
     String resolvedModel,
     BigDecimal costUsd,
+    long tokenCount,
     long latencyMs,
     String failureReason) {
 
@@ -20,14 +22,11 @@ public record AgentRunOutcome(
     obtainedEvidenceRefs =
         List.copyOf(Objects.requireNonNull(obtainedEvidenceRefs, "obtainedEvidenceRefs"));
     trace = List.copyOf(Objects.requireNonNull(trace, "trace"));
-    if (resolvedModel == null || resolvedModel.isBlank()) {
-      throw new IllegalArgumentException("resolvedModel must not be blank");
+    if (resolvedModel != null && resolvedModel.isBlank()) {
+      throw new IllegalArgumentException("resolvedModel must be null or non-blank");
     }
-    if (Objects.requireNonNull(costUsd, "costUsd").signum() < 0) {
-      throw new IllegalArgumentException("costUsd must not be negative");
-    }
-    if (latencyMs < 0) {
-      throw new IllegalArgumentException("latencyMs must not be negative");
-    }
+    ContractValueDomains.requireUsd(costUsd, "costUsd");
+    ContractValueDomains.requireSafeCount(tokenCount, "tokenCount");
+    ContractValueDomains.requireDuration(latencyMs, "latencyMs", true);
   }
 }

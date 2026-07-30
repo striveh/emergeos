@@ -4,9 +4,24 @@
   "title": "TaskEnvelope",
   "type": "object",
   "additionalProperties": false,
+  "$defs": {
+    "safeText2048": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    },
+    "safeName200": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    }
+  },
   "required": [
     "schemaVersion",
     "id",
+    "parentId",
     "principalRef",
     "delegationChain",
     "kind",
@@ -21,26 +36,36 @@
     "outputSchema",
     "acceptanceChecks",
     "allowParallel",
+    "maxModelSteps",
+    "maxToolCalls",
     "deadlineMs",
     "budgetUsd",
+    "idempotencyKey",
     "policyVersion",
     "stateVersion",
     "contextPolicyVersion",
     "toolRegistryVersion",
+    "environmentSnapshotRef",
     "capabilityRefs",
     "unresolvedDecisions",
     "returnControlWhen"
   ],
   "properties": {
     "schemaVersion": {"const": "1.0"},
-    "id": {"type": "string", "minLength": 1},
-    "parentId": {"type": ["string", "null"]},
-    "principalRef": {"type": "string", "minLength": 1},
-    "delegationChain": {"type": "array", "items": {"type": "string"}},
-    "kind": {"type": "string", "minLength": 1},
-    "intent": {"type": "string", "minLength": 1},
-    "inputRefs": {"type": "array", "items": {"type": "string"}},
-    "evidenceRefs": {"type": "array", "items": {"type": "string"}},
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+    },
+    "parentId": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+    },
+    "principalRef": {"$ref": "#/$defs/safeName200"},
+    "delegationChain": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
+    "kind": {"$ref": "#/$defs/safeName200"},
+    "intent": {"$ref": "#/$defs/safeText2048"},
+    "inputRefs": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
+    "evidenceRefs": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
     "modalities": {
       "type": "array",
       "items": {"enum": ["text", "image", "audio", "video"]}
@@ -48,20 +73,31 @@
     "dataClass": {"enum": ["PUBLIC", "PERSONAL", "SENSITIVE", "SECRET"]},
     "risk": {"enum": ["READ_ONLY", "REVERSIBLE", "EXTERNAL", "IRREVERSIBLE"]},
     "latencyClass": {"enum": ["REALTIME", "INTERACTIVE", "DEEP", "ASYNC"]},
-    "requiredTools": {"type": "array", "items": {"type": "string"}},
-    "outputSchema": {"type": "string", "minLength": 1},
-    "acceptanceChecks": {"type": "array", "items": {"type": "string"}},
+    "requiredTools": {"type": "array", "items": {"$ref": "#/$defs/safeName200"}},
+    "outputSchema": {"$ref": "#/$defs/safeText2048"},
+    "acceptanceChecks": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
     "allowParallel": {"type": "boolean"},
-    "deadlineMs": {"type": "integer", "minimum": 1},
-    "budgetUsd": {"type": "number", "minimum": 0},
-    "idempotencyKey": {"type": ["string", "null"]},
-    "policyVersion": {"type": "string", "minLength": 1},
-    "stateVersion": {"type": "string", "minLength": 1},
-    "contextPolicyVersion": {"type": "string", "minLength": 1},
-    "toolRegistryVersion": {"type": "string", "minLength": 1},
-    "environmentSnapshotRef": {"type": ["string", "null"]},
-    "capabilityRefs": {"type": "array", "items": {"type": "string"}},
-    "unresolvedDecisions": {"type": "array", "items": {"type": "string"}},
-    "returnControlWhen": {"type": "string", "minLength": 1}
+    "maxModelSteps": {"type": "integer", "minimum": 1, "maximum": 128},
+    "maxToolCalls": {"type": "integer", "minimum": 1, "maximum": 128},
+    "deadlineMs": {"type": "integer", "minimum": 1, "maximum": 86400000},
+    "budgetUsd": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 999999.999999,
+      "multipleOf": 0.000001
+    },
+    "idempotencyKey": {
+      "oneOf": [{"$ref": "#/$defs/safeName200"}, {"type": "null"}]
+    },
+    "policyVersion": {"$ref": "#/$defs/safeName200"},
+    "stateVersion": {"$ref": "#/$defs/safeName200"},
+    "contextPolicyVersion": {"$ref": "#/$defs/safeName200"},
+    "toolRegistryVersion": {"$ref": "#/$defs/safeName200"},
+    "environmentSnapshotRef": {
+      "oneOf": [{"$ref": "#/$defs/safeText2048"}, {"type": "null"}]
+    },
+    "capabilityRefs": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
+    "unresolvedDecisions": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
+    "returnControlWhen": {"$ref": "#/$defs/safeText2048"}
   }
 }

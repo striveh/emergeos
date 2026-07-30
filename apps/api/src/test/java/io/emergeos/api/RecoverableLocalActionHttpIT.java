@@ -399,7 +399,7 @@ class RecoverableLocalActionHttpIT {
         JsonPath.read(
             readiness.body(), "$.components.stage1Durability.status"));
     assertEquals(
-        "3",
+        "4",
         JsonPath.read(
             readiness.body(),
             "$.components.stage1Durability.details.migration.current"));

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "run-001",
+  "taskId": "task-001",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://task-001",
+      "previousRootHash": "1e689944b93c8523a09a2fc92b76edfd58adfe5864d2a9b68c72e4043ab9b79f",
+      "eventHash": "23fa1bfaef16de32f8b86623f8190aab8d75b048d358124fc64c50b9f6db8064"
+    },
+    {
+      "sequence": 2,
+      "type": "TOOL_REQUEST",
+      "toolName": "capture.read",
+      "status": "REQUESTED",
+      "reference": "capture://capture-001",
+      "previousRootHash": "3bb256d2802bd97fa795d8204e3f4290c946ca5d85ef30fa50a9696b7b3f924d",
+      "eventHash": "2567cfc79f77a843f7b7fb8266a0d072224849c993b5d223f28712ffdd52e10c"
+    },
+    {
+      "sequence": 3,
+      "type": "TOOL_RESULT",
+      "toolName": "capture.read",
+      "status": "SUCCEEDED",
+      "reference": "capture://capture-001",
+      "previousRootHash": "9a1cec780b399b6606ea909a826e9f161a8ce1cc8102ad3f4735a8db544d0732",
+      "eventHash": "0184bd19a62031d0c291d7b13662747bf44287ca7278e4e3b5b5480295f1fe23"
+    },
+    {
+      "sequence": 4,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://task-001",
+      "previousRootHash": "d8eadac209ea2e512a04ba59b77a288a7d70cecc125a3de8c5447fbf28b0d0bd",
+      "eventHash": "900a82c869700a06247891f2398927f47547b94c9c8977a330c4235c9ad1029a"
+    },
+    {
+      "sequence": 5,
+      "type": "STRUCTURED_FINAL",
+      "toolName": null,
+      "status": "PROPOSED",
+      "reference": "task://task-001",
+      "previousRootHash": "b290768204899aa75e75e5995edf3c7339b7c16840d6e9a6ed37a722683baf78",
+      "eventHash": "c61be1ac4836eae13a7d3d810b9910bf3dd7b2db570493d3b4d2687b53590097"
+    },
+    {
+      "sequence": 6,
+      "type": "ARTIFACT_COMMITTED",
+      "toolName": null,
+      "status": "SUCCEEDED",
+      "reference": "artifact-version://artifact-001/1",
+      "previousRootHash": "fc4d5fb4cbb4a051c77b25e1022de82556715647e77d63d411a59940b9065daf",
+      "eventHash": "8c3d7e4b17cd12bdff503b0374e0eee580281e609aaa2a33da5e96b22bd0232b"
+    }
+  ],
+  "eventCount": 6,
+  "rootHash": "562d525968b172060ab312ea39c0523dd7be03b89fa30088176a7e4e2bb5fbe7"
+}
