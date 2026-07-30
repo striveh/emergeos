@@ -75,8 +75,10 @@ Gate：
 
 状态：**S1、S2 工程完成；S3 real model protocol adapter、isolated synthetic
 Eval Runner 与本地 attempt durability 工程切片已通过。Live-provider smoke 尚未执行；
-S4 已冻结首个 Verifier comparison foundation 并完成 strict Pack loader，但
-12 个 shared candidates / 24 次 verifier evaluation 尚未执行。**
+S4 已完成首个 deterministic Verifier comparison、12 个 shared candidates /
+24 次 VerifierEvaluation、independent replay，以及 canonical durable report 的
+packaged multi-writer/process-kill/fresh-JVM 工程切片。完整 fault suite、typed
+read-only Worker handoff、stochastic Harness 与真实 Seed Gate 尚未完成。**
 这条技术主线来自项目所有者 2026-07-30 的 Roadmap
 顺序例外；它不代表 Stage 1 的学习、市场或真实 Connector Gate 已完成。
 
@@ -98,6 +100,12 @@ S3 durability 回执：
 S4 loader 回执：
 [Offline Comparison Loader Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-offline-comparison-loader.md)。
 
+S4 comparison 回执：
+[Verified Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)。
+
+S4 durable report 回执：
+[Durable Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+
 产品/工程：
 
 - Provider-neutral `AgentKernel` SPI，先 Fake 后 real adapter；
@@ -116,9 +124,12 @@ protocol 的 loopback evidence、bounded runner engineering Gate，以及 7 个�
 boundary 的 fat-JAR 强制终止/新 JVM 只读核验；仍没有读取 real key、执行
 live-provider smoke、取得 real model result 或 billing receipt。Task Pack 004 已冻结
 reference-grounding Verifier comparison 的输入、arms、cases 与预期矩阵；独立
-offline module 已完成 fixed-path、hash-bound、semantic-bound strict loader，但
-12 个 shared candidates / 24 次 verifier evaluation 尚未执行；H0/H1 正式重复实验、
-真实任务、人工盲评和 stochastic quality Eval 也尚未执行。
+offline module 已实际生成 12 个 shared candidates，执行 24 次 H0/H1
+VerifierEvaluation，并由 independent verifier replay 得到 `VERIFIED_PASSED`。
+相同 28,343-byte canonical report 已通过 packaged hard-link create-only commit、
+双 writer、7-point process-kill 与 fresh-JVM read-only verification。这个小型
+deterministic synthetic comparison 不是正式 60-run stochastic quality 结论；
+真实任务、人工盲评、完整 fault injection 与用户价值证据仍未执行。
 `billingStatus=UNKNOWN` 表示 provider 费用未知，不能解释成免费；reservation 是调用前的
 authorization ceiling，provider 已返回的 observed usage 即使超过 reservation 也必须如实保留。
 

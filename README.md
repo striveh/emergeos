@@ -49,10 +49,21 @@ verifier 不调用 Runner/generator，而是重建 candidate、重跑两臂并�
 hash 与 owned counters，得到 `VERIFIED_PASSED`。这个结果只证明 deterministic
 reference-grounding discrimination 与 replay equivalence；它不是 24 个 product
 `AgentRun`，也不证明真实模型、product `capture.read`、历史进程 provenance 或系统级
-零副作用。完整回执见
+零副作用。commit `a2cb02b` 又把相同结果编码为 28,343-byte canonical report：
+packaged `--execute` 通过 claim、pending fsync/read-back 与 hard-link create-only
+commit 写入 owner-local state，两个 fresh JVM 的只读 `--verify` 均从相同 bytes
+independent replay 得到 `VERIFIED_PASSED`。双 packaged writer 只有一个物理
+publisher；7-point process-kill matrix 中，pre-link incomplete evidence 保持
+`UNKNOWN`，同 inode committed residue 和 clean final 保持 `FINAL`。pending 无
+claim、不同 inode、unsafe path 或不可信 authoritative target 才是 `INVALID`。
+这仍只是 tested local POSIX filesystem 上的 cooperative synthetic evidence，不是
+断电/NFS durability、hostile-local-user authorization、signature、producer
+attestation 或产品 Receipt。完整回执见
 [Stage 2 S3 Durable Attempt Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)
 与
-[Stage 2 S4 Verified Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)。
+[Stage 2 S4 Verified Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)，
+durable 增量见
+[Stage 2 S4 Durable Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
@@ -118,6 +129,16 @@ npm ci
 
 # 默认只做 zero-egress preflight；不会读取 OPENAI_API_KEY
 java -jar apps/eval-runner/target/emerge-eval-runner-0.1.0-SNAPSHOT.jar
+
+# 在临时 owner home 执行 fixed Pack 004 并由 fresh invocation 只读重放
+comparison_home=$(mktemp -d /tmp/emerge-comparison.XXXXXX)
+chmod 700 "$comparison_home"
+java -Duser.home="$comparison_home" \
+  -jar apps/offline-harness-runner/target/emerge-offline-harness-runner-0.1.0-SNAPSHOT-app.jar \
+  --execute
+java -Duser.home="$comparison_home" \
+  -jar apps/offline-harness-runner/target/emerge-offline-harness-runner-0.1.0-SNAPSHOT-app.jar \
+  --verify
 
 # clean-checkout、packaged JVM、独立 Fake Provider 的 Stage 1 operating demo
 ./scripts/run-stage1-operating-demo.sh
@@ -244,7 +265,7 @@ ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问 loopback F
 ```text
 apps/api/                 HTTP 入口与依赖装配
 apps/eval-runner/         隔离 synthetic model Eval；默认 zero-egress，live 路径有 one-shot Gate
-apps/offline-harness-runner/ 固定 Pack 004 的 deterministic comparison、report 与独立 replay verifier
+apps/offline-harness-runner/ 固定 Pack 004 comparison、canonical durable report、packaged CLI 与独立 replay verifier
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例、AgentKernel 与端口
 adapters/inmemory/        本地适配器、有限 Fake Agent 循环与 Offline golden runner
@@ -260,6 +281,7 @@ docs/                     产品、架构、研究、运营和共同治理
 ```text
 api → fake/postgres adapters → core → contracts
 eval-runner → openai/agent-loop adapters → core → contracts
+offline-harness-runner → core → contracts
 ```
 
 核心层不能依赖 Spring、Temporal、AgentScope、数据库或模型 SDK。

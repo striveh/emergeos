@@ -40,8 +40,10 @@ apps/offline-harness-runner
   独立 deterministic Harness comparison 边界；只依赖 contracts、core 与 Jackson
   从固定仓库路径严格加载 hash-frozen Pack 004，生成 12 个 shared candidates，
   执行 24 次 H0/H1 VerifierEvaluation，并由不引用 Runner/generator 的独立 verifier
-  重建、重放和重算 report；依赖 allowlist 与 production bytecode gate 阻止
-  model、network、process、Connector、DB 和产品 Agent Runtime/Store 路径
+  重建、重放和重算 report；canonical codec、owner-local POSIX store、packaged
+  `--execute/--verify` 与 hard-link create-only commit 提供 fresh-JVM durable
+  verification；依赖 allowlist 与 production bytecode gate 阻止 model、network、
+  process、Connector、DB 和产品 Agent Runtime/Store 路径
 
 apps/api
   HTTP DTO、Controller、异常映射、loopback 启动保护、Agent draft 入口、
@@ -100,6 +102,31 @@ flowchart RL
 - API 负责传输协议，不能包含领域状态转移。
 - 跨模块只交换显式类型与引用，不共享可变聊天上下文。
 
+### Offline Harness Runner 的 durable report 边界
+
+`offline-harness-runner` 的 storage 只承载 frozen PUBLIC synthetic Pack 004 report：
+
+```text
+canonical report
+  → CREATE_NEW claim
+  → pending write/read-back/fsync
+  → hard-link create-only target
+  → directory fsync
+  → pending unlink
+  → fresh-JVM read-only replay
+```
+
+pending 从不 authoritative。claim-only 或 claim+pending/no-target 是 `UNKNOWN`；
+pending 无 claim 是 `INVALID`。target+pending 只有在二者是同一 regular inode 时才是
+合法 committed residue；不同 inode、unexpected entry、unsafe metadata 或 invalid
+authoritative target bytes 一律 `INVALID`。Reader 不 repair、不 unlink、不 rewrite。
+
+它与 `eval-runner` 的 one-shot marker/journal/run record 不是同一 persistence
+protocol，也不替代 PostgreSQL product `AgentRun`。当前证据只覆盖 tested local POSIX
+filesystem 上的 cooperative writer 与选定 process-kill phase，不覆盖 power-loss、
+NFS、same-UID/root adversary 或 hidden ACL。路径没有 `dirfd/openat` anchoring，
+hash/replay 也不是 signature、producer attestation 或 WORM。
+
 ## 领域包的演化目标
 
 代码量增长后，Core 内部按领域拆包，但暂不立即拆 Maven 模块：
@@ -148,12 +175,15 @@ key、访问 live provider、产生 real model result 或 billing receipt。当�
 - marker 在 challenge 前用 `CREATE_NEW` 创建；错误 challenge 也会烧掉这次 attempt，
   credential 只能在 permit 之后读取一次；
 - 私有目录必须是 `0700`、文件必须是 `0600`，并拒绝 symlink、foreign owner 与
-  foreign allow ACL；
+  filesystem provider 可见的 foreign allow ACL；当前 macOS JDK 不暴露 ACL view，
+  因而这不是 hostile-local-user authorization；
 - attempt journal 在 credential read、client creation、provider SDK create intent 与
   terminal record publish 周围 append + `fsync` hash-chain event；
-- terminal run record 通过私有 `.pending` 文件、read-back、`ATOMIC_MOVE` 与目录
-  `fsync` 发布；这是本地 atomic publish，不与 provider 调用形成一个 transaction，
-  也不替代 PostgreSQL product `AgentRun`；
+- terminal run record 当前通过私有 `.pending` 文件、read-back、`ATOMIC_MOVE` 与目录
+  `fsync` 发布；Java 对 target 已存在时是否替换的行为是 provider-specific，现有
+  `CREATE_NEW` marker 约束 cooperative flow，但 record store 本身尚未形成
+  no-overwrite primitive。它不与 provider 调用形成一个 transaction，也不替代
+  PostgreSQL product `AgentRun`；
 - 同 UID 恶意进程、owner/root 删除或重写文件、换主机重放、签名、WORM 与 invoice
   reconciliation 都不在该 Gate 的保护范围内；
 - provider invocation 已可能发生但 usage 未完整归因时必须记为

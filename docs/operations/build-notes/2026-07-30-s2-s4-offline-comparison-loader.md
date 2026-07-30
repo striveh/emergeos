@@ -4,6 +4,12 @@
 - Implementation commit：`623abf3`（`feat: add strict offline comparison pack loader`）
 - 状态：strict input/preflight boundary 完成；comparison execution 尚未开始
 
+> 后续状态：comparison execution/replay 已在
+> [Verified Offline Comparison Build Note](./2026-07-30-s2-s4-verified-offline-comparison.md)
+> 闭合，canonical persistence/fresh-JVM evidence 已在
+> [Durable Offline Comparison Build Note](./2026-07-30-s2-s4-durable-offline-comparison-report.md)
+> 闭合。本文其余正文保留 `623abf3` 时点的历史事实。
+
 ## 这次真正完成了什么
 
 新增独立 `apps/offline-harness-runner`，但没有把现有 OpenAI Eval Runner、产品 API

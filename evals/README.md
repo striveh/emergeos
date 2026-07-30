@@ -84,15 +84,18 @@ Runner 在当前 owner home 下使用：
 ```
 
 - directory 必须是 `0700`，file 必须是 `0600`；
-- symlink、foreign owner 与 foreign allow ACL 会 fail closed；
+- symlink、foreign owner 与 filesystem provider 可见的 foreign allow ACL 会
+  fail closed；provider 不暴露 ACL view 时不宣称已验证 ACL，也不构成
+  hostile-local-user authorization；
 - marker 在 challenge 前使用 `CREATE_NEW`，错误 challenge 也会烧掉当前 host 上的
   attempt；
 - 30 秒 permit 绑定 exact Task hash 与 execution profile，并在 provider egress 前
   以 CAS 消费；
 - journal 在 credential read、client creation、provider SDK create intent、observed
   attribution 与 terminal publish 周围 append、hash-chain、`fsync`；
-- terminal record 使用私有 `.pending`、read-back、`ATOMIC_MOVE` 与 directory
-  `fsync` 发布。
+- terminal record 当前使用私有 `.pending`、read-back、`ATOMIC_MOVE` 与 directory
+  `fsync` 发布；target 已存在时是否替换是 provider-specific，现有 marker 约束
+  cooperative flow，但 record store 自身的 no-overwrite hardening 仍开放。
 
 这些是本机防误触与审计边界，不是跨主机 exactly-once、provider-side idempotency、
 signature、WORM 或 invoice reconciliation。同 UID 恶意进程、owner/root 删除或改写

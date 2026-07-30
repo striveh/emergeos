@@ -6,6 +6,13 @@
 - Eval 说明：[Evaluations](../../../evals/README.md)
 - 状态：`engineering complete`；Live-provider smoke 尚未执行
 
+> 后续状态：S4 fixed comparison、independent replay 与 canonical durable report
+> 已完成各自工程切片，见
+> [Verified Offline Comparison](./2026-07-30-s2-s4-verified-offline-comparison.md)
+> 和
+> [Durable Offline Comparison](./2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+> 本文其余 S4 表述保留 `e90c704` 时点的历史事实。
+
 ## 结果
 
 新增独立 `apps/eval-runner`，把已经完成 loopback protocol 验证的 OpenAI Responses
@@ -88,14 +95,18 @@ source。
 安全边界：
 
 - directory 必须是 `0700`，file 必须是 `0600`；
-- 拒绝 symlink、foreign owner 与 foreign allow ACL；
+- 拒绝 symlink、foreign owner，以及 filesystem provider 可见的 foreign allow ACL；
+  当前 macOS JDK 不暴露 ACL view，因此不可把它解释成 hostile-local-user
+  authorization；
 - journal 在 credential read、client creation、每次 provider SDK create intent、
   observed attribution 与 terminal publish 周围 append hash-chain event，并在每次写入
   后 `fsync`；
 - provider SDK create intent 是保守事实，只表示调用可能发生，不证明 provider 已接收、
   已执行、已计费或未计费；
 - terminal record 先以 `CREATE_NEW` 写私有 `.pending`，`fsync`、read-back 后使用
-  `ATOMIC_MOVE` 发布，并 `fsync` directory；
+  `ATOMIC_MOVE` 发布，并 `fsync` directory；target 已存在时是否替换是
+  provider-specific，当前 `CREATE_NEW` marker 约束 cooperative flow，但 record store
+  自身的 no-overwrite hardening 仍开放；
 - record 同时保存完整 synthetic AgentRun、Artifact、Bundle、provider-observed
   metering、Run metering 与 effects counter。
 

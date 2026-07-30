@@ -7,6 +7,11 @@
 - 状态：in-memory deterministic comparison 与独立 replay verification 完成；
   atomic report store、跨新 JVM 持久核验尚未完成
 
+> 后续状态：commit `a2cb02b` 已完成 canonical durable report 与 fresh-JVM
+> verification，见
+> [Durable Offline Comparison Build Note](./2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+> 本文其余正文保留 `8fa96cd` 时点的历史事实。
+
 ## 这次真正完成了什么
 
 固定的 Task Pack 004 现在不再只是 expected matrix。测试进程真实调用
@@ -267,6 +272,10 @@ failures / errors / skipped       0 / 0 / 0
 
 ## 下一项可证伪假设
 
+以下是 `8fa96cd` 时写下的后续假设，不是最终实现说明。后续 adversarial Red 证明
+`ATOMIC_MOVE` 可能替换已存在 target；commit `a2cb02b` 最终采用 hard-link
+create-only logical commit。完成证据见上方后续 Build Note。
+
 下一切片不扩大到 live provider，而是在同一隔离模块完成 durable report evidence：
 
 1. 固定 deterministic JSON serialization 与 bounded schema；
@@ -274,6 +283,7 @@ failures / errors / skipped       0 / 0 / 0
 3. `.pending` write、read-back、file `fsync`、`ATOMIC_MOVE`、directory `fsync`；
 4. 在 write / move / fsync crash windows 强制终止真实 JVM；
 5. 新 JVM 只读加载 bytes、重算 hash、独立 replay，得到相同 verdict；
-6. incomplete evidence 保持 `UNKNOWN / INVALID`，绝不改写成 success。
+6. pre-link incomplete evidence 保持 `UNKNOWN`，冲突或不可信 authoritative
+   evidence 保持 `INVALID`，绝不改写成 success。
 
 完成前，当前结果仍是 verified in-memory comparison，不是 durable report receipt。

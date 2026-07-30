@@ -25,10 +25,17 @@ Critic 即使使用隔离上下文，也不是实验真值。最终评分来自�
 
 ## 当前实现状态
 
-Stage 2 S2 只完成 deterministic Fake Agent 的 synthetic success baseline：同一
+Stage 2 S2 已完成 deterministic Fake Agent 的 synthetic success baseline：同一
 Task Pack 可以在 Offline runner 中得到一致的 Artifact、safe Trace 与
-HarnessRunBundle hashes。H0/H1 的 60 次运行、真实模型、真实任务、人工盲评和下面的
-故障注入尚未执行，因此这里仍是可证伪的评测计划，不是实验结论。
+HarnessRunBundle hashes。S4 另完成一个更小、隔离的 Pack 004 单变量对照：
+4 cases × 3 repetitions 形成 12 个 shared candidates / 24 次 H0/H1
+VerifierEvaluation，independent replay 得到 `VERIFIED_PASSED`；canonical report
+也已通过 packaged process-kill 与 fresh-JVM read-only verification。
+
+这个小实验只证明 frozen synthetic reference-grounding Verifier 的 discrimination
+与 replay equivalence，不是下面规划的完整 Harness 结论。10 个真实任务 × 2 arms ×
+3 repetitions 的 60 次运行、真实模型、人工盲评、完整 fault injection、成本/延迟和
+用户修改时间仍未执行，因此本文继续是一份可证伪的评测计划。
 
 ## 最小任务集
 

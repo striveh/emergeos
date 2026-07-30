@@ -85,7 +85,8 @@ flowchart TB
 - Stage 2 S4 已在 isolated `apps/offline-harness-runner` 对固定 Pack 004 执行
   12 次 shared candidate generation / 24 次 VerifierEvaluation，并用不引用
   Runner/generator 的独立 verifier 重建 candidate、重跑 H0/H1、重算完整 report，
-  得到 deterministic `VERIFIED_PASSED`；report 仍只存在于内存，不是 durable receipt；
+  得到 deterministic `VERIFIED_PASSED`；packaged writer 已把相同结果写成 canonical
+  durable report，fresh JVM 可只读加载并 independent replay；
 - PostgreSQL 已持有 Capture、Artifact lineage、local ActionAttempt/Receipt 与
   AgentRun truth；
 - Stage 1 S3 Action 仅通过 loopback HTTP 调用独立、文件持久化的 Fake Provider；
@@ -104,6 +105,24 @@ provider-side idempotency。Journal 的 provider SDK create intent 只能说明�
 发生；若没有完整 observed usage，billing 必须保持 `UNKNOWN`，不能把零 observed cost
 解释成免费。Reservation 是调用前的 authorization ceiling，不是对最终 provider usage 的
 改写上限；任何已观察 usage，即使超过 reservation，也必须进入 Result、Bundle 和本地记录。
+
+`apps/offline-harness-runner` 同样属于 Verification/Eval 边界，但与上面的
+real-model protocol Eval Runner 是两个独立组件。它只处理 fixed PUBLIC synthetic
+Pack 004，不访问 provider、产品 Store 或外部平台。其 durable report 使用
+owner-local `0700/0600` state、canonical bounded JSON、claim/pending 与 hard-link
+create-only commit；claim-only 或 claim+pending/no-target 保持 `UNKNOWN`，
+pending 无 claim、不同 inode、unsafe path 或不可信 authoritative target 保持
+`INVALID`，同 inode committed residue 可为 `FINAL`。Reader 永不 repair 或 rewrite。
+两个 fresh JVM 可以从相同 bytes independent replay，但这仍不是 PostgreSQL product
+truth、historical execution attestation 或 Connector Receipt。
+
+该 POSIX boundary 是 cooperative owner/mode restriction：只有 filesystem provider
+暴露 ACL 时才检查 visible foreign `ALLOW` ACL，不防同 UID、owner、root 或 hidden
+ACL。owner home 会 canonicalize，文件读取后会重新绑定 file identity，但实现没有
+`dirfd/openat/openat2`，不能声称消除了 hostile pathname TOCTOU。当前 fault evidence
+是选定 phase 的真实 JVM process kill，不是 power-loss、reboot、NFS 或 storage
+corruption。unkeyed hash 与 independent replay 发现不一致，不提供 signature、
+producer authentication、WORM 或 non-repudiation。
 
 ## ETCLOVG 映射
 

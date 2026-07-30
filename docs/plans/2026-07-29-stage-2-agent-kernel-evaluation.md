@@ -1,10 +1,10 @@
 # ExecPlan: Stage 2 AgentKernel and Eval-Driven Development
 
 状态：进行中；S1、S2 工程完成，S3 protocol adapter、isolated synthetic Eval Runner
-与本地 attempt durability 工程切片已通过；live-provider smoke 尚未执行。S4 已冻结
-首个 Verifier comparison foundation，完成 strict Pack loader、12 次 shared candidate
-generation、24 次 VerifierEvaluation 与独立 replay verifier；atomic report store 与
-跨新 JVM 持久核验尚未完成
+与本地 attempt durability 工程切片已通过；live-provider smoke 尚未执行。S4 已完成
+首个 deterministic Verifier comparison、canonical durable report、packaged
+multi-writer/process-kill 与 fresh-JVM independent replay 工程切片；完整 fault suite、
+bounded read-only Worker handoff、stochastic Harness、真实 Seed 与用户价值 Gate 尚未完成
 
 Owner：项目所有者 + main Codex agent
 
@@ -38,9 +38,13 @@ Eval Runner。S3 现在另有 production read-only journal verifier 与 7-point 
 process-kill/restart evidence。S4 Task Pack 004 已冻结 reference-grounding Verifier
 对照的输入和 expected matrix；独立 offline module 已以 fixed path、raw hash 与 exact
 semantics 加载它，并完成 12 次 shared candidate generation、24 次
-VerifierEvaluation、integrity-bound report 与独立 deterministic replay。Report 尚未
-原子持久化，也没有跨新 JVM durable verification。当前仍没有 live-provider
-smoke、real model result、billing receipt 或 stochastic Harness comparison。较早的
+VerifierEvaluation、integrity-bound report、canonical durable bytes 与独立
+deterministic replay。Packaged writer 使用 create-only hard-link logical commit；
+两个 fresh JVM 可从相同 report bytes 再次得到 `VERIFIED_PASSED`，选定
+process-kill windows 的 pre-link incomplete evidence 保持 `UNKNOWN`，committed
+residue 保持 `FINAL`；另有冲突/不可信 authoritative evidence 固定为 `INVALID`。
+当前仍没有 live-provider smoke、real model result、billing receipt 或 stochastic
+Harness comparison。较早的
 `TemplateArtifactGenerator` 仍是确定性的 Stage 0 scaffolding。
 
 S2 已补齐 durable AgentRun、Safe Trace、HarnessRunBundle integrity binding 与
@@ -299,9 +303,11 @@ then locate it from the Trace.
   `fsync` event。`PROVIDER_SDK_CREATE_INTENT` 是保守边界：它表示调用可能发生，不证明
   provider 接收、执行或计费。
 - Terminal record 在同一私有目录先以 `CREATE_NEW` 写入 `.pending`、`fsync`、read-back
-  校验，再用 `ATOMIC_MOVE` 发布 `{attemptId}.run.json` 并 `fsync` 目录。它原子发布完整
-  synthetic AgentRun、Artifact、Bundle、observed usage/cost 与 effects counter；它不与
-  provider 调用形成事务，也不替代 S2 PostgreSQL product `AgentRun`。
+  校验，再用 `ATOMIC_MOVE` 发布 `{attemptId}.run.json` 并 `fsync` 目录。当前
+  cooperative marker flow 会发布完整 synthetic AgentRun、Artifact、Bundle、observed
+  usage/cost 与 effects counter；但 target 已存在时 move 是否替换是 provider-specific，
+  record store 自身的 no-overwrite hardening 仍开放。它不与 provider 调用形成事务，
+  也不替代 S2 PostgreSQL product `AgentRun`。
 - Billing 使用三态：零 provider SDK create 为 `NOT_INVOKED`；每次 create 都有可信
   model/usage 为 `ATTRIBUTED`；至少一次 create、但 attribution 不完整为 `UNKNOWN`。
   `UNKNOWN + observedCostUsd=0` 只表示没有观测到费用，不能解释成免费。Reservation 是
@@ -394,6 +400,45 @@ then locate it from the Trace.
   `P0=0、P1=0`。
 - 当前 report 只存在内存。Replay equivalence 不证明历史 Runner invocation、producer
   identity、系统级零副作用或 signature；durable report store 与跨新 JVM 验证是下一切片。
+
+以上最后一条是 commit `8fa96cd` 时的历史边界；后续 durable delta 如下。
+
+#### S4 O1 durable report delta · 2026-07-30
+
+归档日期取切片开始日；code commit `a2cb02b` 实际完成于
+`2026-07-31T00:04:29+08:00`。
+
+- commit `a2cb02b` 固定最多 `1 MiB` 的 canonical UTF-8 JSON：exact fields/order、
+  Unicode scalar、safe integer、duplicate/unknown/trailing/null rejection，以及
+  decode 后 byte-for-byte canonical re-encode。
+- owner-local state 固定在
+  `${user.home}/.emergeos/offline-comparisons`。claim、pending、target 只允许固定名称；
+  `0700/0600`、owner、regular file、symlink、size、可见 foreign `ALLOW` ACL 与
+  read identity 共同 fail closed。
+- writer 依次执行 `CREATE_NEW claim → directory fsync → CREATE_NEW pending →
+  file fsync → read-back/decode → directory fsync → createLink(target,pending) →
+  directory fsync → unlink pending → directory fsync → final read-back`。
+- 第一版 `ATOMIC_MOVE` no-overwrite 假设被 adversarial Red 否决：Java/provider
+  允许 atomic move 替换已存在 target。最终用 hard-link create-only 作为 logical
+  commit；不支持 hard link 时固定拒绝，不降级为可覆盖 move。
+- reader 从不 repair、unlink 或 rewrite。claim-only 或 claim+pending/no-target 是
+  `UNKNOWN`；pending 无 claim 是 `INVALID`。target 与 pending 为同一 regular inode
+  是 committed crash residue；不同 inode、unsafe path、unexpected entry 或 invalid
+  authoritative target bytes 是 `INVALID`。安全且有界的 pending-only bytes 不做
+  canonical decode，始终保持 non-authoritative。
+- packaged `--execute` 先做 in-memory independent verify，再写 report 并 post-publish
+  verify；`--verify` 只做 bounded read、canonical decode 和 independent replay，
+  不引用 Runner/generator/writer，也不创建 state。
+- 两个真实 packaged writer JVM 竞争同一空目录，最终恰好一个成功；两个 fresh read-only
+  JVM 对相同 file snapshot 得到同一 verdict、IDs、hash 与 byte length。test-only crash
+  harness 覆盖 7 个 durable phase，shipping JAR 不包含 crash injection surface。
+- 固定 report 是 28,343 bytes，file SHA-256 为
+  `b1152849fc2807d536d59e7a1412bfe4336df4ded51a74ec412bc94d840b12a7`，
+  independent replay verdict 为 `VERIFIED_PASSED`。
+- 边界仅是 tested local POSIX filesystem、frozen PUBLIC synthetic report 与
+  cooperative writer。它不是 power-loss/NFS durability、hostile-local-user
+  authorization、`dirfd/openat` path anchoring、signature、producer attestation、
+  WORM 或 product `AgentRun/HarnessRunBundle`。
 
 Stage gate:
 
@@ -565,6 +610,17 @@ baseline.
 - [x] 2026-07-30：single Candidate truth、identity audit、typed literal reader、
   private verdict construction、verifier outer/nested bytecode independence 与四种
   Node golden fingerprints 经两名独立 reviewer 复核为 `P0=0、P1=0`。
+- [x] 2026-07-30：commit `a2cb02b` 将 28,343-byte canonical report 持久化为
+  owner-local cooperative append-once evidence；packaged `--execute/--verify`、
+  两个 fresh JVM、两个竞争 writer 与 7-point process-kill/restart matrix 均为 Green。
+- [x] 2026-07-30：adversarial Red 依次否决可覆盖 target 的 `ATOMIC_MOVE`、ancestor
+  symlink retarget、missing file identity、read 后 target replacement、pending cleanup
+  误报，以及 pending/target 同删或同字节换 inode。最终三名独立 reviewer 均为
+  `P0=0、P1=0`。
+- [x] 2026-07-30：durable focused reactor 连续通过 188 tests；latest full reactor
+  通过 362 tests，contract verifier 通过 5 Schemas / 33 fixtures / 2 golden vectors /
+  4 Packs / 1 environment。完整回执见
+  [Durable Offline Comparison Build Note](../operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)。
 
 ## Decisions
 
@@ -610,6 +666,14 @@ baseline.
 - 2026-07-30：`VERIFIED` 只表示固定 Pack 上 deterministic replay-equivalent；unkeyed
   hash 提供 corruption/tamper detection，不提供历史执行 attestation、signature 或
   producer authentication。
+- 2026-07-30：durable comparison 的 pending 永不 authoritative；claim-only 或
+  claim+pending/no-target 是 `UNKNOWN`，pending 无 claim 是 `INVALID`；
+  target+pending 同一 regular inode 是 committed crash residue，不同 inode 或冲突
+  路径是 `INVALID`。logical commit 使用 hard-link create-only，不把
+  `ATOMIC_MOVE` 冒充 no-replace。
+- 2026-07-30：local POSIX 检查统一解释为 owner/mode-restricted cooperative boundary。
+  只有 filesystem provider 暴露 ACL 时才能声称拒绝 visible foreign `ALLOW` ACL；
+  不可检查不等于已验证，也不构成 hostile-local-user authorization。
 
 ## Surprises and failures
 
@@ -668,6 +732,17 @@ baseline.
 - 第一版 fixture read 只是手动加 counter，不能支持“已读取”的说法。最终加入 typed
   literal reader：canonical ref 校验成功、返回 literal content 后才记录 read；回执仍
   明确它不是 product Tool 或历史执行 attestation。
+- Durable report 第一版把 `ATOMIC_MOVE` 当作 atomic no-replace。一个在 precheck
+  之后创建竞争 target 的 Red 证明 macOS provider 会替换该 target；最终改为
+  `createLink(target,pending)` 的 create-only commit，并对不支持 hard link 的
+  filesystem fail closed。
+- hard-link commit 又暴露两组 reader race：正常 writer unlink pending 曾被误判为冲突；
+  放宽为 `SAME_FILE → ABSENT` 后，pending 与 target 同删或 target 同字节换 inode又可能
+  隐藏变化。最终 read receipt 绑定 non-null
+  fileKey/size/mtime/creationTime，decode 与 pending transition 后无条件重验 target。
+- macOS JDK 不暴露 `AclFileAttributeView`，所以原先“拒绝 foreign ACL”的宽泛表述不成立。
+  实现与文档已收窄为“provider 可见时拒绝 foreign `ALLOW` ACL”；POSIX mode 只是
+  cooperative boundary，不是 hostile-local-user security claim。
 
 ## Verification receipts
 
@@ -710,16 +785,32 @@ S3 bounded runner 当前状态：
   与
   [S3 Durable Attempt Build Note](../operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
 
-S4 当前完成 Task Pack 004、repository validator、strict Pack loader、fixed comparison
-Runner 与 independent report verifier。2 arms × 4 cases × 3 repetitions 已实际形成
-12 次 shared candidate generations / 24 次 VerifierEvaluations，并由独立重放得到
-`VERIFIED_PASSED`。该结果只在 deterministic synthetic Pack 与 owned offline seams
-范围内成立；report 尚未持久化，也不是 historical process attestation。证据见
+S4 的 in-memory 历史快照完成 Task Pack 004、repository validator、strict Pack loader、
+fixed comparison Runner 与 independent report verifier。2 arms × 4 cases ×
+3 repetitions 已实际形成 12 次 shared candidate generations / 24 次
+VerifierEvaluations，并由独立重放得到 `VERIFIED_PASSED`。该阶段 focused clean
+reactor 为 159 tests、full reactor 为 333 tests；证据见
 [S4 Verified Offline Comparison Build Note](../operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)。
-Focused clean reactor 通过 159 tests；latest full Maven reactor 通过 333 tests，
-contract verifier 通过 5 Schemas / 33 fixtures / 4 Packs / 1 environment，73 个
-Markdown files 的 local links 与 `git diff --check` 同时 Green；双独立最终复审
-`P0=0、P1=0`。
+
+commit `a2cb02b` 在此基础上完成 canonical durable report：
+
+- focused clean 及两次重复 reactor 各通过 188 tests；
+- latest full Maven reactor 通过 362 tests：Contracts 26、Core 79、Agent Loop 8、
+  OpenAI 19、In-memory 21、PostgreSQL 45、API 32、Eval Runner 49、
+  Offline Harness 83；
+- contract verifier 通过 5 Schemas / 33 fixtures / 2 golden vectors /
+  4 Packs / 1 environment；
+- doc link verifier 排除 local-only `.workbuddy` 后通过 73 个 Markdown files，
+  `git diff --check` Green；
+- packaged app JAR 的 Main-Class、test-only crash isolation、production
+  CodeSource/test-class shadowing 与 dependency license/NOTICE checks 为 Green；
+- 真实双 writer、两个 fresh read-only JVM 与 7-point process-kill matrix 为 Green；
+- 三名独立最终 source reviewer 均为 `P0=0、P1=0`。
+
+完整机制、hash、状态表、commands 与 non-claims 见
+[Durable Offline Comparison Build Note](../operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+该 report 仍不是 historical process attestation、signature、power-loss evidence 或
+产品/商业结果。
 
 ## AI Coding receipt
 
@@ -755,10 +846,16 @@ transaction/FK/CAS 与跨语言 golden hash 形成可审计 Run。owner-led diag
 S2 的工程假设已在 focused evidence 中成立：不引入 Runtime framework、real model
 或外部动作，也能形成持久、完整性绑定、可离线重执行的 AgentRun truth。S3 adapter、
 bounded runner 与本地 durability engineering slice 已通过。S4 的第一项 deterministic
-Verifier comparison 也已独立重放验证。下一条自动执行的安全假设是：为该 report 冻结
-deterministic bytes 与 bounded schema，通过 pending write、read-back、file/directory
-`fsync`、atomic move 和真实 process-kill windows，使新 JVM 能只读加载并再次得到相同
-verdict；incomplete evidence 必须保持 `UNKNOWN / INVALID`。唯一一次 bounded
+Verifier comparison 与 canonical durable report 已独立重放验证：hard-link
+create-only commit、真实 process-kill 与 fresh JVM 能保持同一 verdict，incomplete
+pre-link evidence 保持 `UNKNOWN`，committed residue 保持 `FINAL`；冲突或不可信
+authoritative evidence 才是 `INVALID`。
+
+下一条自动执行的安全假设先做 cross-cutting truth repair：`apps/eval-runner` 的 local
+run record 仍使用 provider-specific `ATOMIC_MOVE`；ACL view unavailable 时也只能依赖
+POSIX owner/mode。本轮已先收窄文档声明，下一步用 Red 固定 no-overwrite 与
+visible-ACL 语义，再扩展 S4 tool schema error、timeout/rate limit、Context Drift、
+Prompt Injection 与第一个 typed read-only Worker handoff。唯一一次 bounded
 live-provider smoke 仍由 owner 另行批准。没有 live receipt 时不得声称已有 real-model
 fixed baseline；即使执行 smoke，也不能由一次结果证明模型质量、账单准确性或产品价值。
 学习与市场工作仍暂停且未完成。

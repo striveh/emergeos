@@ -5,6 +5,11 @@
 - 日期：2026-07-30
 - 范围：Stage 2 S3
 
+> 2026-07-30 correctness note：Accepted 的 egress/approval/metering 决策不变。
+> 后续 filesystem review 证明 macOS JDK 不暴露 ACL view，且 `ATOMIC_MOVE` 的
+> target-exists 行为是 provider-specific；下文已把对应安全表述收窄为 visible ACL
+> 与 cooperative marker flow，no-overwrite hardening 继续作为独立实现增量。
+
 ## 决策摘要
 
 首个真实模型 adapter 不进入普通 `apps/api`，也不处理现有个人 Capture。它只由独立
@@ -194,7 +199,8 @@ key read count、model factory count、HTTP request count 均为零。
 - attempt marker 在 challenge 前使用 `CREATE_NEW` 创建；错误 challenge 也会烧掉当前
   host 上的 attempt；
 - marker、journal 与 run record 只允许位于当前 owner home 下的私有 POSIX 目录：
-  directory `0700`、file `0600`，拒绝 symlink、foreign owner 与 foreign allow ACL；
+  directory `0700`、file `0600`，拒绝 symlink、foreign owner，以及 filesystem
+  provider 可见的 foreign allow ACL；provider 不暴露 ACL view 时不宣称已验证 ACL；
 - 30 秒 permit 绑定完整 Task hash 与 execution profile，并在 AgentKernel egress 前以
   CAS 消费；
 - attempt journal 在 credential read、client creation、provider SDK create intent、
@@ -202,7 +208,9 @@ key read count、model factory count、HTTP request count 均为零。
 - provider SDK create intent 是保守事实，只表示调用可能发生。进程随后死亡时不能证明
   provider 是否接收或计费，必须保留 `billingStatus=UNKNOWN`；
 - terminal record 先写 `.pending`、`fsync`、read-back，再使用 `ATOMIC_MOVE` 发布并
-  `fsync` directory。这是本地 atomic publish，不与 provider request 构成 transaction；
+  `fsync` directory。这是当前 cooperative marker flow 的本地 atomic publish，不与
+  provider request 构成 transaction；target 已存在时的 move 行为是 provider-specific，
+  record store 自身的 no-overwrite hardening 仍是后续工作；
 - one-shot 只覆盖当前 POSIX host/owner home。它不防同 UID 恶意进程、owner/root
   删除或重写文件、换主机重放，也不是 provider-side idempotency、签名、WORM 或远程
   approval。

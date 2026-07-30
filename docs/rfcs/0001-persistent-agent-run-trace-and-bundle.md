@@ -5,6 +5,10 @@
 - Created: 2026-07-30
 - Discussion: Stage 2 S2 的三次独立只读审查已完成；本 RFC 冻结 S2 的实现边界
 
+> 2026-07-30 compatibility-note correction：S2 的 PostgreSQL truth 决策不变。
+> 后续 S3 本地 record 附注已根据 Java provider 语义明确为 cooperative flow；
+> `ATOMIC_MOVE` 本身不证明 target no-overwrite。
+
 ## Problem
 
 Stage 2 S1 已经能够执行一条受约束的 Fake Agent Loop：
@@ -280,8 +284,9 @@ S3 的 `apps/eval-runner` 复用本 RFC 的 AgentRun、Safe Trace 与 Bundle 不
 - Eval Runner 使用单次内存 Store 执行 frozen PUBLIC synthetic case，并在当前 owner
   home 发布一份本地 terminal JSON record；它不是 product Store 或 replay API；
 - 本地 record 通过私有 `.pending`、read-back、`ATOMIC_MOVE` 与目录 `fsync`
-  atomic publish。该原子性不延伸到 provider 调用，也不替代成功 Artifact + terminal
-  PostgreSQL Run 的 transaction；
+  发布。当前 one-shot marker 约束 cooperative flow，但 target 已存在时 move 是否替换
+  是 provider-specific，record store 自身尚未形成 no-overwrite primitive。该边界不
+  延伸到 provider 调用，也不替代成功 Artifact + terminal PostgreSQL Run 的 transaction；
 - POSIX one-shot marker 只约束当前 host/owner home，不是跨主机 exactly-once、
   provider-side idempotency、签名或 authenticity；
 - attempt journal 在 provider SDK create 前先记录 intent。该 intent 只表示调用可能

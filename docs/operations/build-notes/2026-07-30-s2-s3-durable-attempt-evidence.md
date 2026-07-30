@@ -7,6 +7,13 @@
 - 前置回执：[Bounded Synthetic Eval Runner](./2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)
 - 状态：本地 durability engineering slice 完成；live-provider Gate 继续关闭
 
+> 后续状态：S4 Task Pack 004 后续已完成 fixed comparison、independent replay 与
+> canonical durable report，见
+> [Verified Offline Comparison](./2026-07-30-s2-s4-verified-offline-comparison.md)
+> 和
+> [Durable Offline Comparison](./2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+> 本文其余 S4 “下一步”表述保留本回执时点的历史事实。
+
 ## 结果
 
 本切片没有扩大真实模型权限，而是回答一个更基础的问题：
@@ -42,17 +49,18 @@ Verifier 同时返回三条互补信息，调用方不能只读取其中一条�
 
 | 维度 | 状态 | 含义 |
 |---|---|---|
-| `Verdict` | `VERIFIED` | terminal journal event 与其引用的 immutable run record 在 hash、identity 与语义上相互成立 |
+| `Verdict` | `VERIFIED` | terminal journal event 与其引用的 cooperative append-once run record 在 hash、identity 与语义上相互成立 |
 | `Verdict` | `UNKNOWN` | 证据是合法但尚未闭合的 crash snapshot，不能推断 provider 没有执行或没有计费 |
 | `Verdict` | `INVALID` | path、permission、sequence、hash chain、record hash 或 terminal semantics 存在矛盾 |
 | `BillingStatus` | `NOT_INVOKED / ATTRIBUTED / UNKNOWN` | 表达完整可信 journal prefix 中能够归因的 provider intent 与 usage |
 | `RecordState` | `ABSENT / PENDING_NON_AUTHORITATIVE / FINAL_UNSEALED / TERMINAL_LINKED` | 表达 atomic publish 走到哪一层；只有 `TERMINAL_LINKED` 可以支撑 `VERIFIED` |
 
 Verifier 使用 strict duplicate-key JSON parsing、trailing-token rejection、有界
-journal/line/record read、POSIX owner/permission/ACL 检查、事件 sequence/hash-chain
-校验，并重新验证 terminal record 中的 Task、Run、Artifact、Bundle、profile、pricing
-与 environment 绑定。损坏或矛盾证据 fail closed；它不会读取 credential、构建 model
-client 或访问网络。
+journal/line/record read、POSIX owner/permission 检查，并在 filesystem provider 暴露
+ACL 时检查 visible foreign allow ACL；随后校验事件 sequence/hash-chain，并重新验证
+terminal record 中的 Task、Run、Artifact、Bundle、profile、pricing 与 environment
+绑定。损坏或矛盾证据 fail closed；它不会读取 credential、构建 model client 或访问
+网络。当前 macOS JDK 不暴露 ACL view，因此该边界不抵御 hostile local user。
 
 `trustedPrefix=true` 只表示**本次读取到的完整 journal prefix**通过了 hash 与状态机校验。
 它不是 closed ledger，也不表示 `UNKNOWN` attempt 已终止；仍在运行的同 UID 进程可能在

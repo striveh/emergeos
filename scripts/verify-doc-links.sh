@@ -8,7 +8,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = process.argv[2];
-const ignoredDirectories = new Set([".git", "node_modules", "target"]);
+const ignoredDirectories = new Set([
+  ".git",
+  ".workbuddy",
+  "node_modules",
+  "target",
+]);
 const markdownFiles = [];
 
 function walk(directory) {
