@@ -23,8 +23,11 @@ runner 中重复得到 exact golden hashes。它们是 Agent Runtime/Harness 的
 不是真实模型质量证明，也不是可对真实用户数据执行的 product replay API。
 完整工程回执见
 [Stage 2 S2 Build Note](./docs/operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)。
-真实模型、Temporal、生产认证、加密存储和平台连接器尚未接入，不应将演示结果理解为生产
-自治能力或真实平台结果。
+Stage 2 S3 已增加隔离的 OpenAI Responses adapter，并只用本机 loopback `HttpServer`
+验证 strict tool、manual item replay、structured output、usage/cost、timeout、零重试、
+错误映射与交错 Session 隔离。它尚未接入 API 或 Eval runner，也没有读取真实 key、访问
+OpenAI 或产生真实模型结果。Temporal、生产认证、加密存储和平台连接器仍未接入，不应将
+这些测试理解为生产自治能力或真实平台结果。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
 中的单用户 `local-user`，没有实现登录或多租户身份验证。主体不接受 Header 或请求体覆盖，
@@ -199,6 +202,7 @@ modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例、AgentKernel 与端口
 adapters/inmemory/        本地适配器、有限 Fake Agent 循环与 Offline golden runner
 adapters/postgres/        Capture、Artifact、local Action、AgentRun/Trace 的 PostgreSQL 适配器
+adapters/openai/          隔离的 Responses adapter；当前只有 loopback contract evidence
 contracts/                跨语言 JSON Schema
 evals/                    合成任务与回归证据
 docs/                     产品、架构、研究、运营和共同治理

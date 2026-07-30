@@ -211,6 +211,23 @@ class AgentLoopKernelModelSessionTest {
   }
 
   @Test
+  void mapsCancellationDetectedInsideTheModelCallToCancelled() {
+    AgentModel model =
+        task ->
+            (turn, context) -> {
+              throw new AgentModelFailure(AgentModelFailure.Code.CANCELLED);
+            };
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(model, new AgentToolRegistry(List.of()), 2, 1);
+
+    var outcome =
+        kernel.run(task("model-call-cancelled"), CancellationSignal.never());
+
+    assertEquals(RunStatus.CANCELLED, outcome.status());
+    assertEquals("CANCELLED", outcome.failureReason());
+  }
+
+  @Test
   void preservesUsageWhenProviderReturnsAnAttributedFailureReceipt() {
     AgentModel model =
         task ->

@@ -201,3 +201,23 @@ RFC 转为 Accepted 前必须具备：
 - packaged Eval preflight 的 zero-egress evidence；
 - 一份中文 Build Note 和独立 security/metering review；
 - 只有 owner 明确批准后，才允许最多一次 bounded live smoke。
+
+## Implementation note · 2026-07-30
+
+OpenAI Responses adapter 与 loopback protocol/safety tests 已实现，但没有接入 API 或
+独立 Eval runner，也没有 live call。已验证 strict tool、manual replay、structured final、
+单次 reservation、usage/cost、timeout/no retry、typed HTTP failure 与 Session 隔离。
+本 RFC 继续保持 Proposed：packaged zero-egress preflight、compiled synthetic catalog、
+one-shot operator permit 与 safe receipt 尚未完成。adapter 独立复审已关闭为
+`P0=0、P1=0、P2=0`；Eval runner 与整个 live Gate 仍需另一次最终复审。
+
+## 参考
+
+- [OpenAI · Function calling](https://developers.openai.com/api/docs/guides/function-calling)
+- [OpenAI · Conversation state](https://developers.openai.com/api/docs/guides/conversation-state)
+- [OpenAI · Tools](https://developers.openai.com/api/docs/guides/tools)
+- [OpenAI · Responses create reference](https://developers.openai.com/api/reference/resources/responses/methods/create)
+
+实现首先以仓库固定的 `openai-java 4.43.0` 与本机 Maven sources 为版本真相，再用以上
+官方文档核对 strict tools、manual item replay、encrypted reasoning 与 Responses request
+边界；未采用未被官方 Responses reference 证实的 request-level idempotency header。

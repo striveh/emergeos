@@ -1,6 +1,7 @@
 # ExecPlan: Stage 2 AgentKernel and Eval-Driven Development
 
-状态：进行中；S1、S2 工程完成，下一步进入 S3 real model adapter
+状态：进行中；S1、S2 工程完成，S3 protocol adapter loopback Green，下一步是
+synthetic Eval runner 与默认 zero-egress packaged preflight
 
 Owner：项目所有者 + main Codex agent
 
@@ -215,6 +216,50 @@ then locate it from the Trace.
 - Record resolved model version, tokens, cost, latency and failure attribution.
 - Do not place credentials, prompts containing private data or live responses
   in the repository.
+
+#### S3 adapter delta · 2026-07-30
+
+- OpenAI Java SDK 固定为 `4.43.0`，位于独立 `adapters/openai`；Maven Enforcer
+  禁止它依赖 API、Spring、Temporal、PostgreSQL、LangChain4j 或其他上层 Agent
+  framework。普通 API 依旧只装配 Scripted Fake，不获得 OpenAI transitive dependency。
+- adapter constructor 只接受 server-owned `AgentExecutionProfile` 与已经装配的
+  `OpenAIClient`，不读取环境变量、不解析 key、不选择 base URL、不创建 live client。
+  一个 Run 对应一个 Session，manual replay state、encrypted reasoning item 与 function
+  call id 不跨 Run 共享。
+- 第一轮 Responses 固定 `store=false`、`parallel_tool_calls=false`、
+  `service_tier=default`、strict `capture_read` 和 forced function choice；第二轮继续
+  replay reasoning/function/tool output，移除全部 tools，并要求 strict structured final。
+  不使用 `previous_response_id` 或 conversation。
+- 每个 socket 前先检查 cancellation 与单次 worst-case reservation；request timeout
+  使用剩余 deadline。可信 usage 按 frozen PricingProfile 归因；若 output 语义错误但
+  model/usage 可归因，返回 paid `Failed` receipt，不把费用丢进 exception。
+- loopback Acceptance 已覆盖：两次请求 protocol、精确 cost、cancellation/budget 的
+  zero socket、usage 缺失与不一致、reviewed token ceiling、401/4xx/429/5xx 映射、
+  timeout/no retry、raw error 不进入 public message、foreign tool/evidence、invalid JSON
+  与歧义 JSON、reasoning + message、safe model mismatch、跨 step model drift，以及两个
+  交错 Session 的 replay 隔离。provider 已接受但结果未知时，同一个 Session 会 terminal，
+  不允许再次 egress。
+- 以上测试只访问 `127.0.0.1`，使用 sentinel key；没有真实 API key、外网请求或 live
+  provider result。RFC-0002 仍为 Proposed；只有 compiled synthetic catalog、
+  one-shot operator permit、packaged zero-egress runner、safe receipt 与 Eval runner
+  独立最终审查完成后，才可能请求 owner 批准一次 bounded smoke。
+
+#### S3 adapter 验证回执 · 2026-07-30
+
+- Acceptance Red 先因 `adapters/openai` 与实现类不存在而失败；protocol Happy Path Green
+  后，审查驱动的 Red 依次暴露并修复：`403` 误分类、raw provider exception cause 泄漏、
+  structured final 合法 reasoning item 被拒、safe model mismatch 丢 usage、invalid typed
+  final 在 SDK parser 前丢 attribution，以及 timeout 后同 Session 可重复 egress。
+- OpenAI adapter focused tests 为 `18/18`，provider-neutral Agent Loop session tests 为
+  `8/8`；独立复审关闭为 `P0=0、P1=0、P2=0`。
+- 最终 `./mvnw --batch-mode --no-transfer-progress clean verify` 共通过 `215` tests：
+  contracts 26、Core 65、Agent Loop 8、OpenAI adapter 18、in-memory 21、PostgreSQL 45、
+  API unit + packaged integration 32；failures/errors/skipped 均为 0。
+- `./scripts/verify-contracts.sh` 通过 5 个 Schema、33 个 fixtures、2 个 Task hash vectors
+  与 2 个 synthetic Task Packs；`./scripts/verify-doc-links.sh` 通过 67 个 Markdown files；
+  `apps/api` dependency tree 不含 `com.openai:*`；`git diff --check` 通过。
+- 这些回执仍全部是离线/loopback evidence，不是 live provider receipt，也不证明真实模型
+  质量、账单金额或产品价值。
 
 ### S4 · Harness comparison, faults and bounded handoff
 
