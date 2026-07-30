@@ -2,7 +2,8 @@
 
 状态：进行中；S1、S2 工程完成，S3 protocol adapter、isolated synthetic Eval Runner
 与本地 attempt durability 工程切片已通过；live-provider smoke 尚未执行。S4 已冻结
-首个 Verifier comparison foundation，24-run comparison 尚未执行
+首个 Verifier comparison foundation，并完成 strict Pack loader；12 个 shared
+candidates / 24 次 verifier evaluation 尚未执行
 
 Owner：项目所有者 + main Codex agent
 
@@ -34,9 +35,11 @@ tool loop、Agent Trace 或 Eval runner。S1 增加 bounded Fake Agent product l
 OpenAI Responses protocol adapter，并形成只接受 frozen PUBLIC synthetic Task 的独立
 Eval Runner。S3 现在另有 production read-only journal verifier 与 7-point fat-JAR
 process-kill/restart evidence。S4 Task Pack 004 已冻结 reference-grounding Verifier
-对照的输入和 expected matrix，但还没有 comparison runner 或 24-run result。当前仍没有
-live-provider smoke、real model result、billing receipt 或 stochastic Harness
-comparison。较早的 `TemplateArtifactGenerator` 仍是确定性的 Stage 0 scaffolding。
+对照的输入和 expected matrix；独立 offline module 已能以 fixed path、raw hash 与
+exact semantics 加载它，但还没有 candidate generator、comparison runner 或 24-run
+result。当前仍没有 live-provider smoke、real model result、billing receipt 或
+stochastic Harness comparison。较早的 `TemplateArtifactGenerator` 仍是确定性的
+Stage 0 scaffolding。
 
 S2 已补齐 durable AgentRun、Safe Trace、HarnessRunBundle integrity binding 与
 deterministic Offline golden runner；仍没有 real model、mid-run checkpoint/resume
@@ -358,8 +361,14 @@ then locate it from the Trace.
   12 paired candidates；pack 中的 H0/H1 totals 是 expected matrix，不是 observed
   result。
 - Repository validator 已固定 literal synthetic provenance、zero network/real
-  model/Connector、arms/cases/repetitions 与 totals；comparison runner、24-run report、
-  report verifier 与正式结果尚未实现。
+  model/Connector、arms/cases/repetitions 与 totals。
+- commit `623abf3` 新增独立 `apps/offline-harness-runner` strict loader：固定 Pack
+  relative path、64 KiB bounded `NOFOLLOW_LINKS` read、duplicate/unknown/trailing/
+  missing/null JSON rejection、raw SHA 与完整 semantic binding；default-deny Maven
+  dependency allowlist 及 contracts/core/offline production bytecode gate 阻止已知
+  JDK network/process escape。
+- Loader 只完成可信 preflight；candidate generator、24 次 verifier evaluation、
+  comparison report、report verifier 与 durable report store 尚未实现。
 
 Stage gate:
 
@@ -521,6 +530,9 @@ baseline.
   `P0=0、P1=0`。
 - [x] 2026-07-30：Task Pack 004 与 repository validator 冻结首个
   reference-grounding Verifier comparison foundation；24-run experiment 未执行。
+- [x] 2026-07-30：commit `623abf3` 增加独立 strict Pack loader。两项原始 P1 与三轮
+  adversarial follow-up 已转为 executable Red/Green，独立最终复审
+  `P0=0、P1=0`；该结果仍不等于 comparison 已执行。
 
 ## Decisions
 
@@ -608,8 +620,9 @@ baseline.
   精确验证这些 boundary，却不是 arbitrary-instruction 或物理断电测试。Path 安全检查仍有
   same-UID TOCTOU；marker body 不参与验证；test launcher 也尚未逐个检查 production
   class 的 CodeSource。
-- Task Pack 004 的 24-run totals 是执行前冻结的 expected matrix。没有 run artifact 与
-  report verifier 时，不能把“validator Green”写成 Harness comparison 已通过。
+- Task Pack 004 的 24-run totals 是执行前冻结的 expected matrix。Strict loader
+  Green 只证明输入可信；没有 run artifact 与 report verifier 时，不能把它写成
+  Harness comparison 已通过。
 
 ## Verification receipts
 
@@ -652,8 +665,12 @@ S3 bounded runner 当前状态：
   与
   [S3 Durable Attempt Build Note](../operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
 
-S4 当前只完成 Task Pack 004 与严格 repository validator。2 arms × 4 cases × 3
-repetitions 的 24-run comparison 尚未执行，expected totals 不能充当 experiment receipt。
+S4 当前完成 Task Pack 004、repository validator 与独立 strict Pack loader。它已经
+拒绝任意 Pack path、JSON/hash/semantic drift、非 allowlist dependency 及已知 JDK
+network/process bytecode reference；2 arms × 4 cases × 3 repetitions 所代表的
+12 个 shared candidate generations / 24 次 verifier evaluations 尚未执行，expected
+totals 不能充当 experiment receipt。Loader 证据见
+[S4 Offline Comparison Loader Build Note](../operations/build-notes/2026-07-30-s2-s4-offline-comparison-loader.md)。
 
 ## AI Coding receipt
 

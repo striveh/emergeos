@@ -40,9 +40,13 @@ runner 工程回执见
 fat JAR production classes、强制终止进程，再由新 JVM 只读核验 journal/record 并证明
 one-shot replay 继续被 marker 拒绝；shipping CLI 不接受 crash injection 参数。该证据
 只覆盖本机 POSIX filesystem 与 loopback provider，不是断电、NFS、真实 provider 或真实
-账单证明。S4 的 Task Pack 004 已冻结第一组 reference-grounding Verifier 对照设计，但
-24-run experiment 尚未执行。完整回执见
-[Stage 2 S3 Durable Attempt Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
+账单证明。S4 的 Task Pack 004 已冻结第一组 reference-grounding Verifier 对照设计；
+独立 `apps/offline-harness-runner` 现在可以从固定路径严格加载该 Pack，并以 raw hash、
+完整语义、依赖 allowlist 与 production bytecode gate 拒绝漂移或网络/进程逃逸路径。
+它还没有执行 candidate generation 或 24 次 verifier evaluation。完整回执见
+[Stage 2 S3 Durable Attempt Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)
+与
+[Stage 2 S4 Offline Comparison Loader Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-offline-comparison-loader.md)。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
@@ -234,6 +238,7 @@ ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问 loopback F
 ```text
 apps/api/                 HTTP 入口与依赖装配
 apps/eval-runner/         隔离 synthetic model Eval；默认 zero-egress，live 路径有 one-shot Gate
+apps/offline-harness-runner/ 固定 Pack 004 的 strict offline comparison 边界；当前仅完成可信加载
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例、AgentKernel 与端口
 adapters/inmemory/        本地适配器、有限 Fake Agent 循环与 Offline golden runner

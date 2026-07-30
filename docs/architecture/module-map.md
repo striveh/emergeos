@@ -36,6 +36,12 @@ apps/eval-runner
   one-shot permit、POSIX attempt marker/journal 与本地 atomic terminal run record
   不依赖 API、PostgreSQL、Spring、Temporal、产品 Store 或真实用户数据
 
+apps/offline-harness-runner
+  独立 deterministic Harness comparison 边界；只依赖 contracts、core 与 Jackson
+  当前只从固定仓库路径严格加载 hash-frozen Pack 004，验证完整 synthetic provenance、
+  单变量 arms/cases/matrix，并用依赖 allowlist 与 production bytecode gate 阻止
+  model、network、process、Connector、DB 和产品 Store 路径；尚未执行 comparison
+
 apps/api
   HTTP DTO、Controller、异常映射、loopback 启动保护、Agent draft 入口、
   owner-scoped Run/Trace/Bundle 查询、S3 模拟 Provider HTTP adapter、依赖装配
@@ -51,6 +57,7 @@ flowchart RL
   PG["adapters/postgres"]
   OAI["adapters/openai"]
   EVAL["apps/eval-runner"]
+  OEVAL["apps/offline-harness-runner"]
   CORE["modules/core"]
   CT["modules/contracts"]
 
@@ -65,6 +72,8 @@ flowchart RL
   EVAL --> LOOP
   EVAL --> CORE
   EVAL --> CT
+  OEVAL --> CORE
+  OEVAL --> CT
   LOOP --> CORE
   MEM --> CORE
   PG --> CORE
@@ -78,6 +87,10 @@ flowchart RL
   越过 adapter boundary。
 - `eval-runner` 不依赖 API、PostgreSQL、in-memory 产品 Adapter、Spring、Temporal
   或上层 Agent Runtime；它不能成为普通产品 route。
+- `offline-harness-runner` 使用 default-deny dependency allowlist，只允许
+  contracts、core、Jackson 与 test-only JUnit；它不依赖任何 Adapter、API、模型 SDK、
+  HTTP client 或数据库，并扫描允许 production closure 的已编译 JDK network/process
+  references。该扫描是 fail-closed architecture gate，不是 OS sandbox 或 packet capture。
 - Maven Enforcer 在 `core`、`contracts` 与 `agent-loop` 构建中阻止依赖越界。
 - Adapter 只能实现 Core Port，不能让 SDK 类型进入 Core。
 - API 负责传输协议，不能包含领域状态转移。
