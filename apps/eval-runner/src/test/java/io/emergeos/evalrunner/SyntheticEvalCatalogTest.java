@@ -28,6 +28,10 @@ class SyntheticEvalCatalogTest {
                 SyntheticEvalCatalog.profile().fingerprint()),
         () ->
             assertEquals(
+                SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID,
+                SyntheticEvalCatalog.computedAttemptId()),
+        () ->
+            assertEquals(
                 "0.417000",
                 SyntheticEvalCatalog.profile().reservationUsd().toPlainString()));
   }

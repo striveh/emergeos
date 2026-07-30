@@ -940,7 +940,10 @@ for (const file of evalEnvironmentFiles) {
       "parallelToolCalls",
       "serviceTier",
       "maxRetries",
+      "productionBaseUrl",
       "productionBaseUrlOverrideAllowed",
+      "ambientProxyAllowed",
+      "sdkLogLevel",
       "maximumProviderRequests",
       "maximumInputTokensPerRequest",
       "maximumOutputTokensPerRequest"
@@ -975,7 +978,10 @@ for (const file of evalEnvironmentFiles) {
     [
       "posixOneShotMarkerRequired",
       "realTtyChallengeRequired",
-      "credentialReadAfterPermit"
+      "credentialReadAfterPermit",
+      "durableRunRecordRequired",
+      "attemptJournalRequired",
+      "atomicFinalPublishRequired"
     ],
     `${relative}: operatorGate`
   );
@@ -991,7 +997,11 @@ for (const file of evalEnvironmentFiles) {
     || environment.requestPolicy.parallelToolCalls !== false
     || environment.requestPolicy.serviceTier !== "default"
     || environment.requestPolicy.maxRetries !== 0
+    || environment.requestPolicy.productionBaseUrl
+      !== "https://api.openai.com/v1"
     || environment.requestPolicy.productionBaseUrlOverrideAllowed !== false
+    || environment.requestPolicy.ambientProxyAllowed !== false
+    || environment.requestPolicy.sdkLogLevel !== "OFF"
     || environment.requestPolicy.maximumProviderRequests !== 2
     || environment.requestPolicy.maximumInputTokensPerRequest
       !== environment.inputTokenUpperBound.tokens
@@ -1005,6 +1015,9 @@ for (const file of evalEnvironmentFiles) {
     || environment.operatorGate.posixOneShotMarkerRequired !== true
     || environment.operatorGate.realTtyChallengeRequired !== true
     || environment.operatorGate.credentialReadAfterPermit !== true
+    || environment.operatorGate.durableRunRecordRequired !== true
+    || environment.operatorGate.attemptJournalRequired !== true
+    || environment.operatorGate.atomicFinalPublishRequired !== true
   ) {
     throw new Error(`${relative}: unsafe synthetic evaluation environment`);
   }

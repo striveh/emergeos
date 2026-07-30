@@ -9,6 +9,7 @@ import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.application.AgentExecutionProfile;
 import io.emergeos.core.application.CaptureCommand;
 import io.emergeos.core.application.PricingProfile;
+import io.emergeos.core.domain.ContentHashes;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -22,7 +23,7 @@ final class SyntheticEvalCatalog {
   static final String ENVIRONMENT_PATH =
       "evals/environments/openai-responses-synthetic-v1.json";
   static final String ENVIRONMENT_RAW_SHA256 =
-      "2a788ccc9b3e5be768f5707466b1b05aa340d79caf8ec728f2c6526919c7242b";
+      "f2ddb405f81ac4cf51c8f54479ddbb13fd00b62c9995bee2e52b43db85cccc6f";
 
   static final String PRINCIPAL_ID = "synthetic-eval-owner";
   static final String CAPTURE_ID = "capture-openai-public-003";
@@ -45,11 +46,13 @@ final class SyntheticEvalCatalog {
   static final String EXPECTED_CAPTURE_REQUEST_HASH =
       "72e9f2a45fa1f2cf43cab0963cd0bd5cd16bedb5f8d40c0ae67401014b6f90ea";
   static final String EXPECTED_TASK_HASH =
-      "b55e73579f63736373337077dc2d928ccb8ed540b14193364800d3ec1d238a0a";
+      "9d35efba62250bd01e6a4a0122c28ff1fb4e0ad0f5d74d4c4028058c173f0301";
   static final String EXPECTED_PRICING_FINGERPRINT =
       "96be6f771a5c8d967424f61571af3737072a1c85ed780f9e7f0ab06ba1c7e28c";
   static final String EXPECTED_PROFILE_FINGERPRINT =
-      "ff3bca47eeb5a6b43305d6d88f4c9ce4c9f9edaba78744f0435920d663db1a96";
+      "4241b2fc0879dd9df9131f9c31a89893d09a3a57ef5c485c56f199b32252b703";
+  static final String EXPECTED_ATTEMPT_ID =
+      "701d54cef51b3f6cd1d4e1dd6e0b4565dde305a3d2be6682e97af7f15493c3a2";
 
   private SyntheticEvalCatalog() {}
 
@@ -115,5 +118,25 @@ final class SyntheticEvalCatalog {
 
   static String computedTaskHash() {
     return IntegrityHashes.taskHash(task());
+  }
+
+  static String computedAttemptId() {
+    String material =
+        String.join(
+            "\n",
+            "emergeos.synthetic-model-attempt.v1",
+            "caseId=" + CASE_ID,
+            "packRawSha256=" + PACK_RAW_SHA256,
+            "captureRequestHash=" + EXPECTED_CAPTURE_REQUEST_HASH,
+            "taskHash=" + EXPECTED_TASK_HASH,
+            "environmentRawSha256=" + ENVIRONMENT_RAW_SHA256,
+            "executionProfileFingerprint=" + EXPECTED_PROFILE_FINGERPRINT,
+            "pricingProfileFingerprint=" + EXPECTED_PRICING_FINGERPRINT,
+            "reservationUsd=" + profile().reservationUsd().toPlainString(),
+            "maximumProviderRequests=" + MAXIMUM_PROVIDER_REQUESTS,
+            "experimentArm=" + profile().experiment().arm(),
+            "experimentRepetition="
+                + profile().experiment().repetition());
+    return ContentHashes.sha256(material);
   }
 }

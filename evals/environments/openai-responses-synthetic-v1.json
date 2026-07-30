@@ -22,7 +22,10 @@
     "parallelToolCalls": false,
     "serviceTier": "default",
     "maxRetries": 0,
+    "productionBaseUrl": "https://api.openai.com/v1",
     "productionBaseUrlOverrideAllowed": false,
+    "ambientProxyAllowed": false,
+    "sdkLogLevel": "OFF",
     "maximumProviderRequests": 2,
     "maximumInputTokensPerRequest": 272000,
     "maximumOutputTokensPerRequest": 1000
@@ -49,6 +52,9 @@
   "operatorGate": {
     "posixOneShotMarkerRequired": true,
     "realTtyChallengeRequired": true,
-    "credentialReadAfterPermit": true
+    "credentialReadAfterPermit": true,
+    "durableRunRecordRequired": true,
+    "attemptJournalRequired": true,
+    "atomicFinalPublishRequired": true
   }
 }

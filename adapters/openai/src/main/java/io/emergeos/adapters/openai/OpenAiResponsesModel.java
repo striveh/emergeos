@@ -87,11 +87,52 @@ public final class OpenAiResponsesModel implements AgentModel {
 
   private final AgentExecutionProfile profile;
   private final OpenAIClient client;
+  private final Runnable providerInvocationObserver;
+  private final ProviderAttributionObserver providerAttributionObserver;
 
   public OpenAiResponsesModel(
       AgentExecutionProfile profile, OpenAIClient client) {
+    this(profile, client, () -> {}, (ignoredModel, ignoredUsage) -> {});
+  }
+
+  /**
+   * Creates a model route with a local observer invoked immediately before
+   * each SDK Responses create call.
+   *
+   * <p>The observer is for bounded Harness accounting only. It does not prove
+   * that bytes reached the provider; the production client disables SDK
+   * retries, while loopback tests independently count received HTTP requests.
+   */
+  public OpenAiResponsesModel(
+      AgentExecutionProfile profile,
+      OpenAIClient client,
+      Runnable providerInvocationObserver) {
+    this(
+        profile,
+        client,
+        providerInvocationObserver,
+        (ignoredModel, ignoredUsage) -> {});
+  }
+
+  /**
+   * Creates a model route with separate observers for SDK invocation and
+   * successful model/usage attribution.
+   */
+  public OpenAiResponsesModel(
+      AgentExecutionProfile profile,
+      OpenAIClient client,
+      Runnable providerInvocationObserver,
+      ProviderAttributionObserver providerAttributionObserver) {
     this.profile = Objects.requireNonNull(profile, "profile");
     this.client = Objects.requireNonNull(client, "client");
+    this.providerInvocationObserver =
+        Objects.requireNonNull(
+            providerInvocationObserver,
+            "providerInvocationObserver");
+    this.providerAttributionObserver =
+        Objects.requireNonNull(
+            providerAttributionObserver,
+            "providerAttributionObserver");
     if (!profile.modelBound()
         || !PROVIDER.equals(profile.modelProvider())
         || !PROTOCOL_VERSION.equals(profile.modelAdapterVersion())) {
@@ -170,6 +211,8 @@ public final class OpenAiResponsesModel implements AgentModel {
                         .responses()
                         .create(firstRequest(), requestOptions(context)));
         Attribution attribution = attribution(response);
+        providerAttributionObserver.attributed(
+            attribution.resolvedModel(), attribution.usage());
         if (!acceptAttribution(attribution)) {
           return failed(
               attribution,
@@ -205,6 +248,8 @@ public final class OpenAiResponsesModel implements AgentModel {
                             secondRequest().rawParams(),
                             requestOptions(context)));
         Attribution attribution = attribution(response);
+        providerAttributionObserver.attributed(
+            attribution.resolvedModel(), attribution.usage());
         if (!acceptAttribution(attribution)) {
           return failed(
               attribution,
@@ -567,8 +612,9 @@ public final class OpenAiResponsesModel implements AgentModel {
         attribution.usage());
   }
 
-  private static <T> T invokeProvider(Supplier<T> call) {
+  private <T> T invokeProvider(Supplier<T> call) {
     try {
+      providerInvocationObserver.run();
       return call.get();
     } catch (UnauthorizedException failure) {
       throw new AgentModelFailure(
@@ -610,4 +656,15 @@ public final class OpenAiResponsesModel implements AgentModel {
       ModelUsage usage,
       boolean withinReviewedLimits,
       boolean matchesRequestedModel) {}
+
+  /**
+   * Receives only provider identity and metering data that passed strict
+   * response attribution parsing. Prompt, response body and credentials never
+   * cross this observer boundary.
+   */
+  @FunctionalInterface
+  public interface ProviderAttributionObserver {
+
+    void attributed(String resolvedModel, ModelUsage usage);
+  }
 }

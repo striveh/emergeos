@@ -185,7 +185,11 @@ final class SyntheticEvalPreflight {
         || environment.requestPolicy().parallelToolCalls()
         || !"default".equals(environment.requestPolicy().serviceTier())
         || environment.requestPolicy().maxRetries() != 0
+        || !ProductionOpenAiClientFactory.PRODUCTION_BASE_URL.equals(
+            environment.requestPolicy().productionBaseUrl())
         || environment.requestPolicy().productionBaseUrlOverrideAllowed()
+        || environment.requestPolicy().ambientProxyAllowed()
+        || !"OFF".equals(environment.requestPolicy().sdkLogLevel())
         || environment.requestPolicy().maximumProviderRequests()
             != SyntheticEvalCatalog.MAXIMUM_PROVIDER_REQUESTS
         || environment.requestPolicy().maximumInputTokensPerRequest()
@@ -218,7 +222,10 @@ final class SyntheticEvalPreflight {
         || environment.operatorGate() == null
         || !environment.operatorGate().posixOneShotMarkerRequired()
         || !environment.operatorGate().realTtyChallengeRequired()
-        || !environment.operatorGate().credentialReadAfterPermit()) {
+        || !environment.operatorGate().credentialReadAfterPermit()
+        || !environment.operatorGate().durableRunRecordRequired()
+        || !environment.operatorGate().attemptJournalRequired()
+        || !environment.operatorGate().atomicFinalPublishRequired()) {
       throw rejected("ENVIRONMENT_SEMANTICS_MISMATCH");
     }
   }
@@ -233,6 +240,8 @@ final class SyntheticEvalPreflight {
             profile.pricing().fingerprint())
         || !SyntheticEvalCatalog.EXPECTED_PROFILE_FINGERPRINT.equals(
             profile.fingerprint())
+        || !SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID.equals(
+            SyntheticEvalCatalog.computedAttemptId())
         || !("environment://sha256:"
                 + SyntheticEvalCatalog.ENVIRONMENT_RAW_SHA256)
             .equals(profile.environmentSnapshotRef())) {
@@ -271,6 +280,8 @@ final class SyntheticEvalPreflight {
           + SyntheticEvalCatalog.EXPECTED_PROFILE_FINGERPRINT
           + " pricingProfileFingerprint="
           + SyntheticEvalCatalog.EXPECTED_PRICING_FINGERPRINT
+          + " attemptId="
+          + SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID
           + " modelRequested="
           + profile.modelRequested()
           + " maximumProviderRequests="
@@ -291,7 +302,7 @@ final class SyntheticEvalPreflight {
   static final class Rejected extends RuntimeException {
     private final String code;
 
-    private Rejected(String code) {
+    Rejected(String code) {
       super(code, null, false, false);
       this.code = code;
     }
@@ -368,7 +379,10 @@ final class SyntheticEvalPreflight {
       boolean parallelToolCalls,
       String serviceTier,
       int maxRetries,
+      String productionBaseUrl,
       boolean productionBaseUrlOverrideAllowed,
+      boolean ambientProxyAllowed,
+      String sdkLogLevel,
       int maximumProviderRequests,
       long maximumInputTokensPerRequest,
       long maximumOutputTokensPerRequest) {}
@@ -391,5 +405,8 @@ final class SyntheticEvalPreflight {
   private record OperatorGate(
       boolean posixOneShotMarkerRequired,
       boolean realTtyChallengeRequired,
-      boolean credentialReadAfterPermit) {}
+      boolean credentialReadAfterPermit,
+      boolean durableRunRecordRequired,
+      boolean attemptJournalRequired,
+      boolean atomicFinalPublishRequired) {}
 }
