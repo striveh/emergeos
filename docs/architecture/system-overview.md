@@ -78,12 +78,28 @@ flowchart TB
   Result 与 HarnessRunBundle 持久化；成功 Artifact 与 terminal Run 原子提交；
 - frozen synthetic Task Pack 可通过 fresh、无网络的 Offline runner 得到 exact
   Trace/Artifact/Bundle golden hashes；
+- Stage 2 S3 已有独立 `apps/eval-runner`：默认 packaged command 只做
+  zero-egress preflight；显式执行路径绑定 frozen PUBLIC synthetic Task、
+  real TTY challenge、30 秒 one-shot permit、POSIX attempt marker/journal 和本地
+  atomic terminal run record；
 - PostgreSQL 已持有 Capture、Artifact lineage、local ActionAttempt/Receipt 与
   AgentRun truth；
-- S3 仅通过 loopback HTTP 调用独立、文件持久化的 Fake Provider；
-- 真实模型、Temporal、AgentScope 和真实 Connector 仍是后续外层适配器，不是当前实现。
+- Stage 1 S3 Action 仅通过 loopback HTTP 调用独立、文件持久化的 Fake Provider；
+- OpenAI real-model protocol adapter 与受控 Eval Runner 实现已形成，但只有当前最终验证
+  全部通过后才能宣称 runner engineering complete；live-provider smoke 尚未执行，
+  没有 real key、real model result 或 billing receipt；
+- Temporal、AgentScope 和真实 Connector 仍是后续外层适配器，不是当前实现。
 
 此时拆微服务只会增加一致性、部署和调试成本，不能增加用户价值。未来只有出现独立扩缩、故障隔离、团队所有权或合规边界时才拆服务。
+
+`apps/eval-runner` 属于 Verification/Eval 边界，不属于普通 Product API 或 Durable
+Action Plane。它使用单次内存 Store 执行冻结案例；本地 JSON record 只保存该 synthetic
+attempt 的 terminal evidence，不替代 PostgreSQL 中 owner-scoped product `AgentRun`。
+POSIX marker 只约束当前 host/owner home，不防同 UID、owner/root、跨主机重放，也不是
+provider-side idempotency。Journal 的 provider SDK create intent 只能说明一次调用可能
+发生；若没有完整 observed usage，billing 必须保持 `UNKNOWN`，不能把零 observed cost
+解释成免费。Reservation 是调用前的 authorization ceiling，不是对最终 provider usage 的
+改写上限；任何已观察 usage，即使超过 reservation，也必须进入 Result、Bundle 和本地记录。
 
 ## ETCLOVG 映射
 

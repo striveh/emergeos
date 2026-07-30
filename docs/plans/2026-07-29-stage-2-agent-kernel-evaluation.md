@@ -1,7 +1,8 @@
 # ExecPlan: Stage 2 AgentKernel and Eval-Driven Development
 
-状态：进行中；S1、S2 工程完成，S3 protocol adapter loopback Green，下一步是
-synthetic Eval runner 与默认 zero-egress packaged preflight
+状态：进行中；S1、S2 工程完成，S3 protocol adapter 与 isolated synthetic Eval Runner
+engineering Gate 已通过；live-provider smoke 尚未执行，S3 durability hardening
+正在继续，S4 Harness comparison 尚未开始
 
 Owner：项目所有者 + main Codex agent
 
@@ -26,12 +27,14 @@ stale-`DISPATCHING` 证据改写成已完成 Gate。
 
 ## Context and user result
 
-At the S1 baseline the repository had stable `TaskEnvelope`, `ResultEnvelope`
-and `HarnessRunBundle` contracts, but no executable AgentKernel, model port,
-tool registry, tool loop, Agent Trace or evaluation runner. S1 now adds the
-bounded Fake Agent product loop described below. It still has no real-model
-adapter, persistent run/Trace binding or evaluation runner. The older
-`TemplateArtifactGenerator` remains deterministic Stage 0 scaffolding.
+在 S1 baseline，仓库只有稳定的 `TaskEnvelope`、`ResultEnvelope` 与
+`HarnessRunBundle` contract，没有可执行 AgentKernel、model port、tool registry、
+tool loop、Agent Trace 或 Eval runner。S1 增加 bounded Fake Agent product loop；S2
+增加 durable AgentRun/Trace/Bundle truth 与 offline golden runner；S3 已加入隔离的
+OpenAI Responses protocol adapter，并形成只接受 frozen PUBLIC synthetic Task 的独立
+Eval Runner。当前仍没有 live-provider smoke、real model result、billing receipt 或
+stochastic Harness comparison。较早的 `TemplateArtifactGenerator` 仍是确定性的
+Stage 0 scaffolding。
 
 S2 已补齐 durable AgentRun、Safe Trace、HarnessRunBundle integrity binding 与
 deterministic Offline golden runner；仍没有 real model、mid-run checkpoint/resume
@@ -240,9 +243,9 @@ then locate it from the Trace.
   交错 Session 的 replay 隔离。provider 已接受但结果未知时，同一个 Session 会 terminal，
   不允许再次 egress。
 - 以上测试只访问 `127.0.0.1`，使用 sentinel key；没有真实 API key、外网请求或 live
-  provider result。RFC-0002 仍为 Proposed；只有 compiled synthetic catalog、
-  one-shot operator permit、packaged zero-egress runner、safe receipt 与 Eval runner
-  独立最终审查完成后，才可能请求 owner 批准一次 bounded smoke。
+  provider result。RFC-0002 已在 compiled synthetic catalog、one-shot operator permit、
+  packaged zero-egress runner、safe receipt 与独立最终审查全部通过后转为 Accepted；
+  bounded live smoke 仍须 owner 另行明确批准。
 
 #### S3 adapter 验证回执 · 2026-07-30
 
@@ -262,6 +265,54 @@ then locate it from the Trace.
   质量、账单金额或产品价值。
 - 完整回执见
   [Stage 2 S3 Build Note](../operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)。
+
+#### S3 bounded synthetic Eval Runner delta · 2026-07-30
+
+- `apps/eval-runner` 是普通 `apps/api` 之外的独立 packaged 入口，只能读取
+  checked-in、hash-frozen、`PUBLIC` 且 literal synthetic 的 Task Pack 003 与
+  environment manifest；它不依赖 API、PostgreSQL、in-memory 产品 Adapter、Spring、
+  Temporal、Self Model、Connector 或真实用户数据。
+- 默认命令只执行 preflight，核验 Java release、pack/environment raw hash、
+  Capture request hash、完整 Task hash、execution/pricing profile fingerprint、
+  provider request 上限、deadline、token 上界与 whole-run reservation。默认路径不创建
+  marker，不读取 credential，不构建 client/model，不启动 Run，也不发起网络请求。
+- 显式 `--execute` 先要求 real TTY，再在当前 owner home 的私有 POSIX 目录内用
+  `CREATE_NEW` 创建 exact attempt marker。Operator 必须输入完整
+  `EXECUTE {attemptId}`；marker 在 challenge 前创建，因此错误 challenge 也会烧掉当前
+  host 上这一次 attempt。
+- 30 秒 `OneShotExecutionPermit` 同时绑定 server-owned execution profile 与完整
+  Task hash；AgentKernel egress 前以 CAS 消费，过期、Task drift 或重复消费都在 socket
+  前失败。只有 marker、challenge 与 permit 全部通过后才允许单次读取
+  `OPENAI_API_KEY`。
+- production client 固定 `https://api.openai.com/v1`、`Proxy.NO_PROXY`、
+  `maxRetries(0)`、Run deadline timeout 与 `LogLevel.OFF`；CLI、环境变量或 Task 不能
+  覆盖 model、pricing、base URL、tool、budget 或 key source。
+- Attempt journal 在 credential read、client creation、每个 provider SDK create intent、
+  attributed usage 与 terminal record publish 周围写入 append-only、hash-chained、
+  `fsync` event。`PROVIDER_SDK_CREATE_INTENT` 是保守边界：它表示调用可能发生，不证明
+  provider 接收、执行或计费。
+- Terminal record 在同一私有目录先以 `CREATE_NEW` 写入 `.pending`、`fsync`、read-back
+  校验，再用 `ATOMIC_MOVE` 发布 `{attemptId}.run.json` 并 `fsync` 目录。它原子发布完整
+  synthetic AgentRun、Artifact、Bundle、observed usage/cost 与 effects counter；它不与
+  provider 调用形成事务，也不替代 S2 PostgreSQL product `AgentRun`。
+- Billing 使用三态：零 provider SDK create 为 `NOT_INVOKED`；每次 create 都有可信
+  model/usage 为 `ATTRIBUTED`；至少一次 create、但 attribution 不完整为 `UNKNOWN`。
+  `UNKNOWN + observedCostUsd=0` 只表示没有观测到费用，不能解释成免费。Reservation 是
+  egress 前的 authorization ceiling；provider 已返回的 observed usage 即使超过
+  reservation 或 requested budget，也必须保留并形成 paid failure，而不能截断、清零或
+  丢进 exception。Billing 与后续对账必须读取 terminal record 顶层
+  `observedCostUsd/observedTokenCount`；`runCostUsd/runTokenCount` 来自经过 product
+  sanitizer 的 Run/Bundle，失败路径可以合法为 `0`。`meteringMatchesRun=false` 明确记录
+  两者不同，Run usage 不能充当 invoice truth。
+- 这个 one-shot Gate 只覆盖当前 POSIX host 与当前 owner home。它不防同 UID 恶意进程、
+  owner/root 删除或重写文件、换主机重放，也不是 provider-side idempotency、签名、
+  WORM、全账户 hard spend cap 或 invoice reconciliation。
+- Runner 的 engineering-complete 状态只有在当前 focused/package/full verification、
+  contract/doc checks 与独立 security/metering review 全部通过后才成立。即使成立，也仍
+  没有读取 real key、访问 live provider、产生 real model result 或 billing receipt；
+  owner 尚未批准或执行 bounded live smoke。
+- 独立回执见
+  [Bounded Synthetic Eval Runner Build Note](../operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)。
 
 ### S4 · Harness comparison, faults and bounded handoff
 
@@ -418,6 +469,14 @@ baseline.
   contracts、doc links、packaged forced-restart、两轮独立复审与中文
   [Build Note](../operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)；
   下一步自动进入 S3。
+- [x] 2026-07-30：S3 OpenAI Responses adapter 的 loopback protocol/safety slice
+  完成；它没有进入普通 API，也没有读取 real key 或访问 live provider。
+- [x] 2026-07-30：isolated Eval Runner 的独立安全审查关闭为
+  `P0=0、P1=0`。审查要求把 provider-observed metering 与经过 sanitizer 的 Run usage
+  分栏保存，并将本地 POSIX、journal、atomic publish 与 billing-unknown 边界写入规格。
+- [x] 2026-07-30：runner focused/package/full verification、contracts、doc links
+  与 diff check 全部通过，engineering Gate 关闭。该 Gate 没有触发或冒充
+  live-provider smoke。
 
 ## Decisions
 
@@ -446,6 +505,12 @@ baseline.
 - 2026-07-30：V4 是 additive migration，但除了三张新表，还为 Capture
   identity/request hash 添加 composite unique constraint，以便 Evidence binding
   由 owner-scoped FK 约束。
+- 2026-07-30：S3 的 one-shot permit 是当前 POSIX host/owner home 内的操作防误触
+  边界，不是跨主机 exactly-once 或 provider idempotency；outcome-unknown 不自动 retry。
+- 2026-07-30：reservation 是调用前 authorization ceiling，不是 observed metering 的
+  截断上限。Billing/对账读取 terminal record 顶层
+  `observedCostUsd/observedTokenCount`；Run/Bundle usage 只表达经过 product sanitizer
+  的 execution projection。
 
 ## Surprises and failures
 
@@ -484,6 +549,12 @@ baseline.
 - typed ResourceBinding 不能只靠 Java constructor。Schema、Node semantic
   verifier 与 PostgreSQL typed shape 必须共同约束 `capture://...` 和
   `artifact-version://...`。
+- S3 security review 证明“Run 中 usage 为 0”不等于“provider 没有 usage”。失败结果
+  可能被 sanitizer 合法归零，而 adapter 已在失败前观察到 model/usage。Terminal
+  record 因此同时保存 `observedCostUsd/observedTokenCount` 与
+  `runCostUsd/runTokenCount`，并用 `meteringMatchesRun=false` 显式暴露差异。
+- Provider SDK create intent 与 provider acceptance 之间没有原子边界。进程在其间死亡
+  时不能证明是否计费；journal 必须保留保守证据，后续状态为 `UNKNOWN`，不能当成免费。
 
 ## Verification receipts
 
@@ -508,6 +579,18 @@ S2 当前已确认：
 - 完整证据与 non-claims 见
   [S2 Build Note](../operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)。
 
+S3 bounded runner 当前状态：
+
+- 实现、frozen assets、one-shot POSIX Gate、attempt journal、atomic local run record
+  与 loopback fault tests 已形成；
+- 独立安全审查为 `P0=0、P1=0`；
+- exact commit `e90c704` 的隔离 full `clean verify` 共通过 `246` tests；focused
+  Eval reactor、contracts、doc links 与 diff check 同时为 Green；
+- live-provider smoke 未执行；没有 real key read、real provider result、real token
+  receipt 或 billing receipt；
+- 完整边界与验证结果见
+  [S3 Runner Build Note](../operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)。
+
 ## AI Coding receipt
 
 本切片继续使用单 writer + 多个 read-only reviewer。流程是 packaged Acceptance
@@ -521,8 +604,9 @@ success、Trace 配对、SafeText parity、typed binding 和 DB numeric evidence
 当前机制已经从 inline summary 进化为 durable Agent execution truth：server-owned
 Task、adapter outcome、Trace state machine、owner-scoped Evidence、structured
 proposal、deterministic verification、atomic Artifact commit、Result、safe
-hash-chain Trace 与 HarnessRunBundle 可以跨 JVM verified read。仍没有 durable
-checkpoint/resume、real model 或 stochastic Harness experiment。
+hash-chain Trace 与 HarnessRunBundle 可以跨 JVM verified read。S3 已形成 real-model
+protocol adapter 与受控 synthetic execution path，但尚无 live result；仍没有 durable
+checkpoint/resume 或 stochastic Harness experiment。
 
 ## Career receipt
 
@@ -539,7 +623,10 @@ transaction/FK/CAS 与跨语言 golden hash 形成可审计 Run。owner-led diag
 ## Outcome and next hypothesis
 
 S2 的工程假设已在 focused evidence 中成立：不引入 Runtime framework、real model
-或外部动作，也能形成持久、完整性绑定、可离线重执行的 AgentRun truth。最终 Merge
-Gate 已在稳定快照中重复全部证据。下一条可证伪假设进入 S3：
-一个 real provider adapter 能否在保持相同 Task/Trace/Result 边界、默认零 live call
-和无 credential 落盘的前提下，产生固定 baseline。学习与市场工作仍暂停且未完成。
+或外部动作，也能形成持久、完整性绑定、可离线重执行的 AgentRun truth。S3 adapter 与
+bounded runner 的 engineering Gate 已通过。下一条自动执行的安全假设是 production
+read-only journal verifier 与真实 fat-JAR crash/restart evidence；它不读取 credential、
+不访问 live provider。唯一一次 bounded live-provider smoke 仍由 owner 另行批准。
+没有 live receipt 时不得声称已有 real-model fixed baseline；即使执行 smoke，也不能由
+一次结果证明模型质量、账单准确性或产品价值。S4 的 offline Harness/fault infrastructure
+可以继续研发，但任何 live experiment 仍保持 Gate closed。学习与市场工作仍暂停且未完成。

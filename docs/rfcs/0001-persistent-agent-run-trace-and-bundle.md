@@ -271,6 +271,37 @@ S2 分成三种语义边界：
 read，不能宣称可以完整离线重执行。S2 的 Offline runner 不是 product replay API，
 不得连接 shared/persistent store、真实用户 Evidence 或外部副作用。
 
+### 9. Stage 2 S3 isolated Eval compatibility note
+
+S3 的 `apps/eval-runner` 复用本 RFC 的 AgentRun、Safe Trace 与 Bundle 不变量，但它
+没有改变 S2 的产品真相边界：
+
+- PostgreSQL 中 owner-scoped `AgentRun` 仍是普通产品执行真相；
+- Eval Runner 使用单次内存 Store 执行 frozen PUBLIC synthetic case，并在当前 owner
+  home 发布一份本地 terminal JSON record；它不是 product Store 或 replay API；
+- 本地 record 通过私有 `.pending`、read-back、`ATOMIC_MOVE` 与目录 `fsync`
+  atomic publish。该原子性不延伸到 provider 调用，也不替代成功 Artifact + terminal
+  PostgreSQL Run 的 transaction；
+- POSIX one-shot marker 只约束当前 host/owner home，不是跨主机 exactly-once、
+  provider-side idempotency、签名或 authenticity；
+- attempt journal 在 provider SDK create 前先记录 intent。该 intent 只表示调用可能
+  发生，不能证明 provider 已接收、已执行、已计费或未计费；
+- provider invocation 已可能发生、但 observed usage 不完整时必须使用
+  `billingStatus=UNKNOWN`；`observedCostUsd=0` 只表示未观测，不能解释成免费；
+- Billing 与 invoice reconciliation 必须读取 terminal record 顶层
+  `observedCostUsd/observedTokenCount`。Run/Bundle 的
+  `runCostUsd/runTokenCount` 可能因合法 sanitizer 在失败路径为 `0`；
+  `meteringMatchesRun=false` 明确说明两者不一致，因此 Run usage 不能充当 invoice
+  truth；
+- reservation 是调用前 authorization ceiling，不是 provider observed usage 的截断
+  上限。任何已观察 usage，即使超过 reservation 或 requested budget，也必须保存；
+- 同 UID 恶意进程、owner/root 删除或重写本地状态、跨主机重放、WORM、全账户 hard
+  spend cap 和 invoice-level reconciliation 仍属于后续 production boundary。
+
+Runner 的 engineering-complete 声明以其当前 focused/package/full verification 和独立
+审查全部通过为条件；live-provider smoke 尚未执行，没有 real key、real model result 或
+billing receipt。
+
 ## Alternatives
 
 ### 只保存 inline Trace

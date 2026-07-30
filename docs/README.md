@@ -50,6 +50,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [持久 AgentRun 真相 ADR](./architecture/decisions/0006-persistent-agent-run-truth.md)
 - [RFC-0001：持久 AgentRun、Safe Trace 与 HarnessRunBundle](./rfcs/0001-persistent-agent-run-trace-and-bundle.md)
 - [RFC-0002：真实模型 synthetic egress 与计量边界](./rfcs/0002-real-model-synthetic-egress-and-metering.md)
+- [Eval Task Packs、Offline baseline 与 bounded provider runner](../evals/README.md)
 
 ### 想参与研究与共同进化
 
@@ -73,6 +74,8 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [S4 Operating and Gate-Closure Build Note](./operations/build-notes/2026-07-29-s4-operating-gate-closure.md)
 - [Stage 2 S1 Fake Agent Draft Build Note](./operations/build-notes/2026-07-30-s2-s1-fake-agent-draft-loop.md)
 - [Stage 2 S2 持久 AgentRun Build Note](./operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)
+- [Stage 2 S3 OpenAI Responses Adapter Build Note](./operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)
+- [Stage 2 S3 Bounded Synthetic Eval Runner Build Note](./operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)
 - [Stage 1 Operating Runbook](./operations/stage1-operating-runbook.md)
 - [S4 Durable Operations Case Card](./interview/case-cards/2026-07-29-stage1-durable-operations.md)
 - [商业验证路线](./business/validation-roadmap.md)

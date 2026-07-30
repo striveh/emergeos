@@ -23,12 +23,18 @@ runner 中重复得到 exact golden hashes。它们是 Agent Runtime/Harness 的
 不是真实模型质量证明，也不是可对真实用户数据执行的 product replay API。
 完整工程回执见
 [Stage 2 S2 Build Note](./docs/operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)。
-Stage 2 S3 已增加隔离的 OpenAI Responses adapter，并只用本机 loopback `HttpServer`
-验证 strict tool、manual item replay、structured output、usage/cost、timeout、零重试、
-错误映射与交错 Session 隔离。它尚未接入 API 或 Eval runner，也没有读取真实 key、访问
-OpenAI 或产生真实模型结果。Temporal、生产认证、加密存储和平台连接器仍未接入，不应将
-这些测试理解为生产自治能力或真实平台结果。S3 adapter 的 Red/Green、安全审查、计量与
-非声明见 [Stage 2 S3 Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)。
+Stage 2 S3 已把隔离的 OpenAI Responses adapter 装配到独立 `apps/eval-runner`。默认
+packaged command 只核验 hash-frozen Task Pack、environment、Task/profile/pricing
+identity 与预算，保持零 key read、零 client、零 marker 和零网络；显式 `--execute`
+还必须经过真实 TTY challenge、本机 POSIX one-shot marker、30 秒 Task-bound permit、
+append-only attempt journal 与原子 terminal run record。production client 固定官方
+base URL、`Proxy.NO_PROXY`、`maxRetries(0)`、日志关闭和 30 秒 deadline。完整执行目前
+只在本机 loopback `HttpServer` 验证；**尚未读取真实 key、尚未访问 OpenAI、尚无 live
+模型结果或费用回执**。普通 `apps/api` 仍只装配 Fake。adapter 历史回执见
+[Stage 2 S3 Adapter Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)，
+runner 工程回执见
+[Stage 2 S3 Eval Runner Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)。
+Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
 中的单用户 `local-user`，没有实现登录或多租户身份验证。主体不接受 Header 或请求体覆盖，
@@ -91,6 +97,9 @@ npm ci
 ./scripts/verify-contracts.sh
 ./mvnw --batch-mode --no-transfer-progress verify
 
+# 默认只做 zero-egress preflight；不会读取 OPENAI_API_KEY
+java -jar apps/eval-runner/target/emerge-eval-runner-0.1.0-SNAPSHOT.jar
+
 # clean-checkout、packaged JVM、独立 Fake Provider 的 Stage 1 operating demo
 ./scripts/run-stage1-operating-demo.sh
 
@@ -106,6 +115,22 @@ EMERGE_DB_USER='emerge' \
 EMERGE_DB_PASSWORD='local-prototype-only' \
 java -jar apps/api/target/emerge-api-0.1.0-SNAPSHOT.jar
 ```
+
+`apps/eval-runner` 是隔离的 synthetic verification 入口，不是产品 API，也不是 CI
+中的 live 命令。只有项目所有者明确批准唯一一次 bounded smoke 后，才可在真实 TTY
+手工运行：
+
+```bash
+java -jar apps/eval-runner/target/emerge-eval-runner-0.1.0-SNAPSHOT.jar --execute
+```
+
+它会先显示 frozen hashes、最大两次 provider request 与 `$0.417000` requested
+reservation（调用前 authorization ceiling，并非 provider invoice 的 hard cap），
+随后要求输入完整 `EXECUTE {attemptId}`。marker 在 challenge 前以 `CREATE_NEW` 取得，
+所以输错 challenge 也会烧掉该 attempt；不要删除 marker 来伪造“重试”。本机状态位于
+`~/.emergeos/eval-attempts/`：目录为 `0700`，marker、journal 和 terminal record 为
+`0600`。`billingStatus=UNKNOWN` 时，即使 `observedCostUsd=0`，也只表示费用未被可靠
+观测，绝不表示 provider 没有计费。当前仓库没有 live report。
 
 S3 Action API 还要求另行启动测试用的 loopback Fake Provider。默认地址故意指向不可用的
 `127.0.0.1:1`，因此普通快速启动不会产生模拟对象；若批准 Action，只会得到可解释的
@@ -199,11 +224,12 @@ ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问 loopback F
 
 ```text
 apps/api/                 HTTP 入口与依赖装配
+apps/eval-runner/         隔离 synthetic model Eval；默认 zero-egress，live 路径有 one-shot Gate
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例、AgentKernel 与端口
 adapters/inmemory/        本地适配器、有限 Fake Agent 循环与 Offline golden runner
 adapters/postgres/        Capture、Artifact、local Action、AgentRun/Trace 的 PostgreSQL 适配器
-adapters/openai/          隔离的 Responses adapter；当前只有 loopback contract evidence
+adapters/openai/          隔离 Responses adapter；已接 Eval Runner、未接产品 API，当前无 live receipt
 contracts/                跨语言 JSON Schema
 evals/                    合成任务与回归证据
 docs/                     产品、架构、研究、运营和共同治理
@@ -212,8 +238,8 @@ docs/                     产品、架构、研究、运营和共同治理
 依赖只允许由外向内：
 
 ```text
-api → adapters → core → contracts
-api ───────────→ core
+api → fake/postgres adapters → core → contracts
+eval-runner → openai/agent-loop adapters → core → contracts
 ```
 
 核心层不能依赖 Spring、Temporal、AgentScope、数据库或模型 SDK。

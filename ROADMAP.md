@@ -73,7 +73,9 @@ Gate：
 执行计划：
 [Stage 2 AgentKernel and Eval-Driven Development](./docs/plans/2026-07-29-stage-2-agent-kernel-evaluation.md)。
 
-状态：**S1、S2 工程完成；下一步进入 S3 real model adapter。** 这条技术主线来自项目所有者 2026-07-30 的 Roadmap
+状态：**S1、S2 工程完成；S3 real model protocol adapter 与 isolated synthetic
+Eval Runner 的 engineering Gate 已通过。Live-provider smoke 尚未执行；S3 durability
+hardening 正在继续，S4 Harness comparison 尚未开始。** 这条技术主线来自项目所有者 2026-07-30 的 Roadmap
 顺序例外；它不代表 Stage 1 的学习、市场或真实 Connector Gate 已完成。
 
 S1 回执：
@@ -82,17 +84,30 @@ S1 回执：
 S2 回执：
 [持久 AgentRun、Safe Trace 与 HarnessRunBundle Build Note](./docs/operations/build-notes/2026-07-30-s2-persistent-agent-run-trace.md)。
 
+S3 adapter 回执：
+[OpenAI Responses Adapter Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)。
+
+S3 bounded runner 回执：
+[Bounded Synthetic Eval Runner Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)。
+
 产品/工程：
 
 - Provider-neutral `AgentKernel` SPI，先 Fake 后 real adapter；
 - Task/Result Envelope、工具循环、预算、取消、结构化输出和 Trace；
 - PostgreSQL durable AgentRun、Safe Trace hash chain、typed resource binding、
   verified read 与 deterministic Offline golden runner；
+- 普通 API 之外的 isolated synthetic Eval Runner：默认 zero-egress preflight，
+  real TTY + exact Task-bound one-shot permit，POSIX attempt marker/journal 与本地
+  atomic terminal run record；
 - 固定模型与 Task Pack 的 H0/H1 Harness 对照；
 - 错误工具结果、限流、Context Drift 和 Prompt Injection 故障集。
 
-当前 S2 只完成 synthetic Fake success 的 deterministic baseline；real model、
-H0/H1 重复实验、真实任务、人工盲评和 stochastic quality Eval 尚未执行。
+当前已经完成 synthetic Fake success 的 deterministic baseline、OpenAI Responses
+protocol 的 loopback evidence 与 bounded runner engineering Gate；仍没有读取 real key、执行 live-provider smoke、
+取得 real model result 或 billing receipt。H0/H1 重复实验、真实任务、人工盲评和
+stochastic quality Eval 尚未执行。`billingStatus=UNKNOWN` 表示 provider 费用未知，
+不能解释成免费；reservation 是调用前的 authorization ceiling，provider 已返回的
+observed usage 即使超过 reservation 也必须如实保留。
 
 学习：
 

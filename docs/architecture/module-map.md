@@ -28,7 +28,13 @@ adapters/openai
   OpenAI Java SDK 4.43.0 的 Responses protocol adapter；实现 strict tool、
   manual item replay、strict structured final、per-call reservation、usage/cost
   归因与 typed failure。只接受外部装配好的 client，不读取环境变量或凭据；
-  当前只有 loopback contract tests，未接 API、Eval runner 或真实 provider
+  当前已由 isolated Eval Runner 装配，但未接普通 API，也没有 live-provider receipt
+
+apps/eval-runner
+  独立 packaged synthetic Eval 入口；依赖 contracts、core、agent-loop 与 openai
+  默认只做 zero-egress preflight；live 路径需要 real TTY、exact Task-bound
+  one-shot permit、POSIX attempt marker/journal 与本地 atomic terminal run record
+  不依赖 API、PostgreSQL、Spring、Temporal、产品 Store 或真实用户数据
 
 apps/api
   HTTP DTO、Controller、异常映射、loopback 启动保护、Agent draft 入口、
@@ -44,6 +50,7 @@ flowchart RL
   MEM["adapters/inmemory"]
   PG["adapters/postgres"]
   OAI["adapters/openai"]
+  EVAL["apps/eval-runner"]
   CORE["modules/core"]
   CT["modules/contracts"]
 
@@ -54,6 +61,10 @@ flowchart RL
   MEM --> LOOP
   OAI --> LOOP
   OAI --> CORE
+  EVAL --> OAI
+  EVAL --> LOOP
+  EVAL --> CORE
+  EVAL --> CT
   LOOP --> CORE
   MEM --> CORE
   PG --> CORE
@@ -65,6 +76,8 @@ flowchart RL
 - `agent-loop` 不依赖具体模型 SDK、Spring、数据库、Temporal 或上层 Agent Runtime。
 - `openai` 不依赖 API、Spring、数据库、Temporal 或其他 Agent Runtime；SDK 类型不得
   越过 adapter boundary。
+- `eval-runner` 不依赖 API、PostgreSQL、in-memory 产品 Adapter、Spring、Temporal
+  或上层 Agent Runtime；它不能成为普通产品 route。
 - Maven Enforcer 在 `core`、`contracts` 与 `agent-loop` 构建中阻止依赖越界。
 - Adapter 只能实现 Core Port，不能让 SDK 类型进入 Core。
 - API 负责传输协议，不能包含领域状态转移。
@@ -94,7 +107,7 @@ flowchart RL
 adapters/agent-loop        # 已实现：provider-neutral、framework-free 有界 Loop 与 Tool SPI
 adapters/inmemory/agent    # 已实现：脚本 Fake Model 与 Offline golden baseline
 adapters/postgres          # 已实现：Capture、Artifact、local Action、AgentRun/Trace
-adapters/openai            # 已实现 protocol adapter；等待独立 synthetic Eval runner 装配
+adapters/openai            # 已实现 protocol adapter；只由独立 synthetic Eval runner 装配
 adapters/object-storage
 adapters/agent-agentscope
 adapters/agent-pi
@@ -102,9 +115,31 @@ adapters/temporal
 adapters/connectors/*
 ```
 
-除已标记的通用 Agent Loop、OpenAI protocol adapter、in-memory Fake/Offline baseline 与
-PostgreSQL 持久适配器外，其余都是计划，
+除已标记的通用 Agent Loop、OpenAI protocol adapter、isolated Eval Runner、
+in-memory Fake/Offline baseline 与 PostgreSQL 持久适配器外，其余都是计划，
 不应在存在真实实现前创建空目录。S3 模拟 Provider 属于 API 外层的 test-only 协议，不代表
-真实 Connector。OpenAI adapter 也没有普通产品 route、credential resolver 或 live receipt；
-它当前只证明 loopback contract。当前 safe Trace 已持久化并与 owner-scoped AgentRun、Result、Artifact
-version 和 HarnessRunBundle 绑定；它不是原始模型 transcript。
+真实 Connector。OpenAI adapter 没有普通产品 route 或 product credential resolver；
+Eval Runner 的 engineering-complete 声明以当前最终验证通过为条件，且当前没有读取 real
+key、访问 live provider、产生 real model result 或 billing receipt。当前 safe Trace 已
+持久化并与 owner-scoped AgentRun、Result、Artifact version 和 HarnessRunBundle 绑定；
+它不是原始模型 transcript。
+
+## Isolated Eval Runner 的本地边界
+
+- one-shot 只在当前 POSIX host 与当前 owner home 内成立，不是跨主机分布式锁或
+  provider-side idempotency key；
+- marker 在 challenge 前用 `CREATE_NEW` 创建；错误 challenge 也会烧掉这次 attempt，
+  credential 只能在 permit 之后读取一次；
+- 私有目录必须是 `0700`、文件必须是 `0600`，并拒绝 symlink、foreign owner 与
+  foreign allow ACL；
+- attempt journal 在 credential read、client creation、provider SDK create intent 与
+  terminal record publish 周围 append + `fsync` hash-chain event；
+- terminal run record 通过私有 `.pending` 文件、read-back、`ATOMIC_MOVE` 与目录
+  `fsync` 发布；这是本地 atomic publish，不与 provider 调用形成一个 transaction，
+  也不替代 PostgreSQL product `AgentRun`；
+- 同 UID 恶意进程、owner/root 删除或重写文件、换主机重放、签名、WORM 与 invoice
+  reconciliation 都不在该 Gate 的保护范围内；
+- provider invocation 已可能发生但 usage 未完整归因时必须记为
+  `billingStatus=UNKNOWN`。此时 `observedCostUsd=0` 只表示未观测，不能解释成免费；
+  reservation 是调用前 authorization ceiling，provider 返回的 observed usage 即使超过
+  reservation 也必须保留。

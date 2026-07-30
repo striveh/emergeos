@@ -1,6 +1,7 @@
 # RFC-0002：真实模型只经 synthetic Eval egress，并绑定身份与计量
 
-- 状态：Proposed，待 adapter 与 packaged Eval receipt 验证后转 Accepted
+- 状态：Accepted；adapter、isolated Eval Runner、完整验证与独立审查均已通过。
+  Accepted 不等于批准或执行 live-provider smoke
 - 日期：2026-07-30
 - 范围：Stage 2 S3
 
@@ -154,8 +155,20 @@ profile 不匹配或 pack hash 漂移，在建立 socket 前失败。
   宣称 provider 没有计费；
 - 不自动 retry outcome-unknown 调用。
 
-完整 reservation/unknown billing 审计需要后续 per-call metering receipt；在该结构落地前，
-S3 不宣称 invoice-level 对账或全账户 hard spend cap。
+Eval terminal record 必须把 provider-observed metering 与 Run projection 分开：
+
+- `observedCostUsd/observedTokenCount` 是 adapter 在 provider response 中实际观察并按
+  frozen PricingProfile 归因的顶层计量；billing 与后续对账必须读取这两个字段；
+- `runCostUsd/runTokenCount` 来自经过 deterministic product sanitizer 的 Run/Bundle；
+  失败路径可以合法为 `0`，不能据此断言 provider 未计费；
+- `meteringMatchesRun=false` 明确表达两层不同。Run usage 不是 invoice truth；
+- provider observed usage 即使超过 reservation 或 requested budget，也必须完整保留并
+  形成 paid failure，不能截断、清零或丢进 exception；
+- reservation 只是在 egress 前判断是否授权本次 worst-case request 的 authorization
+  ceiling，不是 provider 最终 usage 的记账上限。
+
+完整 reservation/unknown billing 审计仍需要 provider invoice reconciliation；S3 不宣称
+invoice-level 对账或全账户 hard spend cap。
 
 ## Synthetic preflight
 
@@ -175,6 +188,24 @@ S3 不宣称 invoice-level 对账或全账户 hard spend cap。
 
 默认、`--help`、invalid pack、missing TTY、错误 challenge 与 replayed receipt 都必须证明
 key read count、model factory count、HTTP request count 均为零。
+
+## Local one-shot、journal 与 terminal record
+
+- attempt marker 在 challenge 前使用 `CREATE_NEW` 创建；错误 challenge 也会烧掉当前
+  host 上的 attempt；
+- marker、journal 与 run record 只允许位于当前 owner home 下的私有 POSIX 目录：
+  directory `0700`、file `0600`，拒绝 symlink、foreign owner 与 foreign allow ACL；
+- 30 秒 permit 绑定完整 Task hash 与 execution profile，并在 AgentKernel egress 前以
+  CAS 消费；
+- attempt journal 在 credential read、client creation、provider SDK create intent、
+  attributed usage 与 terminal record publish 周围 append + `fsync` hash-chain event；
+- provider SDK create intent 是保守事实，只表示调用可能发生。进程随后死亡时不能证明
+  provider 是否接收或计费，必须保留 `billingStatus=UNKNOWN`；
+- terminal record 先写 `.pending`、`fsync`、read-back，再使用 `ATOMIC_MOVE` 发布并
+  `fsync` directory。这是本地 atomic publish，不与 provider request 构成 transaction；
+- one-shot 只覆盖当前 POSIX host/owner home。它不防同 UID 恶意进程、owner/root
+  删除或重写文件、换主机重放，也不是 provider-side idempotency、签名、WORM 或远程
+  approval。
 
 ## 不做的事
 
@@ -199,17 +230,28 @@ RFC 转为 Accepted 前必须具备：
 - OpenAI adapter loopback protocol、retry=0、timeout、failure mapping、usage retention tests；
 - `apps/api` dependency isolation；
 - packaged Eval preflight 的 zero-egress evidence；
+- real TTY/错误 challenge/replay/expired permit 的 zero-effect evidence；
+- POSIX marker、attempt journal、atomic terminal record 与 billing
+  `NOT_INVOKED/ATTRIBUTED/UNKNOWN` evidence；
+- terminal record 顶层 observed metering 与 Run metering mismatch evidence；
 - 一份中文 Build Note 和独立 security/metering review；
 - 只有 owner 明确批准后，才允许最多一次 bounded live smoke。
 
 ## Implementation note · 2026-07-30
 
-OpenAI Responses adapter 与 loopback protocol/safety tests 已实现，但没有接入 API 或
-独立 Eval runner，也没有 live call。已验证 strict tool、manual replay、structured final、
-单次 reservation、usage/cost、timeout/no retry、typed HTTP failure 与 Session 隔离。
-本 RFC 继续保持 Proposed：packaged zero-egress preflight、compiled synthetic catalog、
-one-shot operator permit 与 safe receipt 尚未完成。adapter 独立复审已关闭为
-`P0=0、P1=0、P2=0`；Eval runner 与整个 live Gate 仍需另一次最终复审。
+OpenAI Responses adapter 与 loopback protocol/safety tests 已实现，且只由独立
+`apps/eval-runner` 装配；普通 API 仍没有 live route。Runner 已形成 compiled synthetic
+catalog、默认 packaged zero-egress preflight、real TTY challenge、exact Task-bound
+one-shot permit、POSIX marker/journal、atomic terminal record 与 safe receipt。
+
+独立安全审查关闭为 `P0=0、P1=0`；其审查修正要求已经冻结在本 RFC：billing 读取顶层
+`observedCostUsd/observedTokenCount`，不能把 sanitizer 后的 Run usage 当 invoice truth；
+`UNKNOWN` 不能解释成免费，reservation 只是 authorization ceiling。
+
+Focused/package/full verification、contracts、doc links 与最终 Diff 检查已通过，
+因此本 RFC 转为 Accepted。这只代表 runner engineering Gate 完成；live-provider smoke
+仍需 owner 另行明确批准。当前没有读取 real key、发起 live request、产生 real model
+result 或 billing receipt，S4 Harness comparison 也尚未开始。
 
 ## 参考
 
