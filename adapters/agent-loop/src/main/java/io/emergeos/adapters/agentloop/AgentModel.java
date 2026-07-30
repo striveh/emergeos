@@ -1,19 +1,74 @@
 package io.emergeos.adapters.agentloop;
 
+import io.emergeos.contracts.ContractText;
+import io.emergeos.contracts.ContractValueDomains;
 import io.emergeos.contracts.TaskEnvelope;
+import io.emergeos.core.port.CancellationSignal;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * Provider-neutral model boundary used by the framework-free Agent loop.
  *
- * <p>Provider SDK types must not cross this interface.
+ * <p>Every run receives a new {@link Session}. Provider continuation state, response IDs and tool
+ * call IDs must remain inside that session, so concurrent runs cannot share mutable context.
+ * Provider SDK types must not cross this interface.
  */
+@FunctionalInterface
 public interface AgentModel {
 
-  String modelId();
+  Session open(TaskEnvelope task);
 
-  Decision decide(Turn turn);
+  @FunctionalInterface
+  interface Session extends AutoCloseable {
+
+    ModelStep next(Turn turn, ModelCallContext context);
+
+    @Override
+    default void close() {}
+  }
+
+  record ModelCallContext(
+      long remainingDeadlineMs,
+      BigDecimal remainingBudgetUsd,
+      CancellationSignal cancellation) {
+
+    public ModelCallContext {
+      ContractValueDomains.requireDuration(
+          remainingDeadlineMs, "remainingDeadlineMs", false);
+      ContractValueDomains.requireUsd(remainingBudgetUsd, "remainingBudgetUsd");
+      Objects.requireNonNull(cancellation, "cancellation");
+    }
+  }
+
+  record ModelStep(
+      Decision decision,
+      String resolvedModel,
+      ModelUsage usage) {
+
+    public ModelStep {
+      Objects.requireNonNull(decision, "decision");
+      ContractText.require(
+          resolvedModel, "resolvedModel", ContractText.MAX_MODEL_LENGTH);
+      if (!resolvedModel.matches("[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}")) {
+        throw new IllegalArgumentException("resolvedModel is outside the safe model domain");
+      }
+      Objects.requireNonNull(usage, "usage");
+    }
+  }
+
+  record ModelUsage(BigDecimal costUsd, long tokenCount) {
+
+    public ModelUsage {
+      ContractValueDomains.requireUsd(costUsd, "model costUsd");
+      ContractValueDomains.requireSafeCount(tokenCount, "model tokenCount");
+    }
+
+    public static ModelUsage zero() {
+      return new ModelUsage(BigDecimal.ZERO, 0);
+    }
+  }
 
   record Turn(TaskEnvelope task, List<ToolResult> toolResults) {
 

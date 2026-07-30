@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
 class FrameworkFreeAgentKernelTest {
@@ -146,22 +147,15 @@ class FrameworkFreeAgentKernelTest {
   void stopsBeforeExecutingAToolWhenTheDeadlineIsExhausted() {
     RecordingCaptureStore captures = new RecordingCaptureStore(capture());
     AtomicLong now = new AtomicLong();
+    ScriptedFakeModel delegate = ScriptedFakeModel.forCaptureDraft();
     AgentModel model =
-        new AgentModel() {
-          private final AgentModel delegate = ScriptedFakeModel.forCaptureDraft();
-
-          @Override
-          public String modelId() {
-            return delegate.modelId();
-          }
-
-          @Override
-          public Decision decide(Turn turn) {
-            Decision decision = delegate.decide(turn);
-            now.set(2_000_000);
-            return decision;
-          }
-        };
+        stateless(
+            ScriptedFakeModel.MODEL_ID,
+            turn -> {
+              AgentModel.Decision decision = delegate.decide(turn);
+              now.set(2_000_000);
+              return decision;
+            });
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             model,
@@ -182,18 +176,12 @@ class FrameworkFreeAgentKernelTest {
   void rejectsAFinalReturnedAfterTheDeadline() {
     AtomicLong now = new AtomicLong();
     AgentModel slowFinal =
-        new AgentModel() {
-          @Override
-          public String modelId() {
-            return "slow-final-fake";
-          }
-
-          @Override
-          public Decision decide(Turn turn) {
-            now.set(2_000_000);
-            return new FinalDraft("late draft", List.of(CAPTURE_REF));
-          }
-        };
+        stateless(
+            "slow-final-fake",
+            turn -> {
+              now.set(2_000_000);
+              return new AgentModel.FinalDraft("late draft", List.of(CAPTURE_REF));
+            });
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             slowFinal,
@@ -214,18 +202,13 @@ class FrameworkFreeAgentKernelTest {
   void rejectsAFinalReturnedAfterCancellation() {
     AtomicBoolean cancelled = new AtomicBoolean();
     AgentModel cancellingFinal =
-        new AgentModel() {
-          @Override
-          public String modelId() {
-            return "cancelling-final-fake";
-          }
-
-          @Override
-          public Decision decide(Turn turn) {
-            cancelled.set(true);
-            return new FinalDraft("cancelled draft", List.of(CAPTURE_REF));
-          }
-        };
+        stateless(
+            "cancelling-final-fake",
+            turn -> {
+              cancelled.set(true);
+              return new AgentModel.FinalDraft(
+                  "cancelled draft", List.of(CAPTURE_REF));
+            });
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             cancellingFinal,
@@ -311,17 +294,11 @@ class FrameworkFreeAgentKernelTest {
   void rejectedModelControlledReferenceCannotLeakIntoTrace() {
     RecordingCaptureStore captures = new RecordingCaptureStore(capture());
     AgentModel maliciousReference =
-        new AgentModel() {
-          @Override
-          public String modelId() {
-            return "malicious-reference-fake";
-          }
-
-          @Override
-          public Decision decide(Turn turn) {
-            return new ToolCall(CaptureReadTool.NAME, "capture://" + SENTINEL);
-          }
-        };
+        stateless(
+            "malicious-reference-fake",
+            turn ->
+                new AgentModel.ToolCall(
+                    CaptureReadTool.NAME, "capture://" + SENTINEL));
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             maliciousReference,
@@ -363,17 +340,9 @@ class FrameworkFreeAgentKernelTest {
   void stopsAtTheToolCallLimitWithoutExecutingAnotherTool() {
     RecordingCaptureStore captures = new RecordingCaptureStore(capture());
     AgentModel repeatedToolCall =
-        new AgentModel() {
-          @Override
-          public String modelId() {
-            return "repeated-tool-call-fake";
-          }
-
-          @Override
-          public Decision decide(Turn turn) {
-            return new ToolCall(CaptureReadTool.NAME, CAPTURE_REF);
-          }
-        };
+        stateless(
+            "repeated-tool-call-fake",
+            turn -> new AgentModel.ToolCall(CaptureReadTool.NAME, CAPTURE_REF));
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             repeatedToolCall,
@@ -392,17 +361,9 @@ class FrameworkFreeAgentKernelTest {
   void stopsAtTheModelStepLimit() {
     RecordingCaptureStore captures = new RecordingCaptureStore(capture());
     AgentModel repeatedToolCall =
-        new AgentModel() {
-          @Override
-          public String modelId() {
-            return "model-step-limit-fake";
-          }
-
-          @Override
-          public Decision decide(Turn turn) {
-            return new ToolCall(CaptureReadTool.NAME, CAPTURE_REF);
-          }
-        };
+        stateless(
+            "model-step-limit-fake",
+            turn -> new AgentModel.ToolCall(CaptureReadTool.NAME, CAPTURE_REF));
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             repeatedToolCall,
@@ -480,6 +441,15 @@ class FrameworkFreeAgentKernelTest {
         Instant.parse("2026-07-30T00:00:00Z"));
   }
 
+  private static AgentModel stateless(
+      String modelId,
+      Function<AgentModel.Turn, AgentModel.Decision> decisions) {
+    return task ->
+        (turn, context) ->
+            new AgentModel.ModelStep(
+                decisions.apply(turn), modelId, AgentModel.ModelUsage.zero());
+  }
+
   private static final class RecordingCaptureStore implements CaptureStore {
     private final Capture capture;
     private int findOwnedCalls;
@@ -513,14 +483,20 @@ class FrameworkFreeAgentKernelTest {
     }
 
     @Override
-    public String modelId() {
-      return delegate.modelId();
-    }
+    public Session open(TaskEnvelope task) {
+      Session session = delegate.open(task);
+      return new Session() {
+        @Override
+        public ModelStep next(Turn turn, ModelCallContext context) {
+          observedTurns.add(turn);
+          return session.next(turn, context);
+        }
 
-    @Override
-    public Decision decide(Turn turn) {
-      observedTurns.add(turn);
-      return delegate.decide(turn);
+        @Override
+        public void close() {
+          session.close();
+        }
+      };
     }
 
     private List<Turn> observedTurns() {

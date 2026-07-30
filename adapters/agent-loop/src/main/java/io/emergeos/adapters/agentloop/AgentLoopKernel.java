@@ -1,5 +1,6 @@
 package io.emergeos.adapters.agentloop;
 
+import io.emergeos.contracts.ContractValueDomains;
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.AgentDraftProposal;
@@ -36,9 +37,7 @@ public final class AgentLoopKernel implements AgentKernel {
     this(model, tools, maxModelSteps, maxToolCalls, System::nanoTime);
   }
 
-  /**
-   * Deterministic clock injection for frozen evaluation and deadline tests.
-   */
+  /** Deterministic clock injection for frozen evaluation and deadline tests. */
   public AgentLoopKernel(
       AgentModel model,
       AgentToolRegistry tools,
@@ -56,92 +55,238 @@ public final class AgentLoopKernel implements AgentKernel {
   }
 
   @Override
-  public AgentRunOutcome run(
-      TaskEnvelope task,
-      CancellationSignal cancellation) {
+  public AgentRunOutcome run(TaskEnvelope task, CancellationSignal cancellation) {
     Objects.requireNonNull(task, "task");
     Objects.requireNonNull(cancellation, "cancellation");
     long startedNanos = nanoTime.getAsLong();
-    List<AgentTraceEvent> trace = new ArrayList<>();
-    List<AgentModel.ToolResult> toolResults = new ArrayList<>();
-    int toolCalls = 0;
+    RunState state = new RunState();
     if (task.maxModelSteps() > modelStepCeiling
         || task.maxToolCalls() > toolCallCeiling) {
       return outcome(
-          RunStatus.BLOCKED, null, trace, "HARNESS_LIMIT_MISMATCH", startedNanos);
+          task,
+          RunStatus.BLOCKED,
+          null,
+          state,
+          "HARNESS_LIMIT_MISMATCH",
+          startedNanos);
     }
 
+    AgentModel.Session session;
+    try {
+      session = Objects.requireNonNull(model.open(task), "model session");
+    } catch (AgentModelFailure failure) {
+      return outcome(
+          task,
+          failure.code().status(),
+          null,
+          state,
+          failure.code().failureReason(),
+          startedNanos);
+    } catch (RuntimeException sessionFailure) {
+      return outcome(
+          task,
+          RunStatus.FAILED,
+          null,
+          state,
+          "MODEL_SESSION_FAILED",
+          startedNanos);
+    }
+
+    try {
+      return runSession(task, cancellation, session, state, startedNanos);
+    } finally {
+      try {
+        session.close();
+      } catch (RuntimeException ignoredCloseFailure) {
+        // Session cleanup cannot rewrite an already determined product outcome.
+      }
+    }
+  }
+
+  private AgentRunOutcome runSession(
+      TaskEnvelope task,
+      CancellationSignal cancellation,
+      AgentModel.Session session,
+      RunState state,
+      long startedNanos) {
+    int toolCalls = 0;
     for (int modelStep = 0; modelStep < task.maxModelSteps(); modelStep++) {
       if (cancellation.isCancelled()) {
         return outcome(
-            RunStatus.CANCELLED, null, trace, "CANCELLED", startedNanos);
+            task, RunStatus.CANCELLED, null, state, "CANCELLED", startedNanos);
       }
-      if (deadlineExceeded(task, startedNanos)) {
+      long remainingDeadlineMs = remainingDeadlineMs(task, startedNanos);
+      if (remainingDeadlineMs <= 0) {
         return outcome(
-            RunStatus.FAILED, null, trace, "DEADLINE_EXHAUSTED", startedNanos);
+            task,
+            RunStatus.FAILED,
+            null,
+            state,
+            "DEADLINE_EXHAUSTED",
+            startedNanos);
       }
-      AgentModel.Decision decision;
+
+      AgentModel.ModelStep step;
       try {
-        decision = model.decide(new AgentModel.Turn(task, toolResults));
-      } catch (RuntimeException modelFailure) {
-        trace.add(
+        step =
+            Objects.requireNonNull(
+                session.next(
+                    new AgentModel.Turn(task, state.toolResults),
+                    new AgentModel.ModelCallContext(
+                        remainingDeadlineMs,
+                        remainingBudget(task, state.costUsd),
+                        cancellation)),
+                "model step");
+      } catch (AgentModelFailure failure) {
+        state.trace.add(
             event(
-                trace,
+                state.trace,
                 AgentTraceEventType.MODEL_STEP,
                 null,
                 "FAILED",
                 "task://" + task.id()));
         return outcome(
-            RunStatus.FAILED, null, trace, "MODEL_STEP_FAILED", startedNanos);
+            task,
+            failure.code().status(),
+            null,
+            state,
+            failure.code().failureReason(),
+            startedNanos);
+      } catch (RuntimeException modelFailure) {
+        state.trace.add(
+            event(
+                state.trace,
+                AgentTraceEventType.MODEL_STEP,
+                null,
+                "FAILED",
+                "task://" + task.id()));
+        return outcome(
+            task,
+            RunStatus.FAILED,
+            null,
+            state,
+            "MODEL_STEP_FAILED",
+            startedNanos);
       }
-      trace.add(
+
+      try {
+        state.costUsd = state.costUsd.add(step.usage().costUsd());
+        state.tokenCount = Math.addExact(state.tokenCount, step.usage().tokenCount());
+        ContractValueDomains.requireUsd(state.costUsd, "aggregate model costUsd");
+        ContractValueDomains.requireSafeCount(
+            state.tokenCount, "aggregate model tokenCount");
+      } catch (RuntimeException invalidUsage) {
+        state.trace.add(
+            event(
+                state.trace,
+                AgentTraceEventType.MODEL_STEP,
+                null,
+                "FAILED",
+                "task://" + task.id()));
+        return outcome(
+            task,
+            RunStatus.FAILED,
+            null,
+            state,
+            "MODEL_USAGE_INVALID",
+            startedNanos);
+      }
+
+      String priorResolvedModel = state.resolvedModel;
+      state.resolvedModel = step.resolvedModel();
+      if (priorResolvedModel != null && !priorResolvedModel.equals(step.resolvedModel())) {
+        state.trace.add(
+            event(
+                state.trace,
+                AgentTraceEventType.MODEL_STEP,
+                null,
+                "FAILED",
+                "task://" + task.id()));
+        return outcome(
+            task,
+            RunStatus.FAILED,
+            null,
+            state,
+            "MODEL_IDENTITY_DRIFT",
+            startedNanos);
+      }
+      if (state.costUsd.compareTo(task.budgetUsd()) > 0) {
+        state.trace.add(
+            event(
+                state.trace,
+                AgentTraceEventType.MODEL_STEP,
+                null,
+                "FAILED",
+                "task://" + task.id()));
+        return outcome(
+            task,
+            RunStatus.BLOCKED,
+            null,
+            state,
+            "MODEL_BUDGET_EXHAUSTED",
+            startedNanos);
+      }
+
+      AgentModel.Decision decision = step.decision();
+      state.trace.add(
           event(
-              trace,
+              state.trace,
               AgentTraceEventType.MODEL_STEP,
               null,
               "COMPLETED",
               "task://" + task.id()));
       if (cancellation.isCancelled()) {
         return outcome(
-            RunStatus.CANCELLED, null, trace, "CANCELLED", startedNanos);
+            task, RunStatus.CANCELLED, null, state, "CANCELLED", startedNanos);
       }
       if (deadlineExceeded(task, startedNanos)) {
         return outcome(
-            RunStatus.FAILED, null, trace, "DEADLINE_EXHAUSTED", startedNanos);
+            task,
+            RunStatus.FAILED,
+            null,
+            state,
+            "DEADLINE_EXHAUSTED",
+            startedNanos);
       }
       if (decision instanceof AgentModel.ToolCall call) {
         if (!tools.isRegistered(call.toolName())
             || !task.requiredTools().contains(call.toolName())
             || !task.inputRefs().contains(call.reference())) {
-          trace.add(
+          state.trace.add(
               event(
-                  trace,
+                  state.trace,
                   AgentTraceEventType.TOOL_REJECTED,
                   "untrusted",
                   "BLOCKED",
                   null));
           return outcome(
-              RunStatus.BLOCKED, null, trace, "TOOL_NOT_ALLOWED", startedNanos);
+              task,
+              RunStatus.BLOCKED,
+              null,
+              state,
+              "TOOL_NOT_ALLOWED",
+              startedNanos);
         }
-        trace.add(
+        state.trace.add(
             event(
-                trace,
+                state.trace,
                 AgentTraceEventType.TOOL_REQUEST,
                 call.toolName(),
                 "REQUESTED",
                 call.reference()));
         if (toolCalls >= task.maxToolCalls()) {
-          trace.add(
+          state.trace.add(
               event(
-                  trace,
+                  state.trace,
                   AgentTraceEventType.TOOL_REJECTED,
                   call.toolName(),
                   "LIMIT_EXHAUSTED",
                   call.reference()));
           return outcome(
+              task,
               RunStatus.BLOCKED,
               null,
-              trace,
+              state,
               "TOOL_CALL_LIMIT_EXHAUSTED",
               startedNanos);
         }
@@ -149,57 +294,60 @@ public final class AgentLoopKernel implements AgentKernel {
         try {
           execution = tools.execute(task, call);
         } catch (RuntimeException toolFailure) {
-          trace.add(
+          state.trace.add(
               event(
-                  trace,
+                  state.trace,
                   AgentTraceEventType.TOOL_REJECTED,
                   call.toolName(),
                   "FAILED",
                   call.reference()));
           return outcome(
+              task,
               RunStatus.FAILED,
               null,
-              trace,
+              state,
               "TOOL_EXECUTION_FAILED",
               startedNanos);
         }
         if (!execution.allowed()) {
-          trace.add(
+          state.trace.add(
               event(
-                  trace,
+                  state.trace,
                   AgentTraceEventType.TOOL_REJECTED,
                   call.toolName(),
                   "BLOCKED",
                   call.reference()));
           return outcome(
+              task,
               RunStatus.BLOCKED,
               null,
-              trace,
+              state,
               execution.failureReason(),
               startedNanos);
         }
         if (execution.result() == null
             || !call.toolName().equals(execution.result().toolName())
             || !call.reference().equals(execution.result().reference())) {
-          trace.add(
+          state.trace.add(
               event(
-                  trace,
+                  state.trace,
                   AgentTraceEventType.TOOL_REJECTED,
                   call.toolName(),
                   "MALFORMED_RESULT",
                   call.reference()));
           return outcome(
+              task,
               RunStatus.FAILED,
               null,
-              trace,
+              state,
               "MALFORMED_TOOL_RESULT",
               startedNanos);
         }
         toolCalls++;
-        toolResults.add(execution.result());
-        trace.add(
+        state.toolResults.add(execution.result());
+        state.trace.add(
             event(
-                trace,
+                state.trace,
                 AgentTraceEventType.TOOL_RESULT,
                 call.toolName(),
                 "SUCCEEDED",
@@ -207,60 +355,72 @@ public final class AgentLoopKernel implements AgentKernel {
         continue;
       }
       if (decision instanceof AgentModel.FinalDraft finalDraft) {
-        trace.add(
+        state.trace.add(
             event(
-                trace,
+                state.trace,
                 AgentTraceEventType.STRUCTURED_FINAL,
                 null,
                 "PROPOSED",
                 "task://" + task.id()));
         return outcome(
+            task,
             RunStatus.SUCCEEDED,
             new AgentDraftProposal(finalDraft.content(), finalDraft.evidenceRefs()),
-            trace,
+            state,
             null,
             startedNanos);
       }
       return outcome(
+          task,
           RunStatus.FAILED,
           null,
-          trace,
+          state,
           "UNSUPPORTED_MODEL_DECISION",
           startedNanos);
     }
     return outcome(
+        task,
         RunStatus.FAILED,
         null,
-        trace,
+        state,
         "MODEL_STEP_LIMIT_EXHAUSTED",
         startedNanos);
   }
 
   private AgentRunOutcome outcome(
+      TaskEnvelope task,
       RunStatus status,
       AgentDraftProposal proposal,
-      List<AgentTraceEvent> trace,
+      RunState state,
       String failureReason,
       long startedNanos) {
     return new AgentRunOutcome(
         status,
         proposal,
-        trace.stream()
+        state.trace.stream()
             .filter(event -> event.type() == AgentTraceEventType.TOOL_RESULT)
             .map(AgentTraceEvent::reference)
             .distinct()
             .toList(),
-        trace,
-        model.modelId(),
-        BigDecimal.ZERO,
-        0,
+        state.trace,
+        state.resolvedModel,
+        state.costUsd,
+        state.tokenCount,
         elapsedMillis(startedNanos),
         failureReason);
   }
 
+  private BigDecimal remainingBudget(TaskEnvelope task, BigDecimal spent) {
+    BigDecimal remaining = task.budgetUsd().subtract(spent);
+    return remaining.signum() < 0 ? BigDecimal.ZERO : remaining;
+  }
+
+  private long remainingDeadlineMs(TaskEnvelope task, long startedNanos) {
+    return task.deadlineMs() - elapsedMillis(startedNanos);
+  }
+
   private boolean deadlineExceeded(TaskEnvelope task, long startedNanos) {
-    long deadlineNanos = TimeUnit.MILLISECONDS.toNanos(task.deadlineMs());
-    return elapsedNanos(startedNanos) >= deadlineNanos;
+    return remainingDeadlineMs(task, startedNanos) <= 0;
   }
 
   private long elapsedMillis(long startedNanos) {
@@ -278,5 +438,14 @@ public final class AgentLoopKernel implements AgentKernel {
       String status,
       String reference) {
     return new AgentTraceEvent(trace.size() + 1, type, toolName, status, reference);
+  }
+
+  private static final class RunState {
+
+    private final List<AgentTraceEvent> trace = new ArrayList<>();
+    private final List<AgentModel.ToolResult> toolResults = new ArrayList<>();
+    private String resolvedModel;
+    private BigDecimal costUsd = BigDecimal.ZERO;
+    private long tokenCount;
   }
 }

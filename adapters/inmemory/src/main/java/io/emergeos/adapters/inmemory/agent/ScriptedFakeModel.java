@@ -24,11 +24,12 @@ public final class ScriptedFakeModel implements AgentModel {
   }
 
   @Override
-  public String modelId() {
-    return MODEL_ID;
+  public Session open(io.emergeos.contracts.TaskEnvelope task) {
+    Objects.requireNonNull(task, "task");
+    return (turn, context) ->
+        new ModelStep(decide(turn), MODEL_ID, ModelUsage.zero());
   }
 
-  @Override
   public Decision decide(Turn turn) {
     Objects.requireNonNull(turn, "turn");
     if (turn.toolResults().isEmpty()) {
