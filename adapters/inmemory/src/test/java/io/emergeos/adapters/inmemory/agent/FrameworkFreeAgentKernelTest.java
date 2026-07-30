@@ -17,6 +17,8 @@ import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.Capture;
 import io.emergeos.core.domain.CaptureRequestHashes;
 import io.emergeos.core.domain.CaptureSourceType;
+import io.emergeos.core.domain.AgentTraceEvent;
+import io.emergeos.core.domain.AgentTraceEventType;
 import io.emergeos.core.port.CancellationSignal;
 import io.emergeos.core.port.CaptureStore;
 import java.math.BigDecimal;
@@ -90,36 +92,21 @@ class FrameworkFreeAgentKernelTest {
   @Test
   void blocksAnUndeclaredToolWithoutExecutingIt() {
     RecordingCaptureStore captures = new RecordingCaptureStore(capture());
-    AtomicInteger dangerCalls = new AtomicInteger();
-    AgentTool registeredDangerTool =
-        new AgentTool() {
-          @Override
-          public String name() {
-            return "danger.write";
-          }
-
-          @Override
-          public AgentModel.ToolResult execute(
-              TaskEnvelope task, AgentModel.ToolCall call) {
-            dangerCalls.incrementAndGet();
-            return new AgentModel.ToolResult(name(), call.reference(), "must not execute");
-          }
-        };
     AgentLoopKernel kernel =
         new AgentLoopKernel(
-            ScriptedFakeModel.requestingTool("danger.write"),
-            new AgentToolRegistry(
-                List.of(new CaptureReadTool(captures), registeredDangerTool)),
+            ScriptedFakeModel.forCaptureDraft(),
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             2,
             1);
 
-    var outcome = kernel.run(task(List.of("capture.read")), CancellationSignal.never());
+    var outcome = kernel.run(task(List.of()), CancellationSignal.never());
 
     assertEquals(RunStatus.BLOCKED, outcome.status());
     assertNull(outcome.proposal());
     assertEquals(0, captures.findOwnedCalls);
-    assertEquals(0, dangerCalls.get());
-    assertTrue(outcome.trace().stream().noneMatch(event -> event.toString().contains("danger.write")));
+    assertTrue(
+        outcome.trace().stream()
+            .noneMatch(event -> event.toString().contains("capture.read")));
   }
 
   @Test
@@ -133,7 +120,7 @@ class FrameworkFreeAgentKernelTest {
             2,
             1);
     AtomicInteger checks = new AtomicInteger();
-    CancellationSignal cancelBeforeSecondModel = () -> checks.incrementAndGet() >= 3;
+    CancellationSignal cancelBeforeSecondModel = () -> checks.incrementAndGet() >= 4;
 
     var outcome = kernel.run(task(List.of("capture.read")), cancelBeforeSecondModel);
 
@@ -185,7 +172,8 @@ class FrameworkFreeAgentKernelTest {
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             slowFinal,
-            new AgentToolRegistry(List.of()),
+            new AgentToolRegistry(
+                List.of(new CaptureReadTool(new RecordingCaptureStore(capture())))),
             1,
             1,
             now::get);
@@ -212,7 +200,8 @@ class FrameworkFreeAgentKernelTest {
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             cancellingFinal,
-            new AgentToolRegistry(List.of()),
+            new AgentToolRegistry(
+                List.of(new CaptureReadTool(new RecordingCaptureStore(capture())))),
             1,
             1);
 
@@ -225,16 +214,28 @@ class FrameworkFreeAgentKernelTest {
 
   @Test
   void rejectsAMalformedToolResultBeforeItCanBecomeEvidence() {
-    AgentTool malformedTool =
-        new AgentTool() {
+    AgentTool<CaptureReadTool.Arguments> malformedTool =
+        new AgentTool<>() {
           @Override
           public String name() {
             return CaptureReadTool.NAME;
           }
 
           @Override
-          public AgentModel.ToolResult execute(
+          public String argumentSchemaId() {
+            return CaptureReadTool.ARGUMENT_SCHEMA_ID;
+          }
+
+          @Override
+          public Validation<CaptureReadTool.Arguments> validate(
               TaskEnvelope task, AgentModel.ToolCall call) {
+            return Validation.valid(
+                new CaptureReadTool.Arguments(task.inputRefs().getFirst()));
+          }
+
+          @Override
+          public AgentModel.ToolResult execute(
+              TaskEnvelope task, CaptureReadTool.Arguments arguments) {
             return new AgentModel.ToolResult(
                 CaptureReadTool.NAME, "capture://forged", "untrusted tool content");
           }
@@ -251,6 +252,206 @@ class FrameworkFreeAgentKernelTest {
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("MALFORMED_TOOL_RESULT", outcome.failureReason());
     assertNull(outcome.proposal());
+  }
+
+  @Test
+  void rejectsSchemaInvalidToolArgumentsBeforeDispatchWithoutLosingUsage() {
+    List<String> invalidArguments =
+        List.of(
+            "",
+            """
+            {"reference":"capture://capture-agent-kernel",
+             "reference":"capture://forged"}
+            """,
+            """
+            {"reference":"capture://capture-agent-kernel"} {}
+            """,
+            "{}",
+            """
+            {"reference":"capture://capture-agent-kernel",
+             "unexpected":"PRIVATE_ARGUMENT_SENTINEL"}
+            """,
+            """
+            {"reference":7}
+            """,
+            """
+            {"reference":{"nested":{"too":{"deep":"capture://capture-agent-kernel"}}}}
+            """,
+            """
+            {"reference":"%s"}
+            """.formatted("x".repeat(2_000)));
+
+    for (String rawArguments : invalidArguments) {
+      RecordingCaptureStore captures = new RecordingCaptureStore(capture());
+      AtomicInteger modelCalls = new AtomicInteger();
+      AgentModel model =
+          task ->
+              (turn, context) -> {
+                modelCalls.incrementAndGet();
+                return new AgentModel.ModelStep(
+                    new AgentModel.ToolCall(
+                        CaptureReadTool.NAME,
+                        AgentModel.ToolArguments.fromJson(rawArguments)),
+                    "schema-fault-fake",
+                    new AgentModel.ModelUsage(new BigDecimal("0.000710"), 110));
+              };
+      AgentLoopKernel kernel =
+          new AgentLoopKernel(
+              model,
+              new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
+              2,
+              1);
+
+      var outcome =
+          kernel.run(
+              task(
+                  List.of("capture.read"),
+                  5_000,
+                  2,
+                  1,
+                  new BigDecimal("0.010000")),
+              CancellationSignal.never());
+
+      assertEquals(RunStatus.FAILED, outcome.status());
+      assertEquals("TOOL_ARGUMENTS_INVALID", outcome.failureReason());
+      assertNull(outcome.proposal());
+      assertEquals(List.of(), outcome.obtainedEvidenceRefs());
+      assertEquals(0, captures.findOwnedCalls);
+      assertEquals(1, modelCalls.get());
+      assertEquals("schema-fault-fake", outcome.resolvedModel());
+      assertEquals(new BigDecimal("0.000710"), outcome.costUsd());
+      assertEquals(110, outcome.tokenCount());
+      assertEquals(
+          List.of(AgentTraceEventType.MODEL_STEP, AgentTraceEventType.TOOL_REJECTED),
+          outcome.trace().stream().map(AgentTraceEvent::type).toList());
+      assertEquals("FAILED", outcome.trace().getLast().status());
+      assertNull(outcome.trace().getLast().reference());
+      assertFalse(outcome.toString().contains("PRIVATE_ARGUMENT_SENTINEL"));
+      if (!rawArguments.isEmpty()) {
+        assertFalse(outcome.toString().contains(rawArguments));
+      }
+    }
+  }
+
+  @Test
+  void rejectsNonCanonicalCaptureReferencesBeforeTheCaptureStore() {
+    String tooLong = "capture://" + "a".repeat(201);
+    List<InvalidReference> invalidReferences =
+        List.of(
+            new InvalidReference(
+                "capture://.bad",
+                "{\"reference\":\"capture://.bad\"}"),
+            new InvalidReference(
+                "capture://_bad",
+                "{\"reference\":\"capture://_bad\"}"),
+            new InvalidReference(
+                "capture://-bad",
+                "{\"reference\":\"capture://-bad\"}"),
+            new InvalidReference(
+                "capture://:bad",
+                "{\"reference\":\"capture://:bad\"}"),
+            new InvalidReference(
+                "capture://a:b",
+                "{\"reference\":\"capture://a:b\"}"),
+            new InvalidReference(
+                "capture://nested/id",
+                "{\"reference\":\"capture://nested/id\"}"),
+            new InvalidReference(
+                "capture://中文",
+                "{\"reference\":\"capture://中文\"}"),
+            new InvalidReference(
+                "capture://line\nbreak",
+                "{\"reference\":\"capture://line\\nbreak\"}"),
+            new InvalidReference(
+                tooLong,
+                "{\"reference\":\"" + tooLong + "\"}"));
+
+    for (InvalidReference invalid : invalidReferences) {
+      RecordingCaptureStore captures = new RecordingCaptureStore(capture());
+      AgentModel model =
+          stateless(
+              "non-canonical-reference-fake",
+              turn ->
+                  new AgentModel.ToolCall(
+                      CaptureReadTool.NAME,
+                      AgentModel.ToolArguments.fromJson(invalid.rawArguments())));
+      AgentLoopKernel kernel =
+          new AgentLoopKernel(
+              model,
+              new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
+              1,
+              1);
+
+      var outcome =
+          kernel.run(
+              task(
+                  List.of("capture.read"),
+                  5_000,
+                  1,
+                  1,
+                  BigDecimal.ZERO,
+                  invalid.reference()),
+              CancellationSignal.never());
+
+      assertEquals(RunStatus.FAILED, outcome.status());
+      assertEquals("TOOL_ARGUMENTS_INVALID", outcome.failureReason());
+      assertEquals(0, captures.findOwnedCalls);
+      assertEquals(AgentTraceEventType.TOOL_REJECTED, outcome.trace().getLast().type());
+      assertNull(outcome.trace().getLast().reference());
+    }
+  }
+
+  @Test
+  void acceptsTheCanonicalTildeCaptureReferenceAtTheToolBoundary() {
+    String captureId = "capture~agent-kernel";
+    String captureRef = "capture://" + captureId;
+    Capture canonicalCapture =
+        new Capture(
+            captureId,
+            PRINCIPAL,
+            "agent-kernel-tilde-nonce",
+            CaptureRequestHashes.sha256(
+                SENTINEL,
+                CaptureSourceType.TEXT,
+                "agent-kernel-test",
+                DataClass.PERSONAL),
+            SENTINEL,
+            CaptureSourceType.TEXT,
+            "agent-kernel-test",
+            DataClass.PERSONAL,
+            Instant.parse("2026-07-30T00:00:00Z"));
+    RecordingCaptureStore captures = new RecordingCaptureStore(canonicalCapture);
+    AgentModel model =
+        stateless(
+            "canonical-reference-fake",
+            turn ->
+                turn.toolResults().isEmpty()
+                    ? new AgentModel.ToolCall(
+                        CaptureReadTool.NAME,
+                        AgentModel.ToolArguments.fromJson(
+                            "{\"reference\":\"" + captureRef + "\"}"))
+                    : new AgentModel.FinalDraft("canonical draft", List.of(captureRef)));
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            model,
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
+            2,
+            1);
+
+    var outcome =
+        kernel.run(
+            task(
+                List.of("capture.read"),
+                5_000,
+                2,
+                1,
+                BigDecimal.ZERO,
+                captureRef),
+            CancellationSignal.never());
+
+    assertEquals(RunStatus.SUCCEEDED, outcome.status());
+    assertEquals(List.of(captureRef), outcome.obtainedEvidenceRefs());
+    assertEquals(1, captures.findOwnedCalls);
   }
 
   @Test
@@ -298,7 +499,9 @@ class FrameworkFreeAgentKernelTest {
             "malicious-reference-fake",
             turn ->
                 new AgentModel.ToolCall(
-                    CaptureReadTool.NAME, "capture://" + SENTINEL));
+                    CaptureReadTool.NAME,
+                    AgentModel.ToolArguments.forReference(
+                        "capture://" + SENTINEL)));
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             maliciousReference,
@@ -319,21 +522,30 @@ class FrameworkFreeAgentKernelTest {
 
   @Test
   void blocksADeclaredButUnregisteredTool() {
+    RecordingCaptureStore captures = new RecordingCaptureStore(capture());
+    AgentModel undeclaredToolModel =
+        stateless(
+            "unregistered-tool-fake",
+            turn ->
+                new AgentModel.ToolCall(
+                    "unknown.read",
+                    AgentModel.ToolArguments.forReference(CAPTURE_REF)));
     AgentLoopKernel kernel =
         new AgentLoopKernel(
-            ScriptedFakeModel.forCaptureDraft(),
-            new AgentToolRegistry(List.of()),
+            undeclaredToolModel,
+            new AgentToolRegistry(List.of(new CaptureReadTool(captures))),
             1,
             1);
 
     var outcome =
         kernel.run(
-            task(List.of("capture.read"), 5_000, 1, 1),
+            task(List.of("unknown.read"), 5_000, 1, 1),
             CancellationSignal.never());
 
     assertEquals(RunStatus.BLOCKED, outcome.status());
     assertEquals("TOOL_NOT_ALLOWED", outcome.failureReason());
     assertNull(outcome.proposal());
+    assertEquals(0, captures.findOwnedCalls);
   }
 
   @Test
@@ -342,7 +554,10 @@ class FrameworkFreeAgentKernelTest {
     AgentModel repeatedToolCall =
         stateless(
             "repeated-tool-call-fake",
-            turn -> new AgentModel.ToolCall(CaptureReadTool.NAME, CAPTURE_REF));
+            turn ->
+                new AgentModel.ToolCall(
+                    CaptureReadTool.NAME,
+                    AgentModel.ToolArguments.forReference(CAPTURE_REF)));
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             repeatedToolCall,
@@ -363,7 +578,10 @@ class FrameworkFreeAgentKernelTest {
     AgentModel repeatedToolCall =
         stateless(
             "model-step-limit-fake",
-            turn -> new AgentModel.ToolCall(CaptureReadTool.NAME, CAPTURE_REF));
+            turn ->
+                new AgentModel.ToolCall(
+                    CaptureReadTool.NAME,
+                    AgentModel.ToolArguments.forReference(CAPTURE_REF)));
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             repeatedToolCall,
@@ -394,6 +612,36 @@ class FrameworkFreeAgentKernelTest {
       long deadlineMs,
       int maxModelSteps,
       int maxToolCalls) {
+    return task(
+        requiredTools,
+        deadlineMs,
+        maxModelSteps,
+        maxToolCalls,
+        BigDecimal.ZERO);
+  }
+
+  private static TaskEnvelope task(
+      List<String> requiredTools,
+      long deadlineMs,
+      int maxModelSteps,
+      int maxToolCalls,
+      BigDecimal budgetUsd) {
+    return task(
+        requiredTools,
+        deadlineMs,
+        maxModelSteps,
+        maxToolCalls,
+        budgetUsd,
+        CAPTURE_REF);
+  }
+
+  private static TaskEnvelope task(
+      List<String> requiredTools,
+      long deadlineMs,
+      int maxModelSteps,
+      int maxToolCalls,
+      BigDecimal budgetUsd,
+      String inputRef) {
     return new TaskEnvelope(
         "1.0",
         "task-agent-kernel",
@@ -402,7 +650,7 @@ class FrameworkFreeAgentKernelTest {
         List.of(),
         "CREATE_ARTICLE_DRAFT",
         "Create one evidence-linked draft",
-        List.of(CAPTURE_REF),
+        List.of(inputRef),
         List.of(),
         List.of("text"),
         DataClass.PERSONAL,
@@ -415,7 +663,7 @@ class FrameworkFreeAgentKernelTest {
         maxModelSteps,
         maxToolCalls,
         deadlineMs,
-        BigDecimal.ZERO,
+        budgetUsd,
         null,
         null,
         null,
@@ -423,12 +671,14 @@ class FrameworkFreeAgentKernelTest {
         "agent-draft-policy-v1",
         "stage2-s1",
         "ref-only-v1",
-        "agent-tools-v1",
+        "agent-tools-v2",
         null,
         List.of(),
         List.of(),
         "structured final or non-success");
   }
+
+  private record InvalidReference(String reference, String rawArguments) {}
 
   private static Capture capture() {
     return new Capture(

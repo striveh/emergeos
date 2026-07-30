@@ -21,9 +21,9 @@ final class SyntheticEvalCatalog {
   static final String PACK_RAW_SHA256 =
       "bd44cc3ea0230b9267da5cfb6c29fdd2a7452131fe14864e16e6c39b516c8711";
   static final String ENVIRONMENT_PATH =
-      "evals/environments/openai-responses-synthetic-v1.json";
+      "evals/environments/openai-responses-synthetic-v2.json";
   static final String ENVIRONMENT_RAW_SHA256 =
-      "f2ddb405f81ac4cf51c8f54479ddbb13fd00b62c9995bee2e52b43db85cccc6f";
+      "440fe5ce81202d5083e33463849b19e310077c9906baab8d253c1f59fd7de968";
 
   static final String PRINCIPAL_ID = "synthetic-eval-owner";
   static final String CAPTURE_ID = "capture-openai-public-003";
@@ -46,13 +46,13 @@ final class SyntheticEvalCatalog {
   static final String EXPECTED_CAPTURE_REQUEST_HASH =
       "72e9f2a45fa1f2cf43cab0963cd0bd5cd16bedb5f8d40c0ae67401014b6f90ea";
   static final String EXPECTED_TASK_HASH =
-      "9d35efba62250bd01e6a4a0122c28ff1fb4e0ad0f5d74d4c4028058c173f0301";
+      "842f24eba3bc3179d510959a1658876a1ee03a5286babd4552720ff172980a71";
   static final String EXPECTED_PRICING_FINGERPRINT =
       "96be6f771a5c8d967424f61571af3737072a1c85ed780f9e7f0ab06ba1c7e28c";
   static final String EXPECTED_PROFILE_FINGERPRINT =
-      "4241b2fc0879dd9df9131f9c31a89893d09a3a57ef5c485c56f199b32252b703";
+      "bcf080220b5f6bb26446fa6aabae01800aff846b26b043e885f56af4e8412c6a";
   static final String EXPECTED_ATTEMPT_ID =
-      "701d54cef51b3f6cd1d4e1dd6e0b4565dde305a3d2be6682e97af7f15493c3a2";
+      "8a51691cfd4e5fdb46d441f225db65a390ffc637fbe0eca0c03e7aafc5156592";
 
   private SyntheticEvalCatalog() {}
 
@@ -86,7 +86,7 @@ final class SyntheticEvalCatalog {
         "synthetic-model-egress-policy-v1",
         "stage2-s3-eval",
         "ref-only-v1",
-        "agent-tools-v1",
+        "agent-tools-v2",
         "environment://sha256:" + ENVIRONMENT_RAW_SHA256,
         List.of(AgentExecutionProfile.SYNTHETIC_MODEL_EGRESS_CAPABILITY),
         DataClass.PUBLIC);

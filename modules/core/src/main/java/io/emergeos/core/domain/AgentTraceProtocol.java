@@ -37,7 +37,12 @@ public final class AgentTraceProtocol {
               event.reference()));
     }
     verifyKernelEvents(
-        task, outcome.status(), events, outcome.obtainedEvidenceRefs(), false);
+        task,
+        outcome.status(),
+        outcome.failureReason(),
+        events,
+        outcome.obtainedEvidenceRefs(),
+        false);
   }
 
   public static void verifyTerminal(
@@ -81,12 +86,19 @@ public final class AgentTraceProtocol {
       throw new IllegalArgumentException(
           "A successful CREATE_ARTICLE_DRAFT Run requires one committed Artifact");
     }
-    verifyKernelEvents(task, result.status(), kernelEvents, result.evidenceRefs(), true);
+    verifyKernelEvents(
+        task,
+        result.status(),
+        result.failureReason(),
+        kernelEvents,
+        result.evidenceRefs(),
+        true);
   }
 
   private static void verifyKernelEvents(
       TaskEnvelope task,
       RunStatus status,
+      String failureReason,
       List<EventView> events,
       List<String> declaredEvidenceRefs,
       boolean allowRejectedStructuredFinal) {
@@ -97,6 +109,7 @@ public final class AgentTraceProtocol {
     String pendingReference = null;
     boolean pendingOverLimit = false;
     boolean structuredFinal = false;
+    boolean toolArgumentsRejected = false;
     List<String> obtainedEvidence = new ArrayList<>();
     String taskRef = "task://" + task.id();
 
@@ -136,6 +149,12 @@ public final class AgentTraceProtocol {
               && "untrusted".equals(event.toolName())
               && "BLOCKED".equals(event.status())
               && event.reference() == null) {
+            phase = Phase.TERMINAL;
+          } else if (event.type() == TraceEventType.TOOL_REJECTED
+              && task.requiredTools().contains(event.toolName())
+              && "FAILED".equals(event.status())
+              && event.reference() == null) {
+            toolArgumentsRejected = true;
             phase = Phase.TERMINAL;
           } else {
             throw new IllegalArgumentException(
@@ -189,6 +208,14 @@ public final class AgentTraceProtocol {
       throw new IllegalArgumentException(
           "Declared Evidence refs must equal distinct successful TOOL_RESULT refs");
     }
+    boolean declaresToolArgumentsFailure =
+        "TOOL_ARGUMENTS_INVALID".equals(failureReason)
+            || "TOOL_ARGUMENT_VALIDATION_FAILED".equals(failureReason);
+    if (declaresToolArgumentsFailure != toolArgumentsRejected
+        || (toolArgumentsRejected && status != RunStatus.FAILED)) {
+      throw new IllegalArgumentException(
+          "Tool-argument failure and Trace rejection must be bound");
+    }
   }
 
   private static void requireTaskScopedMetadata(
@@ -223,10 +250,16 @@ public final class AgentTraceProtocol {
                 || "MALFORMED_RESULT".equals(event.status());
         boolean safeUntrusted =
             "untrusted".equals(event.toolName()) && event.reference() == null;
+        boolean safePreDispatchRejection =
+            task.requiredTools().contains(event.toolName())
+                && "FAILED".equals(event.status())
+                && event.reference() == null;
         boolean declaredTool =
             task.requiredTools().contains(event.toolName())
+                && event.reference() != null
                 && task.inputRefs().contains(event.reference());
-        if (!allowedStatus || !(safeUntrusted || declaredTool)) {
+        if (!allowedStatus
+            || !(safeUntrusted || safePreDispatchRejection || declaredTool)) {
           throw new IllegalArgumentException("TOOL_REJECTED metadata is unsafe");
         }
       }

@@ -1,0 +1,157 @@
+{
+  "schemaVersion": "0.4",
+  "taskId": "synthetic-offline-tool-arguments-schema-fault-005",
+  "title": "离线验证 Tool arguments schema fault 在副作用前失败",
+  "principalRef": "synthetic-tool-schema-owner",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic://eval/s4-f1-tool-arguments-005",
+    "dataClass": "PUBLIC",
+    "content": "这是公开、虚构、仅用于离线验证 Tool arguments 边界的测试素材。"
+  },
+  "requiredConstraints": [
+    "control 与 fault 除一个 unexpected argument 外使用完全相同的 Task、Capture、Fake Model 路径、工具、预算、时钟和组件版本",
+    "schema-invalid arguments 必须在 Tool execute 与 Tool-backed Capture read 前失败",
+    "失败 Run 必须保留安全 Trace 和 typed failure，且不得产生 Artifact 或成功终态"
+  ],
+  "forbiddenActions": [
+    "访问真实模型、互联网、HTTP endpoint 或 Connector",
+    "访问真实用户数据、账号或社交平台",
+    "把 deterministic safety regression 宣称为模型质量或真实 Harness 收益"
+  ],
+  "acceptanceChecks": [
+    "valid control 产生一次 Tool execute、一次 Tool-backed Capture read 和一个 Artifact",
+    "extra-property fault 的 Tool execute、Tool-backed Capture read 和 Artifact 计数均为 0",
+    "fault 以 FAILED、TOOL_ARGUMENTS_INVALID 和 MODEL_STEP 到 TOOL_REJECTED 的安全 Trace 结束",
+    "两个 fresh fixture 对同一 case 产生完全相同的 terminal Run、Result、Trace 和 Bundle"
+  ],
+  "humanReviewQuestions": [
+    "这个测试是否真正改变 raw arguments schema，而不是用 foreign reference 冒充 schema fault？",
+    "回执是否清楚区分零 Tool dispatch 与已经发生的 Fake Model step、RUNNING 和 FAILED truth 写入？"
+  ],
+  "risk": "REVERSIBLE",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "control 传入只包含 reference 的合法 JSON object",
+    "fault 保持同一 reference，只增加一个 unexpected PUBLIC synthetic 字段",
+    "验证 raw arguments 和 sentinel 不进入 Trace、Result、Bundle 或错误码"
+  ],
+  "deterministicAgentFault": {
+    "suiteId": "offline-tool-arguments-schema-v1",
+    "variable": "capture-read-extra-property",
+    "provenance": {
+      "kind": "LITERAL_CHECKED_IN_SYNTHETIC",
+      "containsRealUserData": false,
+      "containsRealAccount": false,
+      "networkAllowed": false,
+      "realModelAllowed": false,
+      "connectorAllowed": false
+    },
+    "frozen": {
+      "principalId": "synthetic-tool-schema-owner",
+      "captureId": "capture-tool-schema-005",
+      "clientNonce": "tool-schema-005",
+      "sourceType": "TEXT",
+      "sourceRef": "synthetic://eval/s4-f1-tool-arguments-005",
+      "dataClass": "PUBLIC",
+      "content": "这是公开、虚构、仅用于离线验证 Tool arguments 边界的测试素材。",
+      "intent": "把公开的虚构测试素材整理成一段短文",
+      "runId": "run-tool-schema-005",
+      "taskId": "task-tool-schema-005",
+      "artifactId": "art-tool-schema-005",
+      "frozenTime": "2026-07-31T00:00:00Z",
+      "kernelLatencyMs": 7,
+      "taskSchemaVersion": "1.0",
+      "budgetUsd": "0.000000",
+      "maxModelSteps": 2,
+      "maxToolCalls": 1,
+      "taskDeadlineMs": 5000,
+      "executionProfile": "offline-tool-arguments-fault-v1",
+      "model": "scripted-tool-arguments-fault-v1",
+      "harness": "framework-free-agent-kernel-v1",
+      "agent": "agent-draft-service-v1",
+      "verifier": "agent-draft-verifier-v1",
+      "policy": "agent-draft-policy-v1",
+      "state": "stage2-s4-f1",
+      "contextPolicy": "ref-only-v1",
+      "toolRegistry": "agent-tools-v2",
+      "traceIntegrity": "emergeos-length-prefixed-sha256-v1"
+    },
+    "control": {
+      "id": "valid-control",
+      "arguments": {
+        "reference": "capture://capture-tool-schema-005"
+      },
+      "expected": {
+        "status": "SUCCEEDED",
+        "failureReason": null,
+        "traceTypes": [
+          "MODEL_STEP",
+          "TOOL_REQUEST",
+          "TOOL_RESULT",
+          "MODEL_STEP",
+          "STRUCTURED_FINAL",
+          "ARTIFACT_COMMITTED"
+        ],
+        "traceStatuses": [
+          "COMPLETED",
+          "REQUESTED",
+          "SUCCEEDED",
+          "COMPLETED",
+          "PROPOSED",
+          "SUCCEEDED"
+        ],
+        "modelCallCount": 2,
+        "validationCount": 1,
+        "toolExecuteCount": 1,
+        "totalFindOwnedCount": 2,
+        "toolBackedReadCount": 1,
+        "runStartCount": 1,
+        "runCompleteCount": 1,
+        "artifactCount": 1,
+        "consumedIdPrefixes": [
+          "run",
+          "task",
+          "art"
+        ],
+        "taskIntegrityHash": "aea6ef82d51c34b69e5ee81924b029bd460942502d2eee75fae99a9fdee3d3cf",
+        "traceRootHash": "2c69c3c5e347d0ad510ee45c62a06f3bc800178bccefeea91169c43310be1fde",
+        "bundleIntegrityHash": "6efc58076a2914f6e2eb3d28c0b66e31ef98f0257d9cea49c897ef4a6692c3c4"
+      }
+    },
+    "fault": {
+      "id": "extra-property",
+      "arguments": {
+        "reference": "capture://capture-tool-schema-005",
+        "unexpected": "PUBLIC_SYNTHETIC_ARGUMENT_SENTINEL"
+      },
+      "expected": {
+        "status": "FAILED",
+        "failureReason": "TOOL_ARGUMENTS_INVALID",
+        "traceTypes": [
+          "MODEL_STEP",
+          "TOOL_REJECTED"
+        ],
+        "traceStatuses": [
+          "COMPLETED",
+          "FAILED"
+        ],
+        "modelCallCount": 1,
+        "validationCount": 1,
+        "toolExecuteCount": 0,
+        "totalFindOwnedCount": 1,
+        "toolBackedReadCount": 0,
+        "runStartCount": 1,
+        "runCompleteCount": 1,
+        "artifactCount": 0,
+        "consumedIdPrefixes": [
+          "run",
+          "task"
+        ],
+        "taskIntegrityHash": "aea6ef82d51c34b69e5ee81924b029bd460942502d2eee75fae99a9fdee3d3cf",
+        "traceRootHash": "d5157c4273548d58596335485437bb472e70459b3203a277912461dd073126c9",
+        "bundleIntegrityHash": "1370f686ecd5cb3697b08f8774834d61ffbf327c8ea1dec02ece5210c09e7163"
+      }
+    }
+  }
+}

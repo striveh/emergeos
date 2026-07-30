@@ -12,10 +12,194 @@ const fixtureDir = path.join(repoRoot, "contracts", "fixtures", "v1");
 const goldenDir = path.join(repoRoot, "contracts", "golden", "v1");
 const taskPackDir = path.join(repoRoot, "evals", "task-packs", "synthetic");
 const evalEnvironmentDir = path.join(repoRoot, "evals", "environments");
+const frozenEvalEnvironments = new Map([
+  [
+    "evals/environments/openai-responses-synthetic-v1.json",
+    {
+      toolRegistryVersion: "agent-tools-v1",
+      rawSha256: "f2ddb405f81ac4cf51c8f54479ddbb13fd00b62c9995bee2e52b43db85cccc6f"
+    }
+  ],
+  [
+    "evals/environments/openai-responses-synthetic-v2.json",
+    {
+      toolRegistryVersion: "agent-tools-v2",
+      rawSha256: "440fe5ce81202d5083e33463849b19e310077c9906baab8d253c1f59fd7de968"
+    }
+  ]
+]);
+
+export function assertStrictJson(source, label) {
+  let index = 0;
+
+  function fail(message) {
+    throw new Error(`${label}: ${message} at character ${index}`);
+  }
+
+  function skipWhitespace() {
+    while (
+      index < source.length
+      && (
+        source[index] === " "
+        || source[index] === "\t"
+        || source[index] === "\r"
+        || source[index] === "\n"
+      )
+    ) {
+      index += 1;
+    }
+  }
+
+  function parseString() {
+    if (source[index] !== "\"") {
+      fail("expected a JSON string");
+    }
+    const start = index;
+    index += 1;
+    while (index < source.length) {
+      const character = source[index];
+      if (character === "\"") {
+        index += 1;
+        return JSON.parse(source.slice(start, index));
+      }
+      if (character === "\\") {
+        index += 2;
+      } else {
+        index += 1;
+      }
+    }
+    fail("unterminated JSON string");
+  }
+
+  function parseValue(pathLabel, depth) {
+    if (depth > 256) {
+      fail("JSON nesting exceeds the validation boundary");
+    }
+    skipWhitespace();
+    if (source[index] === "{") {
+      parseObject(pathLabel, depth + 1);
+      return;
+    }
+    if (source[index] === "[") {
+      parseArray(pathLabel, depth + 1);
+      return;
+    }
+    if (source[index] === "\"") {
+      parseString();
+      return;
+    }
+    const start = index;
+    while (
+      index < source.length
+      && ![" ", "\t", "\r", "\n", ",", "]", "}"].includes(source[index])
+    ) {
+      index += 1;
+    }
+    if (start === index) {
+      fail("expected a JSON value");
+    }
+    JSON.parse(source.slice(start, index));
+  }
+
+  function parseObject(pathLabel, depth) {
+    index += 1;
+    skipWhitespace();
+    const keys = new Set();
+    if (source[index] === "}") {
+      index += 1;
+      return;
+    }
+    while (index < source.length) {
+      skipWhitespace();
+      const key = parseString();
+      if (keys.has(key)) {
+        fail(`${pathLabel} contains duplicate object key ${JSON.stringify(key)}`);
+      }
+      keys.add(key);
+      skipWhitespace();
+      if (source[index] !== ":") {
+        fail("expected ':' after an object key");
+      }
+      index += 1;
+      parseValue(`${pathLabel}.${key}`, depth);
+      skipWhitespace();
+      if (source[index] === "}") {
+        index += 1;
+        return;
+      }
+      if (source[index] !== ",") {
+        fail("expected ',' or '}' in an object");
+      }
+      index += 1;
+    }
+    fail("unterminated JSON object");
+  }
+
+  function parseArray(pathLabel, depth) {
+    index += 1;
+    skipWhitespace();
+    if (source[index] === "]") {
+      index += 1;
+      return;
+    }
+    let item = 0;
+    while (index < source.length) {
+      parseValue(`${pathLabel}[${item}]`, depth);
+      item += 1;
+      skipWhitespace();
+      if (source[index] === "]") {
+        index += 1;
+        return;
+      }
+      if (source[index] !== ",") {
+        fail("expected ',' or ']' in an array");
+      }
+      index += 1;
+    }
+    fail("unterminated JSON array");
+  }
+
+  parseValue("$", 0);
+  skipWhitespace();
+  if (index !== source.length) {
+    fail("JSON contains trailing content");
+  }
+}
+
+function verifyStrictJsonParserRegression() {
+  assertStrictJson(
+    "{\"reference\":\"capture://ok\",\"nested\":[{\"value\":1}]}",
+    "strict JSON valid control"
+  );
+  const invalidCases = [
+    ["plain duplicate", "{\"a\":1,\"a\":2}"],
+    ["escaped duplicate", "{\"a\":1,\"\\u0061\":2}"],
+    ["nested duplicate", "{\"outer\":{\"a\":1,\"a\":2}}"],
+    ["array object duplicate", "[{\"a\":1,\"a\":2}]"],
+    ["trailing comma", "{\"a\":1,}"],
+    ["trailing content", "{\"a\":1} {}"],
+    ["invalid escape", "{\"a\":\"\\x\"}"]
+  ];
+  for (const [label, source] of invalidCases) {
+    let rejected = false;
+    try {
+      assertStrictJson(source, `strict JSON ${label}`);
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) {
+      throw new Error(`strict JSON parser accepted ${label}`);
+    }
+  }
+}
+
+verifyStrictJsonParserRegression();
 
 function readJson(file) {
   try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
+    const source = fs.readFileSync(file, "utf8");
+    assertStrictJson(source, path.relative(repoRoot, file));
+    return JSON.parse(source);
   } catch (error) {
     throw new Error(`${path.relative(repoRoot, file)} is not valid JSON: ${error.message}`);
   }
@@ -676,6 +860,7 @@ const allowedRisks = new Set(["READ_ONLY", "REVERSIBLE", "EXTERNAL", "IRREVERSIB
 const seenHarnessComparisonSuiteIds = new Set();
 const seenHarnessComparisonExecutionIdentities = new Set();
 let harnessComparisonPackCount = 0;
+let deterministicAgentFaultPackCount = 0;
 
 function verifyHarnessComparison(task, relative) {
   const comparison = task.harnessComparison;
@@ -1084,6 +1269,381 @@ function verifyHarnessComparison(task, relative) {
   }
 }
 
+function verifyDeterministicAgentFault(task, relative) {
+  const expectedPath =
+    "evals/task-packs/synthetic/005-offline-tool-arguments-schema-fault.json";
+  const raw = fs.readFileSync(path.join(repoRoot, relative));
+  const rawHash = crypto.createHash("sha256").update(raw).digest("hex");
+  if (
+    relative !== expectedPath
+    || raw.length > 65_536
+    || rawHash
+      !== "64b7cf77942e444ee871d766c4dbcd38fa45fa1cdf0d2bf6e96d87f7b1211ece"
+  ) {
+    throw new Error(
+      `${relative}: deterministic Agent fault must use the frozen Pack 005 path, byte bound and raw SHA-256`
+    );
+  }
+  const suite = task.deterministicAgentFault;
+  assertExactObjectKeys(
+    task,
+    [
+      "schemaVersion",
+      "taskId",
+      "title",
+      "principalRef",
+      "seed",
+      "requiredConstraints",
+      "forbiddenActions",
+      "acceptanceChecks",
+      "humanReviewQuestions",
+      "risk",
+      "expectedArtifactKind",
+      "faultPlan",
+      "deterministicAgentFault"
+    ],
+    relative
+  );
+  assertExactObjectKeys(
+    task.seed,
+    ["sourceType", "sourceRef", "dataClass", "content"],
+    `${relative}: seed`
+  );
+  assertExactObjectKeys(
+    suite,
+    ["suiteId", "variable", "provenance", "frozen", "control", "fault"],
+    `${relative}: deterministicAgentFault`
+  );
+  if (
+    task.schemaVersion !== "0.4"
+    || task.seed.dataClass !== "PUBLIC"
+    || task.risk !== "REVERSIBLE"
+    || task.expectedArtifactKind !== "ARTICLE_DRAFT"
+    || !task.seed.sourceRef.startsWith("synthetic://eval/")
+    || !task.principalRef.startsWith("synthetic-")
+    || task.modelEval !== undefined
+    || task.syntheticProvenance !== undefined
+    || task.offlineReplay !== undefined
+    || task.expectedReplay !== undefined
+    || task.replayVersions !== undefined
+    || task.harnessComparison !== undefined
+  ) {
+    throw new Error(
+      `${relative}: deterministic Agent fault must be an isolated PUBLIC synthetic reversible draft`
+    );
+  }
+  if (
+    suite.suiteId !== "offline-tool-arguments-schema-v1"
+    || suite.variable !== "capture-read-extra-property"
+  ) {
+    throw new Error(
+      `${relative}: deterministic Agent fault suite or single variable drifted`
+    );
+  }
+  assertExactObjectKeys(
+    suite.provenance,
+    [
+      "kind",
+      "containsRealUserData",
+      "containsRealAccount",
+      "networkAllowed",
+      "realModelAllowed",
+      "connectorAllowed"
+    ],
+    `${relative}: deterministicAgentFault.provenance`
+  );
+  if (
+    suite.provenance.kind !== "LITERAL_CHECKED_IN_SYNTHETIC"
+    || suite.provenance.containsRealUserData !== false
+    || suite.provenance.containsRealAccount !== false
+    || suite.provenance.networkAllowed !== false
+    || suite.provenance.realModelAllowed !== false
+    || suite.provenance.connectorAllowed !== false
+  ) {
+    throw new Error(
+      `${relative}: deterministic Agent fault provenance must disable real data, model, network and Connector`
+    );
+  }
+
+  const frozen = suite.frozen;
+  assertExactObjectKeys(
+    frozen,
+    [
+      "principalId",
+      "captureId",
+      "clientNonce",
+      "sourceType",
+      "sourceRef",
+      "dataClass",
+      "content",
+      "intent",
+      "runId",
+      "taskId",
+      "artifactId",
+      "frozenTime",
+      "kernelLatencyMs",
+      "taskSchemaVersion",
+      "budgetUsd",
+      "maxModelSteps",
+      "maxToolCalls",
+      "taskDeadlineMs",
+      "executionProfile",
+      "model",
+      "harness",
+      "agent",
+      "verifier",
+      "policy",
+      "state",
+      "contextPolicy",
+      "toolRegistry",
+      "traceIntegrity"
+    ],
+    `${relative}: deterministicAgentFault.frozen`
+  );
+  for (const field of [
+    "principalId",
+    "captureId",
+    "clientNonce",
+    "sourceType",
+    "sourceRef",
+    "dataClass",
+    "content",
+    "intent",
+    "runId",
+    "taskId",
+    "artifactId",
+    "frozenTime",
+    "taskSchemaVersion",
+    "budgetUsd",
+    "executionProfile",
+    "model",
+    "harness",
+    "agent",
+    "verifier",
+    "policy",
+    "state",
+    "contextPolicy",
+    "toolRegistry",
+    "traceIntegrity"
+  ]) {
+    if (typeof frozen[field] !== "string" || frozen[field].trim() === "") {
+      throw new Error(
+        `${relative}: deterministicAgentFault.frozen.${field} must be a non-empty string`
+      );
+    }
+  }
+  for (const field of [
+    "kernelLatencyMs",
+    "maxModelSteps",
+    "maxToolCalls",
+    "taskDeadlineMs"
+  ]) {
+    if (!Number.isSafeInteger(frozen[field])) {
+      throw new Error(
+        `${relative}: deterministicAgentFault.frozen.${field} must be an integer`
+      );
+    }
+  }
+  const frozenTimeMillis = Date.parse(frozen.frozenTime);
+  const frozenTimeCanonical =
+    Number.isNaN(frozenTimeMillis)
+      ? null
+      : new Date(frozenTimeMillis).toISOString().replace(".000Z", "Z");
+  if (
+    frozen.principalId !== task.principalRef
+    || frozen.sourceType !== task.seed.sourceType
+    || frozen.sourceRef !== task.seed.sourceRef
+    || frozen.dataClass !== task.seed.dataClass
+    || frozen.content !== task.seed.content
+    || frozen.dataClass !== "PUBLIC"
+    || frozen.sourceType !== "TEXT"
+    || frozen.kernelLatencyMs !== 7
+    || frozen.taskSchemaVersion !== "1.0"
+    || frozen.budgetUsd !== "0.000000"
+    || frozen.maxModelSteps !== 2
+    || frozen.maxToolCalls !== 1
+    || frozen.taskDeadlineMs !== 5000
+    || frozen.executionProfile !== "offline-tool-arguments-fault-v1"
+    || frozen.model !== "scripted-tool-arguments-fault-v1"
+    || frozen.harness !== "framework-free-agent-kernel-v1"
+    || frozen.agent !== "agent-draft-service-v1"
+    || frozen.verifier !== "agent-draft-verifier-v1"
+    || frozen.policy !== "agent-draft-policy-v1"
+    || frozen.state !== "stage2-s4-f1"
+    || frozen.contextPolicy !== "ref-only-v1"
+    || frozen.toolRegistry !== "agent-tools-v2"
+    || frozen.traceIntegrity !== INTEGRITY_PROFILE
+    || frozenTimeCanonical !== frozen.frozenTime
+  ) {
+    throw new Error(
+      `${relative}: deterministic Agent fault frozen inputs or component versions drifted`
+    );
+  }
+  for (const field of [
+    "captureId",
+    "clientNonce",
+    "runId",
+    "taskId",
+    "artifactId"
+  ]) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/.test(frozen[field])) {
+      throw new Error(
+        `${relative}: deterministicAgentFault.frozen.${field} has an invalid identifier`
+      );
+    }
+  }
+
+  const expectedReference = `capture://${frozen.captureId}`;
+  const expectedCases = [
+    {
+      name: "control",
+      id: "valid-control",
+      argumentKeys: ["reference"],
+      status: "SUCCEEDED",
+      failureReason: null,
+      traceTypes: [
+        "MODEL_STEP",
+        "TOOL_REQUEST",
+        "TOOL_RESULT",
+        "MODEL_STEP",
+        "STRUCTURED_FINAL",
+        "ARTIFACT_COMMITTED"
+      ],
+      traceStatuses: [
+        "COMPLETED",
+        "REQUESTED",
+        "SUCCEEDED",
+        "COMPLETED",
+        "PROPOSED",
+        "SUCCEEDED"
+      ],
+      modelCallCount: 2,
+      validationCount: 1,
+      toolExecuteCount: 1,
+      totalFindOwnedCount: 2,
+      toolBackedReadCount: 1,
+      runStartCount: 1,
+      runCompleteCount: 1,
+      artifactCount: 1,
+      consumedIdPrefixes: ["run", "task", "art"]
+    },
+    {
+      name: "fault",
+      id: "extra-property",
+      argumentKeys: ["reference", "unexpected"],
+      status: "FAILED",
+      failureReason: "TOOL_ARGUMENTS_INVALID",
+      traceTypes: ["MODEL_STEP", "TOOL_REJECTED"],
+      traceStatuses: ["COMPLETED", "FAILED"],
+      modelCallCount: 1,
+      validationCount: 1,
+      toolExecuteCount: 0,
+      totalFindOwnedCount: 1,
+      toolBackedReadCount: 0,
+      runStartCount: 1,
+      runCompleteCount: 1,
+      artifactCount: 0,
+      consumedIdPrefixes: ["run", "task"]
+    }
+  ];
+  for (const expected of expectedCases) {
+    const testCase = suite[expected.name];
+    assertExactObjectKeys(
+      testCase,
+      ["id", "arguments", "expected"],
+      `${relative}: deterministicAgentFault.${expected.name}`
+    );
+    if (testCase.id !== expected.id) {
+      throw new Error(
+        `${relative}: deterministicAgentFault.${expected.name}.id drifted`
+      );
+    }
+    assertExactObjectKeys(
+      testCase.arguments,
+      expected.argumentKeys,
+      `${relative}: deterministicAgentFault.${expected.name}.arguments`
+    );
+    if (testCase.arguments.reference !== expectedReference) {
+      throw new Error(
+        `${relative}: deterministic Agent fault reference must bind the frozen Capture`
+      );
+    }
+    assertExactObjectKeys(
+      testCase.expected,
+      [
+        "status",
+        "failureReason",
+        "traceTypes",
+        "traceStatuses",
+        "modelCallCount",
+        "validationCount",
+        "toolExecuteCount",
+        "totalFindOwnedCount",
+        "toolBackedReadCount",
+        "runStartCount",
+        "runCompleteCount",
+        "artifactCount",
+        "consumedIdPrefixes",
+        "taskIntegrityHash",
+        "traceRootHash",
+        "bundleIntegrityHash"
+      ],
+      `${relative}: deterministicAgentFault.${expected.name}.expected`
+    );
+    if (
+      testCase.expected.status !== expected.status
+      || testCase.expected.failureReason !== expected.failureReason
+      || JSON.stringify(testCase.expected.traceTypes)
+        !== JSON.stringify(expected.traceTypes)
+      || JSON.stringify(testCase.expected.traceStatuses)
+        !== JSON.stringify(expected.traceStatuses)
+      || testCase.expected.modelCallCount !== expected.modelCallCount
+      || testCase.expected.validationCount !== expected.validationCount
+      || testCase.expected.toolExecuteCount !== expected.toolExecuteCount
+      || testCase.expected.totalFindOwnedCount !== expected.totalFindOwnedCount
+      || testCase.expected.toolBackedReadCount !== expected.toolBackedReadCount
+      || testCase.expected.runStartCount !== expected.runStartCount
+      || testCase.expected.runCompleteCount !== expected.runCompleteCount
+      || testCase.expected.artifactCount !== expected.artifactCount
+      || JSON.stringify(testCase.expected.consumedIdPrefixes)
+        !== JSON.stringify(expected.consumedIdPrefixes)
+    ) {
+      throw new Error(
+        `${relative}: deterministicAgentFault.${expected.name} expected receipt drifted`
+      );
+    }
+    for (const field of [
+      "taskIntegrityHash",
+      "traceRootHash",
+      "bundleIntegrityHash"
+    ]) {
+      if (!/^[a-f0-9]{64}$/.test(testCase.expected[field])) {
+        throw new Error(
+          `${relative}: deterministicAgentFault.${expected.name}.expected.${field} must be a SHA-256 digest`
+        );
+      }
+    }
+  }
+  if (
+    suite.fault.arguments.unexpected
+      !== "PUBLIC_SYNTHETIC_ARGUMENT_SENTINEL"
+  ) {
+    throw new Error(
+      `${relative}: deterministic Agent fault sentinel drifted`
+    );
+  }
+  const faultWithoutSingleMutation = { ...suite.fault.arguments };
+  delete faultWithoutSingleMutation.unexpected;
+  if (
+    JSON.stringify(faultWithoutSingleMutation)
+      !== JSON.stringify(suite.control.arguments)
+  ) {
+    throw new Error(
+      `${relative}: deterministic Agent fault must change exactly one extra argument`
+    );
+  }
+}
+
 for (const file of taskPackFiles) {
   const task = readJson(file);
   const relative = path.relative(repoRoot, file);
@@ -1130,6 +1690,11 @@ for (const file of taskPackFiles) {
   if (task.harnessComparison !== undefined) {
     verifyHarnessComparison(task, relative);
     harnessComparisonPackCount += 1;
+  }
+
+  if (task.deterministicAgentFault !== undefined) {
+    verifyDeterministicAgentFault(task, relative);
+    deterministicAgentFaultPackCount += 1;
   }
 
   if (task.offlineReplay !== undefined || task.expectedReplay !== undefined) {
@@ -1300,6 +1865,9 @@ for (const file of taskPackFiles) {
 if (harnessComparisonPackCount === 0) {
   throw new Error("No offline Harness comparison Task Pack found");
 }
+if (deterministicAgentFaultPackCount !== 1) {
+  throw new Error("Exactly one deterministic Agent fault Task Pack is required");
+}
 
 process.stdout.write(`Validated ${taskPackFiles.length} synthetic evaluation task packs with unique task IDs.\n`);
 
@@ -1307,9 +1875,37 @@ const evalEnvironmentFiles = jsonFiles(evalEnvironmentDir);
 if (evalEnvironmentFiles.length === 0) {
   throw new Error("No synthetic evaluation environment manifests found");
 }
+const relativeEvalEnvironmentFiles =
+  evalEnvironmentFiles.map((file) => path.relative(repoRoot, file));
+if (
+  JSON.stringify(relativeEvalEnvironmentFiles)
+  !== JSON.stringify([...frozenEvalEnvironments.keys()].sort())
+) {
+  throw new Error(
+    "Synthetic evaluation environment manifests must exactly match the frozen identity set"
+  );
+}
+const evalEnvironmentsByRelative = new Map();
 for (const file of evalEnvironmentFiles) {
-  const environment = readJson(file);
   const relative = path.relative(repoRoot, file);
+  const frozenIdentity = frozenEvalEnvironments.get(relative);
+  const raw = fs.readFileSync(file);
+  const rawHash = crypto.createHash("sha256").update(raw).digest("hex");
+  if (
+    frozenIdentity === undefined
+    || rawHash !== frozenIdentity.rawSha256
+  ) {
+    throw new Error(
+      `${relative}: evaluation environment path and raw SHA-256 must match a frozen identity`
+    );
+  }
+  const environment = readJson(file);
+  if (environment.toolRegistryVersion !== frozenIdentity.toolRegistryVersion) {
+    throw new Error(
+      `${relative}: toolRegistryVersion does not match its frozen environment identity`
+    );
+  }
+  evalEnvironmentsByRelative.set(relative, environment);
   verifyUnicodeScalarTree(environment, relative);
   assertExactObjectKeys(
     environment,
@@ -1462,6 +2058,22 @@ for (const file of evalEnvironmentFiles) {
       throw new Error(`${relative}: references must use official OpenAI docs`);
     }
   }
+}
+const historicalEnvironment = evalEnvironmentsByRelative.get(
+  "evals/environments/openai-responses-synthetic-v1.json"
+);
+const activeEnvironment = evalEnvironmentsByRelative.get(
+  "evals/environments/openai-responses-synthetic-v2.json"
+);
+if (
+  JSON.stringify({
+    ...historicalEnvironment,
+    toolRegistryVersion: "agent-tools-v2"
+  }) !== JSON.stringify(activeEnvironment)
+) {
+  throw new Error(
+    "Synthetic evaluation environment v2 must differ from historical v1 only by toolRegistryVersion"
+  );
 }
 process.stdout.write(
   `Validated ${evalEnvironmentFiles.length} synthetic evaluation environment manifest.\n`

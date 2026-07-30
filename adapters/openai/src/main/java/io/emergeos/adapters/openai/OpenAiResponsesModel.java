@@ -398,7 +398,9 @@ public final class OpenAiResponsesModel implements AgentModel {
         history.addAll(replay);
         pendingCallId = functionCall.callId();
         return new ModelStep(
-            new ToolCall(INTERNAL_CAPTURE_TOOL, captureRef),
+            new ToolCall(
+                INTERNAL_CAPTURE_TOOL,
+                ToolArguments.fromJson(functionCall.arguments())),
             attribution.resolvedModel(),
             attribution.usage());
       } catch (RuntimeException malformedResponse) {
@@ -421,16 +423,7 @@ public final class OpenAiResponsesModel implements AgentModel {
               .isPresent()) {
         return false;
       }
-      try {
-        JsonNode arguments =
-            STRICT_JSON.readTree(functionCall.arguments());
-        return arguments.isObject()
-            && arguments.size() == 1
-            && arguments.path("reference").isTextual()
-            && captureRef.equals(arguments.path("reference").asText());
-      } catch (Exception malformedArguments) {
-        return false;
-      }
+      return functionCall.arguments() != null;
     }
 
     private ToolResult requireMatchingToolResult(

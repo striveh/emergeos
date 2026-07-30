@@ -63,7 +63,7 @@
     "policy": "agent-draft-policy-v1",
     "state": "stage2-s2",
     "contextPolicy": "ref-only-v1",
-    "toolRegistry": "agent-tools-v1",
+    "toolRegistry": "agent-tools-v2",
     "traceIntegrity": "emergeos-length-prefixed-sha256-v1"
   },
   "expectedReplay": {
@@ -72,6 +72,6 @@
     "captureRequestHash": "0c6e36fbdee828aad317bceb6876c4cb5defbe24910496a145ceef6db2aa0415",
     "traceRootHash": "d1ee51bd7f77ccfe02de944213c8cb18259f86497c533363bcad6e0b14ae55b9",
     "artifactContentHash": "50995216bfbbda3efaa86d6b84737d958037383049bd07cdd2a80bd0309980ee",
-    "bundleIntegrityHash": "fe00230548bdd67ad6d4a88f12e74f3314027c92d00ad908ef00fba1c605e012"
+    "bundleIntegrityHash": "78f3328de53b3a04a1c746c30f2b5f00b4c780012780dd7dfde9063227598661"
   }
 }

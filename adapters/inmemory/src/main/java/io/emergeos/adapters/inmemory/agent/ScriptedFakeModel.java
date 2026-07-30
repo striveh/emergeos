@@ -36,7 +36,9 @@ public final class ScriptedFakeModel implements AgentModel {
       if (turn.task().inputRefs().isEmpty()) {
         return new FinalDraft(null, List.of());
       }
-      return new ToolCall(requestedTool, turn.task().inputRefs().getFirst());
+      return new ToolCall(
+          requestedTool,
+          ToolArguments.forReference(turn.task().inputRefs().getFirst()));
     }
     ToolResult source = turn.toolResults().getLast();
     String content =

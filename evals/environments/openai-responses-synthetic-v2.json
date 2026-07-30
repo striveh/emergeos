@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "0.1",
+  "reviewedAt": "2026-07-30",
+  "javaRelease": 21,
+  "openaiJavaVersion": "4.43.0",
+  "protocolVersion": "openai-responses-v1-openai-java-4.43.0",
+  "harnessVersion": "framework-free-agent-kernel-v2",
+  "toolRegistryVersion": "agent-tools-v2",
+  "tools": [
+    "capture.read"
+  ],
+  "providerApi": "responses",
+  "model": {
+    "requested": "gpt-5.4-mini-2026-03-17",
+    "pricingFamily": "gpt-5.4-mini",
+    "maxInputTokens": 272000,
+    "maxOutputTokens": 128000,
+    "reference": "https://developers.openai.com/api/docs/models/gpt-5.4-mini"
+  },
+  "requestPolicy": {
+    "store": false,
+    "parallelToolCalls": false,
+    "serviceTier": "default",
+    "maxRetries": 0,
+    "productionBaseUrl": "https://api.openai.com/v1",
+    "productionBaseUrlOverrideAllowed": false,
+    "ambientProxyAllowed": false,
+    "sdkLogLevel": "OFF",
+    "maximumProviderRequests": 2,
+    "maximumInputTokensPerRequest": 272000,
+    "maximumOutputTokensPerRequest": 1000
+  },
+  "pricing": {
+    "currency": "USD",
+    "unit": "NANO_USD_PER_TOKEN",
+    "uncachedInput": 750,
+    "cachedInput": 75,
+    "output": 4500,
+    "fullRunReservationUsd": "0.417000",
+    "reference": "https://developers.openai.com/api/docs/pricing"
+  },
+  "inputTokenUpperBound": {
+    "method": "OFFICIAL_MODEL_MAX_INPUT",
+    "tokens": 272000,
+    "reference": "https://developers.openai.com/api/docs/models/gpt-5.4-mini"
+  },
+  "promptCachePolicy": {
+    "mode": "PROVIDER_DEFAULT_PRE_GPT_5_6",
+    "cacheWriteFeeIncluded": false,
+    "reference": "https://developers.openai.com/api/docs/guides/prompt-caching"
+  },
+  "operatorGate": {
+    "posixOneShotMarkerRequired": true,
+    "realTtyChallengeRequired": true,
+    "credentialReadAfterPermit": true,
+    "durableRunRecordRequired": true,
+    "attemptJournalRequired": true,
+    "atomicFinalPublishRequired": true
+  }
+}

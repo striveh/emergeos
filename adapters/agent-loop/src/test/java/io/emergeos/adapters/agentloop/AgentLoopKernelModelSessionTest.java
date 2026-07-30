@@ -1,7 +1,10 @@
 package io.emergeos.adapters.agentloop;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.emergeos.contracts.DataClass;
@@ -40,7 +43,9 @@ class AgentLoopKernelModelSessionTest {
               step++;
               if (step == 1) {
                 return new AgentModel.ModelStep(
-                    new AgentModel.ToolCall("capture.read", CAPTURE_REF),
+                    new AgentModel.ToolCall(
+                        "capture.read",
+                        AgentModel.ToolArguments.forReference(CAPTURE_REF)),
                     "provider-model-snapshot",
                     new AgentModel.ModelUsage(new BigDecimal("0.001000"), 11));
               }
@@ -105,7 +110,11 @@ class AgentLoopKernelModelSessionTest {
           return session;
         };
     AgentLoopKernel kernel =
-        new AgentLoopKernel(model, new AgentToolRegistry(List.of()), 2, 1);
+        new AgentLoopKernel(
+            model,
+            new AgentToolRegistry(List.of(captureReadTool())),
+            2,
+            1);
 
     try (var executor = Executors.newFixedThreadPool(2)) {
       var first = executor.submit(() -> kernel.run(task("session-a"), CancellationSignal.never()));
@@ -130,7 +139,9 @@ class AgentLoopKernelModelSessionTest {
                 step++;
                 return new AgentModel.ModelStep(
                     step == 1
-                        ? new AgentModel.ToolCall("capture.read", CAPTURE_REF)
+                        ? new AgentModel.ToolCall(
+                            "capture.read",
+                            AgentModel.ToolArguments.forReference(CAPTURE_REF))
                         : new AgentModel.FinalDraft("must not commit", List.of(CAPTURE_REF)),
                     step == 1 ? "provider-model-a" : "provider-model-b",
                     new AgentModel.ModelUsage(new BigDecimal("0.001000"), 10));
@@ -165,7 +176,9 @@ class AgentLoopKernelModelSessionTest {
                 step++;
                 return new AgentModel.ModelStep(
                     step == 1
-                        ? new AgentModel.ToolCall("capture.read", CAPTURE_REF)
+                        ? new AgentModel.ToolCall(
+                            "capture.read",
+                            AgentModel.ToolArguments.forReference(CAPTURE_REF))
                         : new AgentModel.FinalDraft("must not commit", List.of(CAPTURE_REF)),
                     step == 1 ? "provider-model-a" : "provider-model-b",
                     new AgentModel.ModelUsage(new BigDecimal("0.006000"), 10));
@@ -201,7 +214,11 @@ class AgentLoopKernelModelSessionTest {
                   new IllegalStateException(providerSecret));
             };
     AgentLoopKernel kernel =
-        new AgentLoopKernel(model, new AgentToolRegistry(List.of()), 2, 1);
+        new AgentLoopKernel(
+            model,
+            new AgentToolRegistry(List.of(captureReadTool())),
+            2,
+            1);
 
     var outcome = kernel.run(task("failure-task"), CancellationSignal.never());
 
@@ -218,7 +235,11 @@ class AgentLoopKernelModelSessionTest {
               throw new AgentModelFailure(AgentModelFailure.Code.CANCELLED);
             };
     AgentLoopKernel kernel =
-        new AgentLoopKernel(model, new AgentToolRegistry(List.of()), 2, 1);
+        new AgentLoopKernel(
+            model,
+            new AgentToolRegistry(List.of(captureReadTool())),
+            2,
+            1);
 
     var outcome =
         kernel.run(task("model-call-cancelled"), CancellationSignal.never());
@@ -237,7 +258,11 @@ class AgentLoopKernelModelSessionTest {
                     "provider-model-snapshot",
                     new AgentModel.ModelUsage(new BigDecimal("0.004000"), 41));
     AgentLoopKernel kernel =
-        new AgentLoopKernel(model, new AgentToolRegistry(List.of()), 2, 1);
+        new AgentLoopKernel(
+            model,
+            new AgentToolRegistry(List.of(captureReadTool())),
+            2,
+            1);
 
     var outcome =
         kernel.run(task("attributed-failure-task"), CancellationSignal.never());
@@ -265,7 +290,7 @@ class AgentLoopKernelModelSessionTest {
     AgentLoopKernel kernel =
         new AgentLoopKernel(
             model,
-            new AgentToolRegistry(List.of()),
+            new AgentToolRegistry(List.of(captureReadTool())),
             2,
             1,
             () -> now.getAndSet(TimeUnit.MILLISECONDS.toNanos(40)));
@@ -277,20 +302,284 @@ class AgentLoopKernelModelSessionTest {
     assertEquals(60, observed.get().remainingDeadlineMs());
   }
 
-  private static AgentTool captureReadTool() {
-    return new AgentTool() {
+  @Test
+  void validatorFailureIsTypedAndRedactedBeforeToolExecution() {
+    String sentinel = "PRIVATE_VALIDATOR_SENTINEL";
+    AtomicInteger executions = new AtomicInteger();
+    AgentTool<Arguments> brokenTool =
+        new AgentTool<>() {
+          @Override
+          public String name() {
+            return "capture.read";
+          }
+
+          @Override
+          public String argumentSchemaId() {
+            return "urn:emergeos:tool:capture-read-arguments:v1";
+          }
+
+          @Override
+          public Validation<Arguments> validate(
+              TaskEnvelope task, AgentModel.ToolCall call) {
+            throw new IllegalStateException(sentinel);
+          }
+
+          @Override
+          public AgentModel.ToolResult execute(TaskEnvelope task, Arguments arguments) {
+            executions.incrementAndGet();
+            throw new AssertionError("Tool execute must not run");
+          }
+        };
+    AgentModel model =
+        task ->
+            (turn, context) ->
+                new AgentModel.ModelStep(
+                    new AgentModel.ToolCall(
+                        "capture.read",
+                        AgentModel.ToolArguments.forReference(CAPTURE_REF)),
+                    "provider-model-snapshot",
+                    new AgentModel.ModelUsage(new BigDecimal("0.001000"), 11));
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            model,
+            new AgentToolRegistry(List.of(brokenTool)),
+            2,
+            1);
+
+    var outcome = kernel.run(task("validator-failure"), CancellationSignal.never());
+
+    assertEquals(RunStatus.FAILED, outcome.status());
+    assertEquals("TOOL_ARGUMENT_VALIDATION_FAILED", outcome.failureReason());
+    assertEquals(new BigDecimal("0.001000"), outcome.costUsd());
+    assertEquals(11, outcome.tokenCount());
+    assertEquals(0, executions.get());
+    assertEquals(2, outcome.trace().size());
+    assertEquals("FAILED", outcome.trace().getLast().status());
+    assertNull(outcome.trace().getLast().reference());
+    assertFalse(outcome.toString().contains(sentinel));
+  }
+
+  @Test
+  void cancellationObservedDuringValidationTakesPrecedenceOverInvalidArguments() {
+    AtomicInteger executions = new AtomicInteger();
+    java.util.concurrent.atomic.AtomicBoolean cancelled =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    AgentTool<Arguments> invalidatingTool =
+        captureReadTool(
+            () -> cancelled.set(true),
+            executions);
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            toolCallingModel(),
+            new AgentToolRegistry(List.of(invalidatingTool)),
+            2,
+            1);
+
+    var outcome =
+        kernel.run(task("cancel-during-validation"), cancelled::get);
+
+    assertEquals(RunStatus.CANCELLED, outcome.status());
+    assertEquals("CANCELLED", outcome.failureReason());
+    assertEquals(0, executions.get());
+    assertEquals(1, outcome.trace().size());
+  }
+
+  @Test
+  void deadlineObservedDuringValidationTakesPrecedenceOverInvalidArguments() {
+    AtomicLong now = new AtomicLong();
+    AtomicInteger executions = new AtomicInteger();
+    AgentTool<Arguments> invalidatingTool =
+        captureReadTool(
+            () -> now.set(TimeUnit.MILLISECONDS.toNanos(2)),
+            executions);
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            toolCallingModel(),
+            new AgentToolRegistry(List.of(invalidatingTool)),
+            2,
+            1,
+            now::get);
+
+    var outcome =
+        kernel.run(task("deadline-during-validation", 1), CancellationSignal.never());
+
+    assertEquals(RunStatus.FAILED, outcome.status());
+    assertEquals("DEADLINE_EXHAUSTED", outcome.failureReason());
+    assertEquals(0, executions.get());
+    assertEquals(1, outcome.trace().size());
+  }
+
+  @Test
+  void registryVersionMismatchBlocksBeforeOpeningAModelSession() {
+    AtomicInteger opens = new AtomicInteger();
+    AgentModel model =
+        task -> {
+          opens.incrementAndGet();
+          throw new AssertionError("model must not open");
+        };
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            model,
+            new AgentToolRegistry(List.of(captureReadTool())),
+            2,
+            1);
+
+    var outcome =
+        kernel.run(
+            task(
+                "registry-version-mismatch",
+                5_000,
+                new BigDecimal("0.010000"),
+                "agent-tools-v3"),
+            CancellationSignal.never());
+
+    assertEquals(RunStatus.BLOCKED, outcome.status());
+    assertEquals("TOOL_REGISTRY_MISMATCH", outcome.failureReason());
+    assertEquals(0, opens.get());
+    assertEquals(List.of(), outcome.trace());
+  }
+
+  @Test
+  void registryVersionRejectsAnUnboundToolSchema() {
+    AgentTool<Arguments> driftedSchema =
+        new AgentTool<>() {
+          @Override
+          public String name() {
+            return "capture.read";
+          }
+
+          @Override
+          public String argumentSchemaId() {
+            return "urn:emergeos:tool:capture-read-arguments:v2";
+          }
+
+          @Override
+          public Validation<Arguments> validate(
+              TaskEnvelope task, AgentModel.ToolCall call) {
+            return Validation.invalid();
+          }
+
+          @Override
+          public AgentModel.ToolResult execute(
+              TaskEnvelope task, Arguments arguments) {
+            throw new AssertionError("Tool execute must not run");
+          }
+        };
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new AgentToolRegistry(List.of(driftedSchema)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new AgentToolRegistry(List.of()));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new AgentToolRegistry("agent-tools-v3", List.of()));
+  }
+
+  @Test
+  void opaqueToolArgumentsAreBoundedImmutableAndRedacted() {
+    String sentinel = "PRIVATE_ARGUMENT_SENTINEL";
+    AgentModel.ToolArguments arguments =
+        AgentModel.ToolArguments.fromJson(
+            "{\"reference\":\"capture://synthetic-agent-loop\","
+                + "\"unexpected\":\""
+                + sentinel
+                + "\"}");
+    byte[] exported = arguments.copyUtf8();
+    exported[0] = 'x';
+
+    assertEquals(
+        AgentModel.ToolArguments.fromJson(
+            "{\"reference\":\"capture://synthetic-agent-loop\","
+                + "\"unexpected\":\""
+                + sentinel
+                + "\"}"),
+        arguments);
+    assertFalse(arguments.toString().contains(sentinel));
+    assertFalse(
+        new AgentModel.ToolCall("capture.read", arguments)
+            .toString()
+            .contains(sentinel));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            AgentModel.ToolArguments.fromJson(
+                "x".repeat(AgentModel.ToolArguments.MAX_UTF8_BYTES + 1)));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> AgentModel.ToolArguments.fromJson("before\0after"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> AgentModel.ToolArguments.fromJson("\uD800"));
+  }
+
+  private static AgentTool<Arguments> captureReadTool() {
+    return new AgentTool<>() {
       @Override
       public String name() {
         return "capture.read";
       }
 
       @Override
-      public AgentModel.ToolResult execute(
+      public String argumentSchemaId() {
+        return "urn:emergeos:tool:capture-read-arguments:v1";
+      }
+
+      @Override
+      public Validation<Arguments> validate(
           TaskEnvelope task, AgentModel.ToolCall call) {
-        return new AgentModel.ToolResult(name(), call.reference(), "synthetic evidence");
+        return Validation.valid(new Arguments(task.inputRefs().getFirst()));
+      }
+
+      @Override
+      public AgentModel.ToolResult execute(TaskEnvelope task, Arguments arguments) {
+        return new AgentModel.ToolResult(
+            name(), arguments.reference(), "synthetic evidence");
       }
     };
   }
+
+  private static AgentTool<Arguments> captureReadTool(
+      Runnable duringValidation, AtomicInteger executions) {
+    return new AgentTool<>() {
+      @Override
+      public String name() {
+        return "capture.read";
+      }
+
+      @Override
+      public String argumentSchemaId() {
+        return "urn:emergeos:tool:capture-read-arguments:v1";
+      }
+
+      @Override
+      public Validation<Arguments> validate(
+          TaskEnvelope task, AgentModel.ToolCall call) {
+        duringValidation.run();
+        return Validation.invalid();
+      }
+
+      @Override
+      public AgentModel.ToolResult execute(TaskEnvelope task, Arguments arguments) {
+        executions.incrementAndGet();
+        throw new AssertionError("Tool execute must not run");
+      }
+    };
+  }
+
+  private static AgentModel toolCallingModel() {
+    return task ->
+        (turn, context) ->
+            new AgentModel.ModelStep(
+                new AgentModel.ToolCall(
+                    "capture.read",
+                    AgentModel.ToolArguments.forReference(CAPTURE_REF)),
+                "provider-model-snapshot",
+                AgentModel.ModelUsage.zero());
+  }
+
+  private record Arguments(String reference) implements AgentTool.ValidatedArguments {}
 
   private static TaskEnvelope task(String id) {
     return task(id, 5_000);
@@ -302,6 +591,14 @@ class AgentLoopKernelModelSessionTest {
 
   private static TaskEnvelope task(
       String id, long deadlineMs, BigDecimal budgetUsd) {
+    return task(id, deadlineMs, budgetUsd, "agent-tools-v2");
+  }
+
+  private static TaskEnvelope task(
+      String id,
+      long deadlineMs,
+      BigDecimal budgetUsd,
+      String toolRegistryVersion) {
     return new TaskEnvelope(
         "1.1",
         id,
@@ -331,7 +628,7 @@ class AgentLoopKernelModelSessionTest {
         "synthetic-egress-policy-v1",
         "stage2-s3",
         "ref-only-v1",
-        "agent-tools-v1",
+        toolRegistryVersion,
         "environment://sha256:" + "b".repeat(64),
         List.of("capability://model-egress/synthetic-openai-v1"),
         List.of(),

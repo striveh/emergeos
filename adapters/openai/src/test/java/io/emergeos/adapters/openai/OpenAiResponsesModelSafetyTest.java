@@ -229,7 +229,7 @@ class OpenAiResponsesModelSafetyTest {
   }
 
   @Test
-  void returnsAttributedFailureForAFunctionCallOutsideTheTask()
+  void preservesAttributedForeignArgumentsForKernelAuthorization()
       throws Exception {
     try (RecordingServer server =
         new RecordingServer(
@@ -251,9 +251,12 @@ class OpenAiResponsesModelSafetyTest {
                 new AgentModel.Turn(task, List.of()),
                 context(new BigDecimal("0.022000")));
 
-        AgentModel.Failed failure =
-            assertInstanceOf(AgentModel.Failed.class, step.decision());
-        assertEquals("MODEL_RESPONSE_MALFORMED", failure.failureReason());
+        AgentModel.ToolCall toolCall =
+            assertInstanceOf(AgentModel.ToolCall.class, step.decision());
+        assertEquals(
+            AgentModel.ToolArguments.forReference("capture://foreign-source"),
+            toolCall.arguments());
+        assertFalse(toolCall.toString().contains("foreign-source"));
         assertEquals(new BigDecimal("0.000710"), step.usage().costUsd());
         assertEquals(110, step.usage().tokenCount());
         assertEquals(1, server.requestCount());
@@ -264,7 +267,8 @@ class OpenAiResponsesModelSafetyTest {
   }
 
   @Test
-  void rejectsAmbiguousToolArgumentsWithoutLosingUsage() throws Exception {
+  void preservesAmbiguousToolArgumentsForKernelValidationWithoutLosingUsage()
+      throws Exception {
     try (RecordingServer server =
         new RecordingServer(
             ok(
@@ -289,9 +293,10 @@ class OpenAiResponsesModelSafetyTest {
                 new AgentModel.Turn(task, List.of()),
                 context(new BigDecimal("0.022000")));
 
-        AgentModel.Failed failure =
-            assertInstanceOf(AgentModel.Failed.class, step.decision());
-        assertEquals("MODEL_RESPONSE_MALFORMED", failure.failureReason());
+        AgentModel.ToolCall toolCall =
+            assertInstanceOf(AgentModel.ToolCall.class, step.decision());
+        assertFalse(toolCall.toString().contains("foreign-source"));
+        assertFalse(toolCall.toString().contains("synthetic-003"));
         assertEquals(new BigDecimal("0.000710"), step.usage().costUsd());
         assertEquals(110, step.usage().tokenCount());
         assertEquals(1, server.requestCount());
@@ -922,7 +927,7 @@ class OpenAiResponsesModelSafetyTest {
         "synthetic-model-egress-policy-v1",
         "stage2-s3",
         "ref-only-v1",
-        "agent-tools-v1",
+        "agent-tools-v2",
         "environment://sha256:" + "b".repeat(64),
         List.of(AgentExecutionProfile.SYNTHETIC_MODEL_EGRESS_CAPABILITY),
         DataClass.PUBLIC);

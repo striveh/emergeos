@@ -34,6 +34,7 @@ class AgentExecutionProfileTest {
     assertNull(profile.requiredDataClass());
     assertNull(profile.experiment());
     assertNull(profile.taskIdempotencyKey("task-001"));
+    assertEquals("agent-tools-v2", profile.toolRegistryVersion());
     assertEquals(
         Map.of(
             "agent", "agent-draft-service-v1",
@@ -240,7 +241,7 @@ class AgentExecutionProfileTest {
         "synthetic-model-egress-policy-v1",
         "stage2-s3",
         "ref-only-v1",
-        "agent-tools-v1",
+        "agent-tools-v2",
         "environment://sha256:" + "a".repeat(64),
         List.of("capability://model-egress/synthetic-openai-v1"),
         DataClass.PUBLIC);

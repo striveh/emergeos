@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import io.emergeos.contracts.AgentTraceEntry;
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.HarnessExperiment;
 import io.emergeos.contracts.IntegrityHashes;
@@ -12,6 +13,7 @@ import io.emergeos.contracts.ResourceRole;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
+import io.emergeos.contracts.TraceEventType;
 import io.emergeos.core.domain.AgentDraftProposal;
 import io.emergeos.core.domain.AgentRunOutcome;
 import io.emergeos.core.domain.ArtifactLineage;
@@ -239,6 +241,88 @@ class AgentDraftServiceTest {
     assertEquals(List.of(), outcome.trace());
     assertEquals(AgentRunLifecycle.FAILED, runStore.stored.lifecycle());
     assertFalse(runStore.stored.toString().contains(sentinel));
+  }
+
+  @Test
+  void toolArgumentsFailureMustBeBoundToASafeToolRejection() {
+    RecordingArtifactStore artifactStore = new RecordingArtifactStore();
+    RecordingAgentRunStore runStore = new RecordingAgentRunStore(artifactStore);
+    AgentDraftService service =
+        service(
+            runStore,
+            (task, cancellation) ->
+                new AgentRunOutcome(
+                    RunStatus.FAILED,
+                    null,
+                    List.of(),
+                    List.of(
+                        new AgentTraceEvent(
+                            1,
+                            AgentTraceEventType.MODEL_STEP,
+                            null,
+                            "FAILED",
+                            "task://" + task.id())),
+                    "schema-fault-fake",
+                    BigDecimal.ZERO,
+                    110,
+                    1,
+                    "TOOL_ARGUMENTS_INVALID"));
+
+    AgentDraftOutcome outcome =
+        service.draft(
+            new AgentDraftCommand(PRINCIPAL, CAPTURE_ID, "Create an article draft"));
+
+    assertEquals(RunStatus.FAILED, outcome.result().status());
+    assertEquals("UNSAFE_AGENT_TRACE", outcome.result().failureReason());
+    assertEquals(List.of(), outcome.result().artifactRefs());
+    assertEquals(AgentRunLifecycle.FAILED, runStore.stored.lifecycle());
+    assertEquals(0, artifactStore.createCalls);
+  }
+
+  @Test
+  void safePreDispatchToolArgumentsRejectionPersistsWithoutAnArtifact() {
+    RecordingArtifactStore artifactStore = new RecordingArtifactStore();
+    RecordingAgentRunStore runStore = new RecordingAgentRunStore(artifactStore);
+    AgentDraftService service =
+        service(
+            runStore,
+            (task, cancellation) ->
+                new AgentRunOutcome(
+                    RunStatus.FAILED,
+                    null,
+                    List.of(),
+                    List.of(
+                        new AgentTraceEvent(
+                            1,
+                            AgentTraceEventType.MODEL_STEP,
+                            null,
+                            "COMPLETED",
+                            "task://" + task.id()),
+                        new AgentTraceEvent(
+                            2,
+                            AgentTraceEventType.TOOL_REJECTED,
+                            "capture.read",
+                            "FAILED",
+                            null)),
+                    "schema-fault-fake",
+                    BigDecimal.ZERO,
+                    110,
+                    1,
+                    "TOOL_ARGUMENTS_INVALID"));
+
+    AgentDraftOutcome outcome =
+        service.draft(
+            new AgentDraftCommand(PRINCIPAL, CAPTURE_ID, "Create an article draft"));
+
+    assertEquals(RunStatus.FAILED, outcome.result().status());
+    assertEquals("TOOL_ARGUMENTS_INVALID", outcome.result().failureReason());
+    assertEquals(List.of(), outcome.result().artifactRefs());
+    assertEquals(List.of(), outcome.result().evidenceRefs());
+    assertEquals(
+        List.of(TraceEventType.MODEL_STEP, TraceEventType.TOOL_REJECTED),
+        outcome.trace().stream().map(AgentTraceEntry::type).toList());
+    assertEquals(AgentRunLifecycle.FAILED, runStore.stored.lifecycle());
+    assertEquals(0, artifactStore.createCalls);
   }
 
   @Test
@@ -1046,7 +1130,7 @@ class AgentDraftServiceTest {
         "synthetic-model-egress-policy-v1",
         "stage2-s3",
         "ref-only-v1",
-        "agent-tools-v1",
+        "agent-tools-v2",
         "environment://sha256:" + "a".repeat(64),
         List.of(AgentExecutionProfile.SYNTHETIC_MODEL_EGRESS_CAPABILITY),
         DataClass.PUBLIC);

@@ -70,6 +70,15 @@ public final class AgentLoopKernel implements AgentKernel {
     Objects.requireNonNull(cancellation, "cancellation");
     long startedNanos = nanoTime.getAsLong();
     RunState state = new RunState();
+    if (!tools.version().equals(task.toolRegistryVersion())) {
+      return outcome(
+          task,
+          RunStatus.BLOCKED,
+          null,
+          state,
+          "TOOL_REGISTRY_MISMATCH",
+          startedNanos);
+    }
     if (task.maxModelSteps() > modelStepCeiling
         || task.maxToolCalls() > toolCallCeiling) {
       return outcome(
@@ -276,8 +285,7 @@ public final class AgentLoopKernel implements AgentKernel {
       }
       if (decision instanceof AgentModel.ToolCall call) {
         if (!tools.isRegistered(call.toolName())
-            || !task.requiredTools().contains(call.toolName())
-            || !task.inputRefs().contains(call.reference())) {
+            || !task.requiredTools().contains(call.toolName())) {
           state.trace.add(
               event(
                   state.trace,
@@ -293,21 +301,56 @@ public final class AgentLoopKernel implements AgentKernel {
               "TOOL_NOT_ALLOWED",
               startedNanos);
         }
+        AgentToolRegistry.ToolPreparation preparation =
+            tools.prepare(task, call);
+        if (cancellation.isCancelled()) {
+          return outcome(
+              task, RunStatus.CANCELLED, null, state, "CANCELLED", startedNanos);
+        }
+        if (deadlineExceeded(task, startedNanos)) {
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "DEADLINE_EXHAUSTED",
+              startedNanos);
+        }
+        if (!preparation.prepared()) {
+          boolean notAllowed =
+              "TOOL_NOT_ALLOWED".equals(preparation.failureReason());
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.TOOL_REJECTED,
+                  notAllowed ? "untrusted" : call.toolName(),
+                  notAllowed ? "BLOCKED" : "FAILED",
+                  null));
+          return outcome(
+              task,
+              notAllowed ? RunStatus.BLOCKED : RunStatus.FAILED,
+              null,
+              state,
+              preparation.failureReason(),
+              startedNanos);
+        }
+        AgentToolRegistry.PreparedToolExecution prepared =
+            preparation.execution();
         state.trace.add(
             event(
                 state.trace,
                 AgentTraceEventType.TOOL_REQUEST,
-                call.toolName(),
+                prepared.toolName(),
                 "REQUESTED",
-                call.reference()));
+                prepared.reference()));
         if (toolCalls >= task.maxToolCalls()) {
           state.trace.add(
               event(
                   state.trace,
                   AgentTraceEventType.TOOL_REJECTED,
-                  call.toolName(),
+                  prepared.toolName(),
                   "LIMIT_EXHAUSTED",
-                  call.reference()));
+                  prepared.reference()));
           return outcome(
               task,
               RunStatus.BLOCKED,
@@ -316,17 +359,17 @@ public final class AgentLoopKernel implements AgentKernel {
               "TOOL_CALL_LIMIT_EXHAUSTED",
               startedNanos);
         }
-        AgentToolRegistry.ToolExecution execution;
+        AgentModel.ToolResult result;
         try {
-          execution = tools.execute(task, call);
+          result = prepared.execute();
         } catch (RuntimeException toolFailure) {
           state.trace.add(
               event(
                   state.trace,
                   AgentTraceEventType.TOOL_REJECTED,
-                  call.toolName(),
+                  prepared.toolName(),
                   "FAILED",
-                  call.reference()));
+                  prepared.reference()));
           return outcome(
               task,
               RunStatus.FAILED,
@@ -335,32 +378,16 @@ public final class AgentLoopKernel implements AgentKernel {
               "TOOL_EXECUTION_FAILED",
               startedNanos);
         }
-        if (!execution.allowed()) {
+        if (result == null
+            || !prepared.toolName().equals(result.toolName())
+            || !prepared.reference().equals(result.reference())) {
           state.trace.add(
               event(
                   state.trace,
                   AgentTraceEventType.TOOL_REJECTED,
-                  call.toolName(),
-                  "BLOCKED",
-                  call.reference()));
-          return outcome(
-              task,
-              RunStatus.BLOCKED,
-              null,
-              state,
-              execution.failureReason(),
-              startedNanos);
-        }
-        if (execution.result() == null
-            || !call.toolName().equals(execution.result().toolName())
-            || !call.reference().equals(execution.result().reference())) {
-          state.trace.add(
-              event(
-                  state.trace,
-                  AgentTraceEventType.TOOL_REJECTED,
-                  call.toolName(),
+                  prepared.toolName(),
                   "MALFORMED_RESULT",
-                  call.reference()));
+                  prepared.reference()));
           return outcome(
               task,
               RunStatus.FAILED,
@@ -370,14 +397,14 @@ public final class AgentLoopKernel implements AgentKernel {
               startedNanos);
         }
         toolCalls++;
-        state.toolResults.add(execution.result());
+        state.toolResults.add(result);
         state.trace.add(
             event(
                 state.trace,
                 AgentTraceEventType.TOOL_RESULT,
-                call.toolName(),
+                prepared.toolName(),
                 "SUCCEEDED",
-                execution.result().reference()));
+                result.reference()));
         continue;
       }
       if (decision instanceof AgentModel.FinalDraft finalDraft) {

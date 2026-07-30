@@ -66,7 +66,9 @@ class OpenAiResponsesModelProtocolTest {
         AgentModel.ToolCall toolCall =
             assertInstanceOf(AgentModel.ToolCall.class, first.decision());
         assertEquals("capture.read", toolCall.toolName());
-        assertEquals("capture://synthetic-003", toolCall.reference());
+        assertEquals(
+            AgentModel.ToolArguments.forReference("capture://synthetic-003"),
+            toolCall.arguments());
         assertEquals(new BigDecimal("0.000710"), first.usage().costUsd());
 
         AgentModel.ModelStep second =
@@ -312,7 +314,7 @@ class OpenAiResponsesModelProtocolTest {
         "synthetic-model-egress-policy-v1",
         "stage2-s3",
         "ref-only-v1",
-        "agent-tools-v1",
+        "agent-tools-v2",
         "environment://sha256:" + "b".repeat(64),
         List.of(AgentExecutionProfile.SYNTHETIC_MODEL_EGRESS_CAPABILITY),
         DataClass.PUBLIC);

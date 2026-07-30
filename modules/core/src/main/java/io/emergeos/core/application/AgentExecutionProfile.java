@@ -181,7 +181,7 @@ public record AgentExecutionProfile(
         "agent-draft-policy-v1",
         "stage2-s2",
         "ref-only-v1",
-        "agent-tools-v1",
+        "agent-tools-v2",
         null,
         List.of(),
         null);
