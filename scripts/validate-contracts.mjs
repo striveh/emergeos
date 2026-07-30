@@ -673,6 +673,413 @@ if (taskPackFiles.length === 0) {
 const seenTaskIds = new Set();
 const allowedDataClasses = new Set(["PUBLIC", "PERSONAL", "SENSITIVE", "SECRET"]);
 const allowedRisks = new Set(["READ_ONLY", "REVERSIBLE", "EXTERNAL", "IRREVERSIBLE"]);
+const seenHarnessComparisonSuiteIds = new Set();
+const seenHarnessComparisonExecutionIdentities = new Set();
+let harnessComparisonPackCount = 0;
+
+function verifyHarnessComparison(task, relative) {
+  const comparison = task.harnessComparison;
+  assertExactObjectKeys(
+    comparison,
+    [
+      "suiteId",
+      "variable",
+      "repetitions",
+      "pairedExecutionIdsSharedAcrossArms",
+      "provenance",
+      "frozen",
+      "arms",
+      "cases",
+      "expectedTotals"
+    ],
+    `${relative}: harnessComparison`
+  );
+  if (
+    task.schemaVersion !== "0.3"
+    || task.seed.dataClass !== "PERSONAL"
+    || task.risk !== "REVERSIBLE"
+    || task.expectedArtifactKind !== "ARTICLE_DRAFT"
+    || !task.seed.sourceRef.startsWith("synthetic://eval/")
+    || !task.principalRef.startsWith("synthetic-")
+  ) {
+    throw new Error(
+      `${relative}: offline Harness comparison must be a PERSONAL, REVERSIBLE, literal synthetic draft`
+    );
+  }
+  if (
+    task.modelEval !== undefined
+    || task.syntheticProvenance !== undefined
+    || task.offlineReplay !== undefined
+    || task.expectedReplay !== undefined
+    || task.replayVersions !== undefined
+  ) {
+    throw new Error(
+      `${relative}: harnessComparison cannot also be a modelEval or offlineReplay pack`
+    );
+  }
+  assertExactObjectKeys(
+    task,
+    [
+      "schemaVersion",
+      "taskId",
+      "title",
+      "principalRef",
+      "seed",
+      "requiredConstraints",
+      "forbiddenActions",
+      "acceptanceChecks",
+      "humanReviewQuestions",
+      "risk",
+      "expectedArtifactKind",
+      "faultPlan",
+      "harnessComparison"
+    ],
+    relative
+  );
+  assertExactObjectKeys(
+    task.seed,
+    ["sourceType", "sourceRef", "dataClass", "content"],
+    `${relative}: seed`
+  );
+
+  if (
+    typeof comparison.suiteId !== "string"
+    || !/^[a-z][a-z0-9._-]{0,199}$/.test(comparison.suiteId)
+    || comparison.suiteId !== "offline-reference-grounding-verifier-v1"
+    || comparison.variable !== "reference-grounding-verifier"
+    || comparison.repetitions !== 3
+    || comparison.pairedExecutionIdsSharedAcrossArms !== true
+  ) {
+    throw new Error(
+      `${relative}: harnessComparison must freeze the S4-O1 suite, variable and three repetitions`
+    );
+  }
+  if (seenHarnessComparisonSuiteIds.has(comparison.suiteId)) {
+    throw new Error(
+      `${relative}: duplicate Harness comparison suiteId ${comparison.suiteId}`
+    );
+  }
+  seenHarnessComparisonSuiteIds.add(comparison.suiteId);
+
+  assertExactObjectKeys(
+    comparison.provenance,
+    [
+      "kind",
+      "containsRealUserData",
+      "containsRealAccount",
+      "networkAllowed",
+      "realModelAllowed",
+      "connectorAllowed"
+    ],
+    `${relative}: harnessComparison.provenance`
+  );
+  if (
+    comparison.provenance.kind !== "LITERAL_CHECKED_IN_SYNTHETIC"
+    || comparison.provenance.containsRealUserData !== false
+    || comparison.provenance.containsRealAccount !== false
+    || comparison.provenance.networkAllowed !== false
+    || comparison.provenance.realModelAllowed !== false
+    || comparison.provenance.connectorAllowed !== false
+  ) {
+    throw new Error(
+      `${relative}: harnessComparison provenance must be literal synthetic with model, network and Connector disabled`
+    );
+  }
+
+  const frozen = comparison.frozen;
+  assertExactObjectKeys(
+    frozen,
+    [
+      "principalId",
+      "captureId",
+      "clientNonce",
+      "sourceType",
+      "sourceRef",
+      "dataClass",
+      "content",
+      "intent",
+      "frozenTime",
+      "kernelLatencyMs",
+      "maxModelSteps",
+      "maxToolCalls",
+      "taskDeadlineMs",
+      "model",
+      "harness",
+      "agent",
+      "policy",
+      "state",
+      "contextPolicy",
+      "toolRegistry",
+      "traceIntegrity"
+    ],
+    `${relative}: harnessComparison.frozen`
+  );
+  for (const field of [
+    "principalId",
+    "captureId",
+    "clientNonce",
+    "sourceType",
+    "sourceRef",
+    "dataClass",
+    "content",
+    "intent",
+    "frozenTime",
+    "model",
+    "harness",
+    "agent",
+    "policy",
+    "state",
+    "contextPolicy",
+    "toolRegistry",
+    "traceIntegrity"
+  ]) {
+    if (typeof frozen[field] !== "string" || frozen[field].trim() === "") {
+      throw new Error(
+        `${relative}: harnessComparison.frozen.${field} must be a non-empty string`
+      );
+    }
+  }
+  for (const field of [
+    "kernelLatencyMs",
+    "maxModelSteps",
+    "maxToolCalls",
+    "taskDeadlineMs"
+  ]) {
+    if (!Number.isSafeInteger(frozen[field])) {
+      throw new Error(
+        `${relative}: harnessComparison.frozen.${field} must be an integer`
+      );
+    }
+  }
+  const frozenTimeMillis = Date.parse(frozen.frozenTime);
+  const frozenTimeCanonical =
+    Number.isNaN(frozenTimeMillis)
+      ? null
+      : new Date(frozenTimeMillis).toISOString().replace(".000Z", "Z");
+  if (
+    frozen.principalId !== task.principalRef
+    || frozen.sourceType !== task.seed.sourceType
+    || frozen.sourceRef !== task.seed.sourceRef
+    || frozen.dataClass !== task.seed.dataClass
+    || frozen.content !== task.seed.content
+    || frozen.dataClass !== "PERSONAL"
+    || frozen.sourceType !== "TEXT"
+    || frozen.kernelLatencyMs < 0
+    || frozen.kernelLatencyMs >= frozen.taskDeadlineMs
+    || frozen.taskDeadlineMs < 1
+    || frozen.taskDeadlineMs > MAX_DURATION_MS
+    || frozen.maxModelSteps !== 2
+    || frozen.maxToolCalls !== 1
+    || frozen.model !== "scripted-fake-draft-v1"
+    || frozen.harness !== "framework-free-agent-kernel-v1"
+    || frozen.agent !== "agent-draft-service-v1"
+    || frozen.policy !== "agent-draft-policy-v1"
+    || frozen.state !== "stage2-s4-o1"
+    || frozen.contextPolicy !== "ref-only-v1"
+    || frozen.toolRegistry !== "agent-tools-v1"
+    || frozen.traceIntegrity !== INTEGRITY_PROFILE
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(frozen.frozenTime)
+    || frozenTimeCanonical !== frozen.frozenTime
+  ) {
+    throw new Error(
+      `${relative}: harnessComparison frozen inputs or component versions drifted`
+    );
+  }
+  for (const [field, value] of [
+    ["captureId", frozen.captureId],
+    ["clientNonce", frozen.clientNonce]
+  ]) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/.test(value)) {
+      throw new Error(
+        `${relative}: harnessComparison.frozen.${field} has an invalid identifier`
+      );
+    }
+  }
+
+  if (!Array.isArray(comparison.arms) || comparison.arms.length !== 2) {
+    throw new Error(`${relative}: harnessComparison requires exactly two arms`);
+  }
+  const expectedArms = [
+    ["h0-schema-only", "schema-only-eval-v1"],
+    ["h1-reference-grounding", "agent-draft-verifier-v1"]
+  ];
+  const seenArmIds = new Set();
+  comparison.arms.forEach((arm, index) => {
+    assertExactObjectKeys(
+      arm,
+      ["id", "verifier"],
+      `${relative}: harnessComparison.arms[${index}]`
+    );
+    const [expectedId, expectedVerifier] = expectedArms[index];
+    if (arm.id !== expectedId || arm.verifier !== expectedVerifier) {
+      throw new Error(
+        `${relative}: harnessComparison arms must freeze only the selected Verifier variable`
+      );
+    }
+    if (seenArmIds.has(arm.id)) {
+      throw new Error(`${relative}: duplicate Harness comparison arm id ${arm.id}`);
+    }
+    seenArmIds.add(arm.id);
+  });
+
+  if (!Array.isArray(comparison.cases) || comparison.cases.length !== 4) {
+    throw new Error(`${relative}: harnessComparison requires exactly four cases`);
+  }
+  const expectedCases = [
+    {
+      id: "grounded",
+      mode: "GROUNDED",
+      fault: "NONE",
+      h0Status: "SUCCEEDED",
+      h0Reason: null,
+      h1Status: "SUCCEEDED",
+      h1Reason: null
+    },
+    {
+      id: "claim-without-tool",
+      mode: "CLAIM_WITHOUT_TOOL",
+      fault: "CLAIM_WITHOUT_TOOL",
+      h0Status: "SUCCEEDED",
+      h0Reason: null,
+      h1Status: "FAILED",
+      h1Reason: "MISSING_REQUIRED_EVIDENCE"
+    },
+    {
+      id: "omitted-claim",
+      mode: "OMITTED_EVIDENCE_REF",
+      fault: "OMITTED_EVIDENCE_REF",
+      h0Status: "SUCCEEDED",
+      h0Reason: null,
+      h1Status: "FAILED",
+      h1Reason: "INVALID_EVIDENCE_CLAIM"
+    },
+    {
+      id: "extra-claim",
+      mode: "EXTRA_EVIDENCE_REF",
+      fault: "EXTRA_EVIDENCE_REF",
+      h0Status: "SUCCEEDED",
+      h0Reason: null,
+      h1Status: "FAILED",
+      h1Reason: "INVALID_EVIDENCE_CLAIM"
+    }
+  ];
+  const seenCaseIds = new Set();
+  const seenExecutionPrefixes = new Set();
+  const generatedExecutionIds = new Set();
+  comparison.cases.forEach((testCase, index) => {
+    assertExactObjectKeys(
+      testCase,
+      [
+        "id",
+        "executionIdPrefix",
+        "candidateMode",
+        "faultClass",
+        "expectedByArm"
+      ],
+      `${relative}: harnessComparison.cases[${index}]`
+    );
+    const expected = expectedCases[index];
+    if (
+      testCase.id !== expected.id
+      || testCase.candidateMode !== expected.mode
+      || testCase.faultClass !== expected.fault
+      || typeof testCase.executionIdPrefix !== "string"
+      || !/^[a-z][a-z0-9-]{0,80}$/.test(testCase.executionIdPrefix)
+    ) {
+      throw new Error(
+        `${relative}: harnessComparison case ${index} drifted from the frozen S4-O1 fault matrix`
+      );
+    }
+    if (seenCaseIds.has(testCase.id)) {
+      throw new Error(`${relative}: duplicate Harness comparison case id ${testCase.id}`);
+    }
+    if (seenExecutionPrefixes.has(testCase.executionIdPrefix)) {
+      throw new Error(
+        `${relative}: duplicate Harness comparison executionIdPrefix ${testCase.executionIdPrefix}`
+      );
+    }
+    seenCaseIds.add(testCase.id);
+    seenExecutionPrefixes.add(testCase.executionIdPrefix);
+
+    assertExactObjectKeys(
+      testCase.expectedByArm,
+      ["h0-schema-only", "h1-reference-grounding"],
+      `${relative}: harnessComparison.cases[${index}].expectedByArm`
+    );
+    for (const [armId, expectedStatus, expectedReason] of [
+      ["h0-schema-only", expected.h0Status, expected.h0Reason],
+      ["h1-reference-grounding", expected.h1Status, expected.h1Reason]
+    ]) {
+      const verdict = testCase.expectedByArm[armId];
+      assertExactObjectKeys(
+        verdict,
+        ["status", "failureReason"],
+        `${relative}: harnessComparison.cases[${index}].expectedByArm.${armId}`
+      );
+      if (
+        verdict.status !== expectedStatus
+        || verdict.failureReason !== expectedReason
+      ) {
+        throw new Error(
+          `${relative}: harnessComparison case ${testCase.id} has an invalid ${armId} verdict`
+        );
+      }
+    }
+
+    for (let repetition = 1; repetition <= comparison.repetitions; repetition += 1) {
+      for (const kind of ["run", "task", "art"]) {
+        const generated = `${kind}-${testCase.executionIdPrefix}-r${repetition}`;
+        if (
+          !/^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/.test(generated)
+          || generatedExecutionIds.has(generated)
+        ) {
+          throw new Error(
+            `${relative}: harnessComparison generated execution IDs must be unique and valid`
+          );
+        }
+        generatedExecutionIds.add(generated);
+        for (const arm of comparison.arms) {
+          const compositeIdentity =
+            `${comparison.suiteId}\0${arm.id}\0${generated}`;
+          if (seenHarnessComparisonExecutionIdentities.has(compositeIdentity)) {
+            throw new Error(
+              `${relative}: Harness comparison composite execution identity is not unique`
+            );
+          }
+          seenHarnessComparisonExecutionIdentities.add(compositeIdentity);
+        }
+      }
+    }
+  });
+
+  assertExactObjectKeys(
+    comparison.expectedTotals,
+    [
+      "pairedCandidates",
+      "runs",
+      "h0Accepted",
+      "h0FaultAcceptances",
+      "h1Accepted",
+      "h1FaultRejections"
+    ],
+    `${relative}: harnessComparison.expectedTotals`
+  );
+  const expectedTotals = {
+    pairedCandidates: 12,
+    runs: 24,
+    h0Accepted: 12,
+    h0FaultAcceptances: 9,
+    h1Accepted: 3,
+    h1FaultRejections: 9
+  };
+  for (const [field, expected] of Object.entries(expectedTotals)) {
+    if (comparison.expectedTotals[field] !== expected) {
+      throw new Error(
+        `${relative}: harnessComparison.expectedTotals.${field} must be ${expected}`
+      );
+    }
+  }
+}
 
 for (const file of taskPackFiles) {
   const task = readJson(file);
@@ -715,6 +1122,11 @@ for (const file of taskPackFiles) {
     "faultPlan"
   ]) {
     assertNonEmptyStrings(task[field], `${relative}: ${field}`);
+  }
+
+  if (task.harnessComparison !== undefined) {
+    verifyHarnessComparison(task, relative);
+    harnessComparisonPackCount += 1;
   }
 
   if (task.offlineReplay !== undefined || task.expectedReplay !== undefined) {
@@ -880,6 +1292,10 @@ for (const file of taskPackFiles) {
       );
     }
   }
+}
+
+if (harnessComparisonPackCount === 0) {
+  throw new Error("No offline Harness comparison Task Pack found");
 }
 
 process.stdout.write(`Validated ${taskPackFiles.length} synthetic evaluation task packs with unique task IDs.\n`);

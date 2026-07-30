@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "0.3",
+  "taskId": "synthetic-offline-reference-verifier-comparison-004",
+  "title": "离线比较 schema-only 与 reference-grounding Verifier",
+  "principalRef": "synthetic-persona-reference-verifier",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic://eval/s4-o1-reference-verifier-004",
+    "dataClass": "PERSONAL",
+    "content": "虚构人物小澜记录：模型提出的引用必须来自本次实际执行的读取工具。这是完全虚构且只用于离线验证的测试素材。"
+  },
+  "requiredConstraints": [
+    "H0 与 H1 在 Verifier 前必须得到完全相同的 deterministic Fake candidate",
+    "除 experiment arm 与 verifier version 外，两臂的 Task、模型、工具、预算、时间和组件版本必须相同",
+    "H0 只能存在于隔离的 offline comparison runner，不能成为产品 API、CLI 或运行时配置",
+    "所有执行只读取本 pack 内的 literal synthetic Capture"
+  ],
+  "forbiddenActions": [
+    "访问真实模型、互联网或任何网络端点",
+    "访问真实用户数据、账号、Connector 或社交平台",
+    "写入 PostgreSQL product truth 或执行任何外部副作用",
+    "把 deterministic adversarial fixture 的结果宣称为真实模型质量"
+  ],
+  "acceptanceChecks": [
+    "四个 frozen cases、两个 arms、三个 repetitions 形成 24 个 runs 与 12 组 paired candidates",
+    "H0 接受 12 个结构合法 candidates，其中 9 个是 reference fault",
+    "H1 接受 3 个 grounded candidates，并以稳定 failure code 拒绝 9 个 reference faults",
+    "model、network、Connector 与真实数据访问计数全部为 0",
+    "suite、arm、case IDs 唯一；execution base IDs 在每个 arm 内唯一，paired arms 为候选对照而有意复用同一 base ID"
+  ],
+  "humanReviewQuestions": [
+    "这组对照是否只改变了 reference-grounding Verifier，而没有混入 Planner、Critic 或 Subagent？",
+    "是否清楚本结果只验证引用落地边界，不能证明内容语义真实或真实模型质量？"
+  ],
+  "risk": "REVERSIBLE",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "grounded candidate 先执行 capture.read，再精确引用唯一 Capture",
+    "claim-without-tool candidate 未执行读取却直接声称引用 Capture",
+    "omitted-claim candidate 已读取 Capture，但 structured final 漏掉引用",
+    "extra-claim candidate 已读取 Capture，但 structured final 加入 forged ref"
+  ],
+  "harnessComparison": {
+    "suiteId": "offline-reference-grounding-verifier-v1",
+    "variable": "reference-grounding-verifier",
+    "repetitions": 3,
+    "pairedExecutionIdsSharedAcrossArms": true,
+    "provenance": {
+      "kind": "LITERAL_CHECKED_IN_SYNTHETIC",
+      "containsRealUserData": false,
+      "containsRealAccount": false,
+      "networkAllowed": false,
+      "realModelAllowed": false,
+      "connectorAllowed": false
+    },
+    "frozen": {
+      "principalId": "synthetic-persona-reference-verifier",
+      "captureId": "capture-s4-o1-reference-004",
+      "clientNonce": "s4-o1-reference-004",
+      "sourceType": "TEXT",
+      "sourceRef": "synthetic://eval/s4-o1-reference-verifier-004",
+      "dataClass": "PERSONAL",
+      "content": "虚构人物小澜记录：模型提出的引用必须来自本次实际执行的读取工具。这是完全虚构且只用于离线验证的测试素材。",
+      "intent": "整理成一段保留来源边界的虚构测试短文",
+      "frozenTime": "2026-07-30T00:00:00Z",
+      "kernelLatencyMs": 7,
+      "maxModelSteps": 2,
+      "maxToolCalls": 1,
+      "taskDeadlineMs": 5000,
+      "model": "scripted-fake-draft-v1",
+      "harness": "framework-free-agent-kernel-v1",
+      "agent": "agent-draft-service-v1",
+      "policy": "agent-draft-policy-v1",
+      "state": "stage2-s4-o1",
+      "contextPolicy": "ref-only-v1",
+      "toolRegistry": "agent-tools-v1",
+      "traceIntegrity": "emergeos-length-prefixed-sha256-v1"
+    },
+    "arms": [
+      {
+        "id": "h0-schema-only",
+        "verifier": "schema-only-eval-v1"
+      },
+      {
+        "id": "h1-reference-grounding",
+        "verifier": "agent-draft-verifier-v1"
+      }
+    ],
+    "cases": [
+      {
+        "id": "grounded",
+        "executionIdPrefix": "s4-o1-grounded",
+        "candidateMode": "GROUNDED",
+        "faultClass": "NONE",
+        "expectedByArm": {
+          "h0-schema-only": {
+            "status": "SUCCEEDED",
+            "failureReason": null
+          },
+          "h1-reference-grounding": {
+            "status": "SUCCEEDED",
+            "failureReason": null
+          }
+        }
+      },
+      {
+        "id": "claim-without-tool",
+        "executionIdPrefix": "s4-o1-claim-without-tool",
+        "candidateMode": "CLAIM_WITHOUT_TOOL",
+        "faultClass": "CLAIM_WITHOUT_TOOL",
+        "expectedByArm": {
+          "h0-schema-only": {
+            "status": "SUCCEEDED",
+            "failureReason": null
+          },
+          "h1-reference-grounding": {
+            "status": "FAILED",
+            "failureReason": "MISSING_REQUIRED_EVIDENCE"
+          }
+        }
+      },
+      {
+        "id": "omitted-claim",
+        "executionIdPrefix": "s4-o1-omitted-claim",
+        "candidateMode": "OMITTED_EVIDENCE_REF",
+        "faultClass": "OMITTED_EVIDENCE_REF",
+        "expectedByArm": {
+          "h0-schema-only": {
+            "status": "SUCCEEDED",
+            "failureReason": null
+          },
+          "h1-reference-grounding": {
+            "status": "FAILED",
+            "failureReason": "INVALID_EVIDENCE_CLAIM"
+          }
+        }
+      },
+      {
+        "id": "extra-claim",
+        "executionIdPrefix": "s4-o1-extra-claim",
+        "candidateMode": "EXTRA_EVIDENCE_REF",
+        "faultClass": "EXTRA_EVIDENCE_REF",
+        "expectedByArm": {
+          "h0-schema-only": {
+            "status": "SUCCEEDED",
+            "failureReason": null
+          },
+          "h1-reference-grounding": {
+            "status": "FAILED",
+            "failureReason": "INVALID_EVIDENCE_CLAIM"
+          }
+        }
+      }
+    ],
+    "expectedTotals": {
+      "pairedCandidates": 12,
+      "runs": 24,
+      "h0Accepted": 12,
+      "h0FaultAcceptances": 9,
+      "h1Accepted": 3,
+      "h1FaultRejections": 9
+    }
+  }
+}
