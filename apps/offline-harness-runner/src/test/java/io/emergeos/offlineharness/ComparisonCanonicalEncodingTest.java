@@ -32,15 +32,16 @@ class ComparisonCanonicalEncodingTest {
     Map<String, Object> reversed = new LinkedHashMap<>();
     reversed.put("ordered", List.of("first", "second"));
     reversed.put("nullable", null);
+    Map<String, Object> listOrderMutation = new LinkedHashMap<>();
+    listOrderMutation.put("nullable", null);
+    listOrderMutation.put("ordered", List.of("second", "first"));
 
     assertArrayEquals(
         ComparisonCanonicalEncoding.encode(first),
         ComparisonCanonicalEncoding.encode(reversed));
     assertNotEquals(
         hex(ComparisonCanonicalEncoding.encode(first)),
-        hex(
-            ComparisonCanonicalEncoding.encode(
-                Map.of("ordered", List.of("second", "first")))));
+        hex(ComparisonCanonicalEncoding.encode(listOrderMutation)));
     assertNotEquals(
         hex(ComparisonCanonicalEncoding.encode(first)),
         hex(
