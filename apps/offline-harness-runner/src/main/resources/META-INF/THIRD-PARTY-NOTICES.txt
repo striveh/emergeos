@@ -1,0 +1,21 @@
+Third-party notices for the EmergeOS Offline Harness Runner
+===========================================================
+
+This packaged internal evaluation tool bundles Jackson components.
+Jackson is licensed under the Apache License, Version 2.0. A complete
+copy is included at META-INF/licenses/Apache-2.0.txt, and the merged
+Jackson NOTICE is included at META-INF/NOTICE.
+
+jackson-core also contains FastDoubleParser and Schubfach code. Their
+license texts are included at:
+
+- META-INF/FastDoubleParser-LICENSE
+- META-INF/FastDoubleParser-ThirdParty-LICENSE
+- META-INF/Schubfach-LICENSE
+
+Exact dependency versions remain available in the packaged Maven
+metadata under META-INF/maven.
+
+This third-party notice does not choose or grant a license for the
+EmergeOS project itself. Project licensing remains an owner decision
+before public distribution or open-source release.

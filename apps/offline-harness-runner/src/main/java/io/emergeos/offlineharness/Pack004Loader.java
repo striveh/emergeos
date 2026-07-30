@@ -71,13 +71,15 @@ final class Pack004Loader {
     if (suppliedRoot == null) {
       throw rejected("REPO_ROOT_INVALID");
     }
-    Path repositoryRoot = suppliedRoot.toAbsolutePath().normalize();
     try {
-      if (Files.isSymbolicLink(repositoryRoot)
+      Path normalizedRoot =
+          suppliedRoot.toAbsolutePath().normalize();
+      if (Files.isSymbolicLink(normalizedRoot)
           || !Files.isDirectory(
-              repositoryRoot, LinkOption.NOFOLLOW_LINKS)) {
+              normalizedRoot, LinkOption.NOFOLLOW_LINKS)) {
         throw rejected("REPO_ROOT_INVALID");
       }
+      Path repositoryRoot = normalizedRoot.toRealPath();
 
       Path current = repositoryRoot;
       int segmentIndex = 0;
@@ -159,9 +161,12 @@ final class Pack004Loader {
       BasicFileAttributes before, BasicFileAttributes after) {
     Object beforeKey = before.fileKey();
     Object afterKey = after.fileKey();
-    return beforeKey != null
-        && afterKey != null
-        && !beforeKey.equals(afterKey);
+    return beforeKey == null
+        || afterKey == null
+        || !beforeKey.equals(afterKey)
+        || !before.lastModifiedTime()
+            .equals(after.lastModifiedTime())
+        || !before.creationTime().equals(after.creationTime());
   }
 
   private static Pack004 parse(byte[] bytes) {

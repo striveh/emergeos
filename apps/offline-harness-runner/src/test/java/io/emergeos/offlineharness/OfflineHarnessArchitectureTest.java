@@ -6,9 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -105,6 +107,90 @@ class OfflineHarnessArchitectureTest {
                         || reference.contains(
                             "LiteralReferenceCandidateGenerator")),
         () -> "verifier common-mode refs: " + constants);
+  }
+
+  @Test
+  void durableReadCommandDoesNotReferenceRunnerGeneratorOrWriter()
+      throws IOException {
+    Path productionClasses =
+        Path.of(System.getProperty("emerge.offline.classes"))
+            .toAbsolutePath()
+            .normalize();
+    Path packageDirectory =
+        productionClasses.resolve(
+            Path.of("io", "emergeos", "offlineharness"));
+    List<String> constants = new ArrayList<>();
+    try (var paths = Files.list(packageDirectory)) {
+      for (Path classFile :
+          paths
+              .filter(
+                  path ->
+                      path.getFileName()
+                              .toString()
+                              .startsWith(
+                                  "OfflineComparisonReadCommand")
+                          && path.toString().endsWith(".class"))
+              .toList()) {
+        constants.addAll(
+            classUtf8Constants(Files.readAllBytes(classFile)));
+      }
+    }
+
+    assertFalse(
+        constants.stream()
+            .anyMatch(
+                reference ->
+                    reference.contains("Pack004ComparisonRunner")
+                        || reference.contains(
+                            "LiteralReferenceCandidateGenerator")
+                        || reference.contains(
+                            "OfflineComparisonWriteCommand")),
+        () -> "durable read common-mode refs: " + constants);
+  }
+
+  @Test
+  void offlineHarnessExportsOnlyThePackagedEntrypoint()
+      throws Exception {
+    Path productionClasses =
+        Path.of(System.getProperty("emerge.offline.classes"))
+            .toAbsolutePath()
+            .normalize();
+    Path packageDirectory =
+        productionClasses.resolve(
+            Path.of("io", "emergeos", "offlineharness"));
+    Set<String> publicTopLevelTypes = new HashSet<>();
+    try (var paths = Files.list(packageDirectory)) {
+      for (Path classFile :
+          paths
+              .filter(
+                  path ->
+                      path.toString().endsWith(".class")
+                          && !path.getFileName()
+                              .toString()
+                              .contains("$"))
+              .toList()) {
+        String simpleName =
+            classFile
+                .getFileName()
+                .toString()
+                .replaceFirst("\\.class$", "");
+        Class<?> type =
+            Class.forName(
+                "io.emergeos.offlineharness." + simpleName,
+                false,
+                getClass().getClassLoader());
+        if (Modifier.isPublic(type.getModifiers())) {
+          publicTopLevelTypes.add(type.getName());
+        }
+      }
+    }
+
+    assertTrue(
+        publicTopLevelTypes.equals(
+            Set.of(
+                "io.emergeos.offlineharness."
+                    + "Pack004ComparisonMain")),
+        () -> "unexpected public surface: " + publicTopLevelTypes);
   }
 
   @Test

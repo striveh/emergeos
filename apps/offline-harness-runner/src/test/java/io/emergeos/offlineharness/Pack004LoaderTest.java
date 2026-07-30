@@ -6,10 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -300,6 +303,30 @@ class Pack004LoaderTest {
             .getParameterCount());
   }
 
+  @Test
+  void missingIdentityOrMtimeChangeFailsClosed()
+      throws Exception {
+    Method changed =
+        Pack004Loader.class.getDeclaredMethod(
+            "fileIdentityChanged",
+            BasicFileAttributes.class,
+            BasicFileAttributes.class);
+    changed.setAccessible(true);
+
+    assertTrue(
+        (boolean)
+            changed.invoke(
+                null,
+                attributes(null, FileTime.fromMillis(1)),
+                attributes(null, FileTime.fromMillis(1))));
+    assertTrue(
+        (boolean)
+            changed.invoke(
+                null,
+                attributes("identity", FileTime.fromMillis(1)),
+                attributes("identity", FileTime.fromMillis(2))));
+  }
+
   private String sourceText() throws IOException {
     return Files.readString(SOURCE_PACK, StandardCharsets.UTF_8);
   }
@@ -341,5 +368,55 @@ class Pack004LoaderTest {
     assertRejected(
         "PACK_SEMANTICS_MISMATCH",
         repositoryWith(mutated.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  private static BasicFileAttributes attributes(
+      Object fileKey, FileTime modified) {
+    return new BasicFileAttributes() {
+      @Override
+      public FileTime lastModifiedTime() {
+        return modified;
+      }
+
+      @Override
+      public FileTime lastAccessTime() {
+        return modified;
+      }
+
+      @Override
+      public FileTime creationTime() {
+        return modified;
+      }
+
+      @Override
+      public boolean isRegularFile() {
+        return true;
+      }
+
+      @Override
+      public boolean isDirectory() {
+        return false;
+      }
+
+      @Override
+      public boolean isSymbolicLink() {
+        return false;
+      }
+
+      @Override
+      public boolean isOther() {
+        return false;
+      }
+
+      @Override
+      public long size() {
+        return 1;
+      }
+
+      @Override
+      public Object fileKey() {
+        return fileKey;
+      }
+    };
   }
 }
