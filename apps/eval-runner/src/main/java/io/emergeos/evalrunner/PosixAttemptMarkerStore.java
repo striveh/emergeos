@@ -11,8 +11,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.nio.file.attribute.AclEntryType;
-import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.UserPrincipal;
 import java.util.Objects;
 import java.util.Set;
@@ -131,17 +129,7 @@ final class PosixAttemptMarkerStore {
   private static void requireNoForeignAllowAcl(
       Path path, UserPrincipal owner, String failureCode)
       throws IOException {
-    AclFileAttributeView view =
-        Files.getFileAttributeView(
-            path,
-            AclFileAttributeView.class,
-            LinkOption.NOFOLLOW_LINKS);
-    if (view != null
-        && view.getAcl().stream()
-            .anyMatch(
-                entry ->
-                    entry.type() == AclEntryType.ALLOW
-                        && !owner.equals(entry.principal()))) {
+    if (VisibleAclPolicy.hasForeignAllow(path, owner)) {
       throw rejected(failureCode);
     }
   }

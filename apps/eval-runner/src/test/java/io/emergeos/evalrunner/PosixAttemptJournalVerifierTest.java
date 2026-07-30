@@ -34,6 +34,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -389,6 +390,11 @@ class PosixAttemptJournalVerifierTest {
         fixture.record().resolveSibling(
             fixture.record().getFileName() + ".pending");
     Files.move(fixture.record(), pending);
+    Files.writeString(
+        pending,
+        "{malformed-non-authoritative",
+        StandardCharsets.US_ASCII,
+        java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
 
     PosixAttemptJournalVerifier.Verification result =
         new PosixAttemptJournalVerifier().verify(fixture.marker());
@@ -403,6 +409,239 @@ class PosixAttemptJournalVerifierTest {
     assertEquals(
         PosixAttemptJournalVerifier.BillingStatus.ATTRIBUTED,
         result.billing().status());
+  }
+
+  @Test
+  void terminalJournalWithPendingOnlyRecordIsInvalid()
+      throws Exception {
+    Fixture fixture = completeFixture(120, 120, true);
+    Path pending =
+        fixture.record().resolveSibling(
+            fixture.record().getFileName() + ".pending");
+    Files.move(fixture.record(), pending);
+
+    PosixAttemptJournalVerifier.Verification result =
+        new PosixAttemptJournalVerifier().verify(fixture.marker());
+
+    assertEquals(
+        PosixAttemptJournalVerifier.Verdict.INVALID,
+        result.verdict());
+    assertEquals("RUN_RECORD_STATE_INVALID", result.code());
+    assertEquals(
+        PosixAttemptJournalVerifier.RecordState.INVALID,
+        result.recordState());
+  }
+
+  @Test
+  void committedLinkResidueIsFinalUnsealedAndUnknown()
+      throws Exception {
+    Fixture fixture = completeFixture(120, 120, false);
+    Path pending =
+        fixture.record().resolveSibling(
+            fixture.record().getFileName() + ".pending");
+    Files.createLink(pending, fixture.record());
+
+    PosixAttemptJournalVerifier.Verification result =
+        new PosixAttemptJournalVerifier().verify(fixture.marker());
+
+    assertEquals(
+        PosixAttemptJournalVerifier.Verdict.UNKNOWN,
+        result.verdict());
+    assertEquals("TERMINAL_EVENT_MISSING", result.code());
+    assertEquals(
+        PosixAttemptJournalVerifier.RecordState.FINAL_UNSEALED,
+        result.recordState());
+    assertEquals(
+        PosixAttemptJournalVerifier.BillingStatus.ATTRIBUTED,
+        result.billing().status());
+  }
+
+  @Test
+  void terminalJournalAcceptsOnlySameInodeCommittedResidue()
+      throws Exception {
+    Fixture fixture = completeFixture(120, 120, true);
+    Path pending =
+        fixture.record().resolveSibling(
+            fixture.record().getFileName() + ".pending");
+    Files.createLink(pending, fixture.record());
+
+    PosixAttemptJournalVerifier.Verification result =
+        new PosixAttemptJournalVerifier().verify(fixture.marker());
+
+    assertEquals(
+        PosixAttemptJournalVerifier.Verdict.VERIFIED,
+        result.verdict(),
+        result.toString());
+    assertEquals("TERMINAL_EVIDENCE_VERIFIED", result.code());
+    assertEquals(
+        PosixAttemptJournalVerifier.RecordState.TERMINAL_LINKED,
+        result.recordState());
+    assertTrue(result.verified());
+  }
+
+  @Test
+  void equalBytesInDifferentTargetAndPendingInodesAreInvalid()
+      throws Exception {
+    Fixture fixture = completeFixture(120, 120, false);
+    Path pending =
+        fixture.record().resolveSibling(
+            fixture.record().getFileName() + ".pending");
+    Files.createFile(
+        pending,
+        PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rw-------")));
+    Files.write(
+        pending,
+        Files.readAllBytes(fixture.record()),
+        java.nio.file.StandardOpenOption.WRITE);
+
+    PosixAttemptJournalVerifier.Verification result =
+        new PosixAttemptJournalVerifier().verify(fixture.marker());
+
+    assertEquals(
+        PosixAttemptJournalVerifier.Verdict.INVALID,
+        result.verdict());
+    assertEquals("RUN_RECORD_STATE_INVALID", result.code());
+    assertEquals(
+        PosixAttemptJournalVerifier.RecordState.INVALID,
+        result.recordState());
+  }
+
+  @Test
+  void terminalJournalRejectsEqualBytesInDifferentPendingInode()
+      throws Exception {
+    Fixture fixture = completeFixture(120, 120, true);
+    Path pending =
+        fixture.record().resolveSibling(
+            fixture.record().getFileName() + ".pending");
+    Files.createFile(
+        pending,
+        PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rw-------")));
+    Files.write(
+        pending,
+        Files.readAllBytes(fixture.record()),
+        java.nio.file.StandardOpenOption.WRITE);
+
+    PosixAttemptJournalVerifier.Verification result =
+        new PosixAttemptJournalVerifier().verify(fixture.marker());
+
+    assertEquals(
+        PosixAttemptJournalVerifier.Verdict.INVALID,
+        result.verdict());
+    assertEquals("RUN_RECORD_STATE_INVALID", result.code());
+    assertEquals(
+        PosixAttemptJournalVerifier.RecordState.INVALID,
+        result.recordState());
+  }
+
+  @Test
+  void sameInodeCleanupAfterIdentityCheckRemainsFinalUnsealed()
+      throws Exception {
+    Fixture fixture = completeFixture(120, 120, false);
+    Path pending =
+        fixture.record().resolveSibling(
+            fixture.record().getFileName() + ".pending");
+    Files.createLink(pending, fixture.record());
+    byte[] authoritative = Files.readAllBytes(fixture.record());
+    AtomicInteger observations = new AtomicInteger();
+
+    PosixAttemptJournalVerifier.Verification result =
+        new PosixAttemptJournalVerifier(
+                (observedPending, record, sameFile) -> {
+                  assertTrue(sameFile);
+                  assertEquals(pending, observedPending);
+                  observations.incrementAndGet();
+                  Files.delete(observedPending);
+                })
+            .verify(fixture.marker());
+
+    assertEquals(1, observations.get());
+    assertEquals(
+        PosixAttemptJournalVerifier.Verdict.UNKNOWN,
+        result.verdict());
+    assertEquals(
+        PosixAttemptJournalVerifier.RecordState.FINAL_UNSEALED,
+        result.recordState());
+    assertFalse(Files.exists(pending));
+    assertTrue(
+        MessageDigest.isEqual(
+            authoritative, Files.readAllBytes(fixture.record())));
+  }
+
+  @Test
+  void sameInodeReplacementWithEqualBytesCannotStayValid()
+      throws Exception {
+    Fixture fixture = completeFixture(120, 120, false);
+    Path pending =
+        fixture.record().resolveSibling(
+            fixture.record().getFileName() + ".pending");
+    Files.createLink(pending, fixture.record());
+    byte[] authoritative = Files.readAllBytes(fixture.record());
+    AtomicInteger observations = new AtomicInteger();
+
+    PosixAttemptJournalVerifier.Verification result =
+        new PosixAttemptJournalVerifier(
+                (observedPending, record, sameFile) -> {
+                  assertTrue(sameFile);
+                  observations.incrementAndGet();
+                  Files.delete(observedPending);
+                  Files.createFile(
+                      observedPending,
+                      PosixFilePermissions.asFileAttribute(
+                          PosixFilePermissions.fromString(
+                              "rw-------")));
+                  Files.write(
+                      observedPending,
+                      authoritative,
+                      java.nio.file.StandardOpenOption.WRITE);
+                  assertFalse(
+                      Files.isSameFile(observedPending, record));
+                })
+            .verify(fixture.marker());
+
+    assertEquals(1, observations.get());
+    assertEquals(
+        PosixAttemptJournalVerifier.Verdict.INVALID,
+        result.verdict());
+    assertEquals("RUN_RECORD_STATE_INVALID", result.code());
+    assertTrue(
+        MessageDigest.isEqual(
+            authoritative, Files.readAllBytes(pending)));
+  }
+
+  @Test
+  void differentInodeCannotDisappearIntoAValidState()
+      throws Exception {
+    Fixture fixture = completeFixture(120, 120, false);
+    Path pending =
+        fixture.record().resolveSibling(
+            fixture.record().getFileName() + ".pending");
+    Files.createFile(
+        pending,
+        PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rw-------")));
+    Files.write(
+        pending,
+        Files.readAllBytes(fixture.record()),
+        java.nio.file.StandardOpenOption.WRITE);
+    AtomicInteger observations = new AtomicInteger();
+
+    PosixAttemptJournalVerifier.Verification result =
+        new PosixAttemptJournalVerifier(
+                (observedPending, record, sameFile) -> {
+                  assertFalse(sameFile);
+                  observations.incrementAndGet();
+                  Files.delete(observedPending);
+                })
+            .verify(fixture.marker());
+
+    assertEquals(1, observations.get());
+    assertEquals(
+        PosixAttemptJournalVerifier.Verdict.INVALID,
+        result.verdict());
+    assertEquals("RUN_RECORD_STATE_INVALID", result.code());
+    assertFalse(Files.exists(pending));
   }
 
   @Test

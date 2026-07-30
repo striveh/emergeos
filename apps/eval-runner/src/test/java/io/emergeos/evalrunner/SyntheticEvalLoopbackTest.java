@@ -21,6 +21,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -28,6 +29,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -45,6 +47,7 @@ import java.util.TreeMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -115,6 +118,8 @@ class SyntheticEvalLoopbackTest {
               EvalExecutionObserver.Phase.PROVIDER_SDK_CREATE,
               EvalExecutionObserver.Phase.PROVIDER_ATTRIBUTED_DURABLE,
               EvalExecutionObserver.Phase.RUN_RECORD_PENDING_DURABLE,
+              EvalExecutionObserver.Phase
+                  .RUN_RECORD_LINK_COMMIT_COMPLETE,
               EvalExecutionObserver.Phase.RUN_RECORD_FINAL_DURABLE,
               EvalExecutionObserver.Phase.TERMINAL_JOURNAL_DURABLE),
           phases);
@@ -513,6 +518,89 @@ class SyntheticEvalLoopbackTest {
   }
 
   @Test
+  void targetCreatedAfterPrecheckIsNeverOverwritten()
+      throws Exception {
+    List<String> requests = new ArrayList<>();
+    AtomicReference<Object> competingFileKey =
+        new AtomicReference<>();
+    Path home =
+        Files.createDirectory(tempDir.resolve("target-race-home"));
+    try (LoopbackResponsesServer server =
+        new LoopbackResponsesServer(
+            requests, firstResponse(), secondResponse())) {
+      SyntheticEvalExecutor.Rejected rejected =
+          assertThrows(
+              SyntheticEvalExecutor.Rejected.class,
+              () ->
+                  new SyntheticEvalExecutor(repoRoot())
+                      .execute(
+                          new SyntheticEvalExecutor.Dependencies(
+                              exactConsole(),
+                              home,
+                              () -> "sentinel-target-race-key",
+                              apiKey ->
+                                  loopbackClient(
+                                      apiKey, server.baseUrl()),
+                              Clock.fixed(
+                                  Instant.parse(
+                                      "2026-07-30T10:00:00Z"),
+                                  ZoneOffset.UTC),
+                              System::nanoTime,
+                              phase -> {
+                                if (phase
+                                    == EvalExecutionObserver.Phase
+                                        .RUN_RECORD_PENDING_DURABLE) {
+                                  competingFileKey.set(
+                                      createCompetingRunRecord(home));
+                                }
+                              })));
+
+      assertEquals("RUN_RECORD_ALREADY_EXISTS", rejected.code());
+      assertEquals(2, requests.size());
+      assertTrue(
+          rejected.safeReceipt().contains("billingStatus=UNKNOWN"));
+      assertFalse(
+          rejected.safeReceipt().contains("sentinel-target-race-key"));
+      assertFalse(
+          rejected.safeReceipt().contains(SyntheticEvalCatalog.CONTENT));
+      Path directory = attemptDirectory(home);
+      Path target = runRecord(directory);
+      Path pending =
+          directory.resolve(
+              SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID
+                  + ".run.json.pending");
+      assertEquals(
+          competingFileKey.get(),
+          Files.readAttributes(
+                  target,
+                  BasicFileAttributes.class,
+                  LinkOption.NOFOLLOW_LINKS)
+              .fileKey());
+      assertEquals(
+          "{\"competitor\":true}",
+          Files.readString(target, StandardCharsets.US_ASCII));
+      assertTrue(
+          Files.isRegularFile(
+              pending, LinkOption.NOFOLLOW_LINKS));
+      assertOwnerPrivate(pending, directory);
+      String journal = Files.readString(journal(directory));
+      assertFalse(journal.contains("TERMINAL_RUN_RECORD_PERSISTED"));
+      assertFalse(journal.contains("sentinel-target-race-key"));
+
+      PosixAttemptJournalVerifier.Verification verification =
+          new PosixAttemptJournalVerifier()
+              .verify(
+                  directory.resolve(
+                      SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID
+                          + ".attempt"));
+      assertEquals(
+          PosixAttemptJournalVerifier.Verdict.INVALID,
+          verification.verdict());
+      assertEquals("RUN_RECORD_STATE_INVALID", verification.code());
+    }
+  }
+
+  @Test
   void preexistingPartialPendingRecordCannotBecomeTerminalEvidence()
       throws Exception {
     List<String> requests = new ArrayList<>();
@@ -812,6 +900,42 @@ class SyntheticEvalLoopbackTest {
           pending,
           "{\"partial\":true}",
           StandardOpenOption.WRITE);
+    } catch (IOException failure) {
+      throw new UncheckedIOException(failure);
+    }
+  }
+
+  private static Object createCompetingRunRecord(Path home) {
+    Path target = runRecord(attemptDirectory(home));
+    try {
+      Files.createFile(
+          target,
+          PosixFilePermissions.asFileAttribute(
+              PosixFilePermissions.fromString("rw-------")));
+      Files.writeString(
+          target,
+          "{\"competitor\":true}",
+          StandardCharsets.US_ASCII,
+          StandardOpenOption.WRITE);
+      try (FileChannel channel =
+          FileChannel.open(target, StandardOpenOption.WRITE)) {
+        channel.force(true);
+      }
+      try (FileChannel channel =
+          FileChannel.open(
+              target.getParent(), StandardOpenOption.READ)) {
+        channel.force(true);
+      }
+      Object fileKey =
+          Files.readAttributes(
+                  target,
+                  BasicFileAttributes.class,
+                  LinkOption.NOFOLLOW_LINKS)
+              .fileKey();
+      if (fileKey == null) {
+        throw new IOException("file identity unavailable");
+      }
+      return fileKey;
     } catch (IOException failure) {
       throw new UncheckedIOException(failure);
     }

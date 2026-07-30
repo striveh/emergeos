@@ -11,8 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.AclEntryType;
-import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
@@ -299,17 +297,7 @@ final class PosixAttemptJournal {
 
   private static boolean hasForeignAllowAcl(
       Path path, UserPrincipal owner) throws IOException {
-    AclFileAttributeView view =
-        Files.getFileAttributeView(
-            path,
-            AclFileAttributeView.class,
-            LinkOption.NOFOLLOW_LINKS);
-    return view != null
-        && view.getAcl().stream()
-            .anyMatch(
-                entry ->
-                    entry.type() == AclEntryType.ALLOW
-                        && !owner.equals(entry.principal()));
+    return VisibleAclPolicy.hasForeignAllow(path, owner);
   }
 
   private static void requireSafeField(String name, String value) {

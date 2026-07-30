@@ -14,7 +14,10 @@ import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -129,6 +132,7 @@ class SyntheticEvalCrashRestartProcessIT {
           crashCase.httpRequests(),
           server.requestCount(),
           crashCase.id());
+      assertRecordShape(home, crashCase.recordShape());
 
       EvidenceSnapshot afterCrash = snapshot(home);
       ProcessResult firstVerification =
@@ -138,12 +142,14 @@ class SyntheticEvalCrashRestartProcessIT {
       assertEquals(
           crashCase.expectedVerificationLine(),
           firstVerification.output());
+      assertRecordShape(home, crashCase.recordShape());
       assertEquals(afterCrash, snapshot(home), crashCase.id());
 
       ProcessResult secondVerification =
           runHarnessToCompletion(home, tmp, "verify", home.toString());
       assertEquals(
           firstVerification, secondVerification, crashCase.id());
+      assertRecordShape(home, crashCase.recordShape());
       assertEquals(afterCrash, snapshot(home), crashCase.id());
       assertSafeOutput(firstVerification.output());
 
@@ -167,6 +173,29 @@ class SyntheticEvalCrashRestartProcessIT {
           crashCase.id());
       assertEquals(afterCrash, snapshot(home), crashCase.id());
       assertSafeOutput(replay.output());
+
+      if (crashCase.recordShape() == RecordShape.LINK_RESIDUE) {
+        replacePendingWithEqualBytesDifferentInode(home);
+        EvidenceSnapshot corrupted = snapshot(home);
+        ProcessResult invalid =
+            runHarnessToCompletion(
+                home, tmp, "verify", home.toString());
+        assertEquals(3, invalid.exitCode(), invalid.output());
+        assertEquals(
+            "VERIFY verdict=INVALID"
+                + " code=RUN_RECORD_STATE_INVALID"
+                + " billingStatus=UNKNOWN"
+                + " trustedPrefix=false"
+                + " observedCostUsd=0"
+                + " observedTokenCount=0"
+                + " providerSdkCreateInvocations=0"
+                + " providerAttributedInvocations=0"
+                + " recordState=INVALID"
+                + " terminalPresent=false",
+            invalid.output());
+        assertEquals(corrupted, snapshot(home));
+        assertSafeOutput(invalid.output());
+      }
     }
   }
 
@@ -287,20 +316,47 @@ class SyntheticEvalCrashRestartProcessIT {
   private static EvidenceSnapshot snapshot(Path home)
       throws IOException {
     Path directory = home.resolve(".emergeos/eval-attempts");
+    BasicFileAttributes directoryAttributes =
+        Files.readAttributes(
+            directory,
+            BasicFileAttributes.class,
+            LinkOption.NOFOLLOW_LINKS);
+    assertTrue(
+        directoryAttributes.fileKey() != null,
+        directory.toString());
     Map<String, EvidenceFile> files = new LinkedHashMap<>();
     try (var entries = Files.list(directory)) {
       for (Path path :
           entries.sorted(Comparator.comparing(Path::toString)).toList()) {
         byte[] bytes = Files.readAllBytes(path);
+        BasicFileAttributes attributes =
+            Files.readAttributes(
+                path,
+                BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        assertTrue(attributes.fileKey() != null, path.toString());
         files.put(
             path.getFileName().toString(),
             new EvidenceFile(
                 bytes.length,
                 Files.getLastModifiedTime(path).toMillis(),
-                sha256(bytes)));
+                sha256(bytes),
+                attributes.fileKey().toString(),
+                PosixFilePermissions.toString(
+                    Files.getPosixFilePermissions(
+                        path, LinkOption.NOFOLLOW_LINKS)),
+                Files.getOwner(path, LinkOption.NOFOLLOW_LINKS)
+                    .getName()));
       }
     }
-    return new EvidenceSnapshot(Map.copyOf(files));
+    return new EvidenceSnapshot(
+        directoryAttributes.fileKey().toString(),
+        PosixFilePermissions.toString(
+            Files.getPosixFilePermissions(
+                directory, LinkOption.NOFOLLOW_LINKS)),
+        Files.getOwner(directory, LinkOption.NOFOLLOW_LINKS)
+            .getName(),
+        Map.copyOf(files));
   }
 
   private static String sha256(byte[] bytes) {
@@ -327,6 +383,75 @@ class SyntheticEvalCrashRestartProcessIT {
     assertFalse(output.contains("Exception"), output);
   }
 
+  private static void assertRecordShape(
+      Path home, RecordShape expected) throws IOException {
+    Path directory = home.resolve(".emergeos/eval-attempts");
+    Path marker =
+        directory.resolve(
+            SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID + ".attempt");
+    Path journal =
+        directory.resolve(
+            SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID + ".journal");
+    Path target =
+        directory.resolve(
+            SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID + ".run.json");
+    Path pending =
+        directory.resolve(
+            SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID
+                + ".run.json.pending");
+    assertTrue(Files.isRegularFile(marker), expected.name());
+    assertTrue(Files.isRegularFile(journal), expected.name());
+    switch (expected) {
+      case NONE -> {
+        assertFalse(Files.exists(target), expected.name());
+        assertFalse(Files.exists(pending), expected.name());
+      }
+      case PENDING_ONLY -> {
+        assertFalse(Files.exists(target), expected.name());
+        assertTrue(Files.isRegularFile(pending), expected.name());
+      }
+      case LINK_RESIDUE -> {
+        assertTrue(Files.isRegularFile(target), expected.name());
+        assertTrue(Files.isRegularFile(pending), expected.name());
+        assertTrue(Files.isSameFile(target, pending), expected.name());
+        assertFalse(
+            Files.readString(journal)
+                .contains("TERMINAL_RUN_RECORD_PERSISTED"),
+            expected.name());
+      }
+      case TARGET_ONLY -> {
+        assertTrue(Files.isRegularFile(target), expected.name());
+        assertFalse(Files.exists(pending), expected.name());
+      }
+    }
+  }
+
+  private static void replacePendingWithEqualBytesDifferentInode(
+      Path home) throws IOException {
+    Path directory = home.resolve(".emergeos/eval-attempts");
+    Path target =
+        directory.resolve(
+            SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID + ".run.json");
+    Path pending =
+        directory.resolve(
+            SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID
+                + ".run.json.pending");
+    Path replacement =
+        directory.resolve(
+            SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID
+                + ".run.json.replacement");
+    byte[] bytes = Files.readAllBytes(target);
+    Files.createFile(
+        replacement,
+        PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rw-------")));
+    Files.write(replacement, bytes);
+    assertFalse(Files.isSameFile(target, replacement));
+    Files.delete(pending);
+    Files.move(replacement, pending);
+    assertFalse(Files.isSameFile(target, pending));
+  }
+
   private static List<CrashCase> crashCases() {
     return List.of(
         crashCase(
@@ -341,7 +466,8 @@ class SyntheticEvalCrashRestartProcessIT {
             0,
             0,
             "ABSENT",
-            false),
+            false,
+            RecordShape.NONE),
         crashCase(
             "credential-read-started",
             "CREDENTIAL_READ_STARTED",
@@ -354,7 +480,8 @@ class SyntheticEvalCrashRestartProcessIT {
             0,
             0,
             "ABSENT",
-            false),
+            false,
+            RecordShape.NONE),
         crashCase(
             "provider-intent",
             "PROVIDER_SDK_CREATE_INTENT_DURABLE",
@@ -367,7 +494,8 @@ class SyntheticEvalCrashRestartProcessIT {
             1,
             0,
             "ABSENT",
-            false),
+            false,
+            RecordShape.NONE),
         crashCase(
             "provider-attributed",
             "PROVIDER_ATTRIBUTED_DURABLE",
@@ -380,7 +508,8 @@ class SyntheticEvalCrashRestartProcessIT {
             1,
             1,
             "ABSENT",
-            false),
+            false,
+            RecordShape.NONE),
         crashCase(
             "record-pending",
             "RUN_RECORD_PENDING_DURABLE",
@@ -393,7 +522,22 @@ class SyntheticEvalCrashRestartProcessIT {
             2,
             2,
             "PENDING_NON_AUTHORITATIVE",
-            false),
+            false,
+            RecordShape.PENDING_ONLY),
+        crashCase(
+            "record-link-commit",
+            "RUN_RECORD_LINK_COMMIT_COMPLETE",
+            2,
+            "UNKNOWN",
+            "TERMINAL_EVENT_MISSING",
+            "ATTRIBUTED",
+            new BigDecimal("0.000413"),
+            300,
+            2,
+            2,
+            "FINAL_UNSEALED",
+            false,
+            RecordShape.LINK_RESIDUE),
         crashCase(
             "record-final",
             "RUN_RECORD_FINAL_DURABLE",
@@ -406,7 +550,8 @@ class SyntheticEvalCrashRestartProcessIT {
             2,
             2,
             "FINAL_UNSEALED",
-            false),
+            false,
+            RecordShape.TARGET_ONLY),
         crashCase(
             "terminal-journal",
             "TERMINAL_JOURNAL_DURABLE",
@@ -419,7 +564,8 @@ class SyntheticEvalCrashRestartProcessIT {
             2,
             2,
             "TERMINAL_LINKED",
-            true));
+            true,
+            RecordShape.TARGET_ONLY));
   }
 
   private static CrashCase crashCase(
@@ -434,7 +580,8 @@ class SyntheticEvalCrashRestartProcessIT {
       int providerSdkCreateInvocations,
       int providerAttributedInvocations,
       String recordState,
-      boolean terminalPresent) {
+      boolean terminalPresent,
+      RecordShape recordShape) {
     return new CrashCase(
         id,
         phase,
@@ -457,7 +604,8 @@ class SyntheticEvalCrashRestartProcessIT {
             + " recordState="
             + recordState
             + " terminalPresent="
-            + terminalPresent);
+            + terminalPresent,
+        recordShape);
   }
 
   private static Path fatJar() {
@@ -492,14 +640,31 @@ class SyntheticEvalCrashRestartProcessIT {
       String id,
       String phase,
       int httpRequests,
-      String expectedVerificationLine) {}
+      String expectedVerificationLine,
+      RecordShape recordShape) {}
+
+  private enum RecordShape {
+    NONE,
+    PENDING_ONLY,
+    LINK_RESIDUE,
+    TARGET_ONLY
+  }
 
   private record ProcessResult(int exitCode, String output) {}
 
-  private record EvidenceSnapshot(Map<String, EvidenceFile> files) {}
+  private record EvidenceSnapshot(
+      String directoryFileKey,
+      String directoryPermissions,
+      String directoryOwner,
+      Map<String, EvidenceFile> files) {}
 
   private record EvidenceFile(
-      long size, long lastModifiedMillis, String sha256) {}
+      long size,
+      long lastModifiedMillis,
+      String sha256,
+      String fileKey,
+      String permissions,
+      String owner) {}
 
   private static final class LoopbackResponsesServer
       implements AutoCloseable {

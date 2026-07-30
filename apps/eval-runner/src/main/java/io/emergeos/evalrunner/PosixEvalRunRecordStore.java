@@ -15,11 +15,10 @@ import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.AclEntryType;
-import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
@@ -122,7 +121,12 @@ final class PosixEvalRunRecordStore {
       forceDirectory(directory);
       observer.observed(
           EvalExecutionObserver.Phase.RUN_RECORD_PENDING_DURABLE);
-      Files.move(pending, target, StandardCopyOption.ATOMIC_MOVE);
+      createOnlyLink(target, pending, Files::createLink);
+      forceDirectory(directory);
+      observer.observed(
+          EvalExecutionObserver.Phase
+              .RUN_RECORD_LINK_COMMIT_COMPLETE);
+      cleanupCommittedPending(pending, target, Files::delete);
       forceDirectory(directory);
       if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
           || Files.isSymbolicLink(target)
@@ -132,8 +136,9 @@ final class PosixEvalRunRecordStore {
           || !owner.equals(
               Files.getOwner(target, LinkOption.NOFOLLOW_LINKS))
           || hasForeignAllowAcl(target, owner)
-          || !sha256(Files.readAllBytes(target))
-              .equals(sha256(bytes))) {
+          || pendingLinkState(pending, target)
+              == PendingLinkState.DIFFERENT_FILE
+          || !verifyReadBack(target, bytes, record)) {
         throw rejected("RUN_RECORD_FILE_UNSAFE");
       }
       observer.observed(
@@ -172,6 +177,66 @@ final class PosixEvalRunRecordStore {
     try (FileChannel channel =
         FileChannel.open(directory, StandardOpenOption.READ)) {
       channel.force(true);
+    }
+  }
+
+  static void createOnlyLink(
+      Path target, Path pending, LinkCreator linkCreator)
+      throws IOException {
+    Objects.requireNonNull(target, "target");
+    Objects.requireNonNull(pending, "pending");
+    Objects.requireNonNull(linkCreator, "linkCreator");
+    try {
+      linkCreator.create(target, pending);
+    } catch (FileAlreadyExistsException duplicate) {
+      throw rejected("RUN_RECORD_ALREADY_EXISTS");
+    } catch (UnsupportedOperationException unsupported) {
+      throw rejected("RUN_RECORD_LINK_COMMIT_UNSUPPORTED");
+    }
+  }
+
+  static void cleanupCommittedPending(
+      Path pending, Path target, PendingCleaner pendingCleaner)
+      throws IOException {
+    Objects.requireNonNull(pending, "pending");
+    Objects.requireNonNull(target, "target");
+    Objects.requireNonNull(pendingCleaner, "pendingCleaner");
+    try {
+      pendingCleaner.delete(pending);
+    } catch (IOException cleanupFailure) {
+      if (pendingLinkState(pending, target)
+          == PendingLinkState.DIFFERENT_FILE) {
+        throw cleanupFailure;
+      }
+    }
+  }
+
+  private static PendingLinkState pendingLinkState(
+      Path pending, Path target) throws IOException {
+    try {
+      BasicFileAttributes pendingAttributes =
+          Files.readAttributes(
+              pending,
+              BasicFileAttributes.class,
+              LinkOption.NOFOLLOW_LINKS);
+      BasicFileAttributes targetAttributes =
+          Files.readAttributes(
+              target,
+              BasicFileAttributes.class,
+              LinkOption.NOFOLLOW_LINKS);
+      Object pendingKey = pendingAttributes.fileKey();
+      Object targetKey = targetAttributes.fileKey();
+      return pendingAttributes.isRegularFile()
+              && targetAttributes.isRegularFile()
+              && pendingKey != null
+              && pendingKey.equals(targetKey)
+          ? PendingLinkState.SAME_FILE
+          : PendingLinkState.DIFFERENT_FILE;
+    } catch (NoSuchFileException disappeared) {
+      if (Files.notExists(pending, LinkOption.NOFOLLOW_LINKS)) {
+        return PendingLinkState.ABSENT;
+      }
+      throw disappeared;
     }
   }
 
@@ -240,17 +305,7 @@ final class PosixEvalRunRecordStore {
 
   private static boolean hasForeignAllowAcl(
       Path path, UserPrincipal owner) throws IOException {
-    AclFileAttributeView view =
-        Files.getFileAttributeView(
-            path,
-            AclFileAttributeView.class,
-            LinkOption.NOFOLLOW_LINKS);
-    return view != null
-        && view.getAcl().stream()
-            .anyMatch(
-                entry ->
-                    entry.type() == AclEntryType.ALLOW
-                        && !owner.equals(entry.principal()));
+    return VisibleAclPolicy.hasForeignAllow(path, owner);
   }
 
   private static boolean verifyReadBack(
@@ -334,6 +389,26 @@ final class PosixEvalRunRecordStore {
       SyntheticEvalExecutor.Effects effects,
       AgentRun run,
       ArtifactLineage artifact) {}
+
+  private enum PendingLinkState {
+    ABSENT,
+    SAME_FILE,
+    DIFFERENT_FILE
+  }
+
+  /** Package-private deterministic test seam, not a runtime extension API. */
+  @FunctionalInterface
+  interface LinkCreator {
+
+    void create(Path target, Path pending) throws IOException;
+  }
+
+  /** Package-private deterministic test seam, not a runtime extension API. */
+  @FunctionalInterface
+  interface PendingCleaner {
+
+    void delete(Path pending) throws IOException;
+  }
 
   static final class Rejected extends RuntimeException {
     private final String code;

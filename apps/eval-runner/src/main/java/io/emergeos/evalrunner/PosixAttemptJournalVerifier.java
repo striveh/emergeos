@@ -20,10 +20,10 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.AclEntryType;
-import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
@@ -63,6 +63,19 @@ final class PosixAttemptJournalVerifier {
           .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
           .build();
 
+  private final PendingIdentityObserver pendingIdentityObserver;
+
+  PosixAttemptJournalVerifier() {
+    this(PendingIdentityObserver.noop());
+  }
+
+  PosixAttemptJournalVerifier(
+      PendingIdentityObserver pendingIdentityObserver) {
+    this.pendingIdentityObserver =
+        Objects.requireNonNull(
+            pendingIdentityObserver, "pendingIdentityObserver");
+  }
+
   Verification verify(Path marker) {
     Objects.requireNonNull(marker, "marker");
     try {
@@ -77,7 +90,7 @@ final class PosixAttemptJournalVerifier {
     }
   }
 
-  private static Verification verifyChecked(Path marker)
+  private Verification verifyChecked(Path marker)
       throws IOException {
     Path canonicalMarker = marker.toAbsolutePath().normalize();
     Path directory = canonicalMarker.getParent();
@@ -136,11 +149,6 @@ final class PosixAttemptJournalVerifier {
     }
 
     TerminalEvidence terminal = parsed.terminal;
-    Path pending =
-        directory.resolve(terminal.runRecordFile() + ".pending");
-    if (Files.exists(pending, LinkOption.NOFOLLOW_LINKS)) {
-      throw invalid("RUN_RECORD_STATE_INVALID");
-    }
     Path record = directory.resolve(terminal.runRecordFile());
     if (!record.getParent().equals(directory)
         || !record
@@ -151,7 +159,17 @@ final class PosixAttemptJournalVerifier {
                     + ".run.json")) {
       throw invalid("TERMINAL_SEMANTICS_INVALID");
     }
+    Path pending =
+        directory.resolve(terminal.runRecordFile() + ".pending");
     if (!Files.exists(record, LinkOption.NOFOLLOW_LINKS)) {
+      if (Files.exists(pending, LinkOption.NOFOLLOW_LINKS)) {
+        requireSafeEvidenceFile(
+            pending, owner, "TERMINAL_RECORD_PATH_UNSAFE");
+        if (Files.size(pending) > MAX_RECORD_BYTES) {
+          throw invalid("TERMINAL_RECORD_TOO_LARGE");
+        }
+        throw invalid("RUN_RECORD_STATE_INVALID");
+      }
       return Verification.unknown(
           "TERMINAL_RECORD_MISSING",
           parsed.billing,
@@ -159,11 +177,15 @@ final class PosixAttemptJournalVerifier {
     }
     requireSafeEvidenceFile(
         record, owner, "TERMINAL_RECORD_PATH_UNSAFE");
+    requireCompatiblePendingIfPresent(
+        pending, record, owner);
     byte[] recordBytes =
         readBounded(
             record, MAX_RECORD_BYTES, "TERMINAL_RECORD_TOO_LARGE");
     requireSafeEvidenceFile(
         record, owner, "TERMINAL_RECORD_PATH_UNSAFE");
+    requireCompatiblePendingIfPresent(
+        pending, record, owner);
     if (!MessageDigest.isEqual(
         terminal.runRecordSha256()
             .getBytes(StandardCharsets.US_ASCII),
@@ -527,7 +549,7 @@ final class PosixAttemptJournalVerifier {
     }
   }
 
-  private static RecordState inspectUnsealedRecordState(
+  private RecordState inspectUnsealedRecordState(
       Path directory, UserPrincipal owner) throws IOException {
     Path record =
         directory.resolve(
@@ -540,15 +562,18 @@ final class PosixAttemptJournalVerifier {
         Files.exists(record, LinkOption.NOFOLLOW_LINKS);
     boolean pendingExists =
         Files.exists(pending, LinkOption.NOFOLLOW_LINKS);
-    if (recordExists && pendingExists) {
-      throw invalid("RUN_RECORD_STATE_INVALID");
-    }
     if (recordExists) {
       requireSafeEvidenceFile(
           record, owner, "TERMINAL_RECORD_PATH_UNSAFE");
       if (Files.size(record) > MAX_RECORD_BYTES) {
         throw invalid("TERMINAL_RECORD_TOO_LARGE");
       }
+      if (pendingExists) {
+        requireCompatiblePendingIfPresent(
+            pending, record, owner);
+      }
+      requireSafeEvidenceFile(
+          record, owner, "TERMINAL_RECORD_PATH_UNSAFE");
       return RecordState.FINAL_UNSEALED;
     }
     if (pendingExists) {
@@ -562,19 +587,73 @@ final class PosixAttemptJournalVerifier {
     return RecordState.ABSENT;
   }
 
+  private void requireCompatiblePendingIfPresent(
+      Path pending, Path record, UserPrincipal owner)
+      throws IOException {
+    try {
+      if (!Files.exists(pending, LinkOption.NOFOLLOW_LINKS)) {
+        return;
+      }
+      requireSafeEvidenceFile(
+          pending, owner, "TERMINAL_RECORD_PATH_UNSAFE");
+      if (Files.size(pending) > MAX_RECORD_BYTES) {
+        throw invalid("TERMINAL_RECORD_TOO_LARGE");
+      }
+      PendingLinkState observed =
+          pendingLinkState(pending, record);
+      if (observed != PendingLinkState.ABSENT) {
+        pendingIdentityObserver.observed(
+            pending,
+            record,
+            observed == PendingLinkState.SAME_FILE);
+      }
+      if (observed == PendingLinkState.DIFFERENT_FILE) {
+        throw invalid("RUN_RECORD_STATE_INVALID");
+      }
+      if (observed == PendingLinkState.SAME_FILE
+          && pendingLinkState(pending, record)
+              == PendingLinkState.DIFFERENT_FILE) {
+        throw invalid("RUN_RECORD_STATE_INVALID");
+      }
+    } catch (NoSuchFileException disappeared) {
+      if (!Files.notExists(pending, LinkOption.NOFOLLOW_LINKS)) {
+        throw disappeared;
+      }
+    }
+  }
+
+  private static PendingLinkState pendingLinkState(
+      Path pending, Path record) throws IOException {
+    try {
+      BasicFileAttributes pendingAttributes =
+          Files.readAttributes(
+              pending,
+              BasicFileAttributes.class,
+              LinkOption.NOFOLLOW_LINKS);
+      BasicFileAttributes recordAttributes =
+          Files.readAttributes(
+              record,
+              BasicFileAttributes.class,
+              LinkOption.NOFOLLOW_LINKS);
+      Object pendingKey = pendingAttributes.fileKey();
+      Object recordKey = recordAttributes.fileKey();
+      return pendingAttributes.isRegularFile()
+              && recordAttributes.isRegularFile()
+              && pendingKey != null
+              && pendingKey.equals(recordKey)
+          ? PendingLinkState.SAME_FILE
+          : PendingLinkState.DIFFERENT_FILE;
+    } catch (NoSuchFileException disappeared) {
+      if (Files.notExists(pending, LinkOption.NOFOLLOW_LINKS)) {
+        return PendingLinkState.ABSENT;
+      }
+      throw disappeared;
+    }
+  }
+
   private static boolean hasForeignAllowAcl(
       Path path, UserPrincipal owner) throws IOException {
-    AclFileAttributeView view =
-        Files.getFileAttributeView(
-            path,
-            AclFileAttributeView.class,
-            LinkOption.NOFOLLOW_LINKS);
-    return view != null
-        && view.getAcl().stream()
-            .anyMatch(
-                entry ->
-                    entry.type() == AclEntryType.ALLOW
-                        && !owner.equals(entry.principal()));
+    return VisibleAclPolicy.hasForeignAllow(path, owner);
   }
 
   private static byte[] readBounded(
@@ -759,6 +838,25 @@ final class PosixAttemptJournalVerifier {
     TERMINAL_LINKED,
     INVALID,
     UNASSESSED
+  }
+
+  private enum PendingLinkState {
+    ABSENT,
+    SAME_FILE,
+    DIFFERENT_FILE
+  }
+
+  /** Package-private deterministic race seam, not a runtime extension API. */
+  @FunctionalInterface
+  interface PendingIdentityObserver {
+
+    void observed(
+        Path pending, Path record, boolean sameFile)
+        throws IOException;
+
+    static PendingIdentityObserver noop() {
+      return (pending, record, sameFile) -> {};
+    }
   }
 
   /**
