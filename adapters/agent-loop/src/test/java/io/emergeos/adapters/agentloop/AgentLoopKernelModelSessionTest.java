@@ -501,6 +501,49 @@ class AgentLoopKernelModelSessionTest {
   }
 
   @Test
+  void exactDeadlineStillWinsAtTheFinalAllowedModelStep() {
+    AtomicLong now = new AtomicLong();
+    AtomicInteger modelCalls = new AtomicInteger();
+    AtomicInteger validations = new AtomicInteger();
+    AtomicInteger executions = new AtomicInteger();
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            attributedToolCallingModel(modelCalls),
+            new AgentToolRegistry(
+                List.of(
+                    timedCaptureReadTool(
+                        LateToolMode.VALID,
+                        5,
+                        now,
+                        validations,
+                        executions,
+                        "SYNTHETIC_FINAL_STEP_EXACT_BOUNDARY_RESULT",
+                        () -> {}))),
+            1,
+            1,
+            now::get);
+
+    AgentRunOutcome outcome =
+        kernel.run(
+            taskWithMaxModelSteps("final-step-exact-deadline", 5, 1),
+            CancellationSignal.never());
+
+    assertEquals(RunStatus.FAILED, outcome.status());
+    assertEquals("DEADLINE_EXHAUSTED", outcome.failureReason());
+    assertEquals(5, outcome.latencyMs());
+    assertEquals(List.of(CAPTURE_REF), outcome.obtainedEvidenceRefs());
+    assertEquals(1, modelCalls.get());
+    assertEquals(1, validations.get());
+    assertEquals(1, executions.get());
+    assertEquals(
+        List.of(
+            AgentTraceEventType.MODEL_STEP,
+            AgentTraceEventType.TOOL_REQUEST,
+            AgentTraceEventType.TOOL_RESULT),
+        outcome.trace().stream().map(event -> event.type()).toList());
+  }
+
+  @Test
   void preDeadlineToolExceptionRemainsAnExecutionFailure() {
     AtomicLong now = new AtomicLong();
     AtomicInteger modelCalls = new AtomicInteger();
@@ -628,6 +671,51 @@ class AgentLoopKernelModelSessionTest {
             AgentTraceEventType.TOOL_RESULT),
         outcome.trace().stream().map(event -> event.type()).toList());
     assertFalse(outcome.toString().contains("SYNTHETIC_CANCELLED_READ_RESULT"));
+  }
+
+  @Test
+  void cancellationStillWinsAtTheFinalAllowedModelStep() {
+    AtomicLong now = new AtomicLong();
+    AtomicInteger modelCalls = new AtomicInteger();
+    AtomicInteger validations = new AtomicInteger();
+    AtomicInteger executions = new AtomicInteger();
+    java.util.concurrent.atomic.AtomicBoolean cancelled =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            attributedToolCallingModel(modelCalls),
+            new AgentToolRegistry(
+                List.of(
+                    timedCaptureReadTool(
+                        LateToolMode.VALID,
+                        4,
+                        now,
+                        validations,
+                        executions,
+                        "SYNTHETIC_FINAL_STEP_CANCELLED_RESULT",
+                        () -> cancelled.set(true)))),
+            1,
+            1,
+            now::get);
+
+    AgentRunOutcome outcome =
+        kernel.run(
+            taskWithMaxModelSteps("final-step-cancelled", 5, 1),
+            cancelled::get);
+
+    assertEquals(RunStatus.CANCELLED, outcome.status());
+    assertEquals("CANCELLED", outcome.failureReason());
+    assertEquals(4, outcome.latencyMs());
+    assertEquals(List.of(CAPTURE_REF), outcome.obtainedEvidenceRefs());
+    assertEquals(1, modelCalls.get());
+    assertEquals(1, validations.get());
+    assertEquals(1, executions.get());
+    assertEquals(
+        List.of(
+            AgentTraceEventType.MODEL_STEP,
+            AgentTraceEventType.TOOL_REQUEST,
+            AgentTraceEventType.TOOL_RESULT),
+        outcome.trace().stream().map(event -> event.type()).toList());
   }
 
   @Test
@@ -921,6 +1009,25 @@ class AgentLoopKernelModelSessionTest {
       long deadlineMs,
       BigDecimal budgetUsd,
       String toolRegistryVersion) {
+    return task(id, deadlineMs, budgetUsd, toolRegistryVersion, 2);
+  }
+
+  private static TaskEnvelope taskWithMaxModelSteps(
+      String id, long deadlineMs, int maxModelSteps) {
+    return task(
+        id,
+        deadlineMs,
+        new BigDecimal("0.010000"),
+        "agent-tools-v2",
+        maxModelSteps);
+  }
+
+  private static TaskEnvelope task(
+      String id,
+      long deadlineMs,
+      BigDecimal budgetUsd,
+      String toolRegistryVersion,
+      int maxModelSteps) {
     return new TaskEnvelope(
         "1.1",
         id,
@@ -939,7 +1046,7 @@ class AgentLoopKernelModelSessionTest {
         "urn:emergeos:schema:internal:agent-draft-proposal:v1",
         List.of("draft cites the synthetic Capture"),
         false,
-        2,
+        maxModelSteps,
         1,
         deadlineMs,
         budgetUsd,

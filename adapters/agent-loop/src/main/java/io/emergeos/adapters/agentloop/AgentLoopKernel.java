@@ -438,6 +438,27 @@ public final class AgentLoopKernel implements AgentKernel {
                 prepared.toolName(),
                 "SUCCEEDED",
                 result.reference()));
+        // The post-result cooperative boundary exists even when this was the
+        // final permitted model step. Do not let loop exhaustion overwrite a
+        // cancellation or exact-deadline observation.
+        if (cancellation.isCancelled()) {
+          return outcome(
+              task,
+              RunStatus.CANCELLED,
+              null,
+              state,
+              "CANCELLED",
+              startedNanos);
+        }
+        if (deadlineExhausted(task, startedNanos)) {
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "DEADLINE_EXHAUSTED",
+              startedNanos);
+        }
         continue;
       }
       if (decision instanceof AgentModel.FinalDraft finalDraft) {
