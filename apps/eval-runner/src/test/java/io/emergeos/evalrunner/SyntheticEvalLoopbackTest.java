@@ -681,6 +681,17 @@ class SyntheticEvalLoopbackTest {
             .contains(
                 "attemptJournalLatestHash="
                     + latestJournalHash));
+    PosixAttemptJournalVerifier.Verification verification =
+        new PosixAttemptJournalVerifier()
+            .verify(
+                directory.resolve(
+                    SyntheticEvalCatalog.EXPECTED_ATTEMPT_ID
+                        + ".attempt"));
+    assertEquals(
+        PosixAttemptJournalVerifier.Verdict.VERIFIED,
+        verification.verdict());
+    assertTrue(verification.verified());
+    assertEquals(recordHash, verification.terminal().runRecordSha256());
     return new PersistedEvidence(
         record, journalText, journalEvents);
   }
