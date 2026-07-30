@@ -82,6 +82,10 @@ flowchart TB
   zero-egress preflight；显式执行路径绑定 frozen PUBLIC synthetic Task、
   real TTY challenge、30 秒 one-shot permit、POSIX attempt marker/journal 和本地
   atomic terminal run record；
+- Stage 2 S4 已在 isolated `apps/offline-harness-runner` 对固定 Pack 004 执行
+  12 次 shared candidate generation / 24 次 VerifierEvaluation，并用不引用
+  Runner/generator 的独立 verifier 重建 candidate、重跑 H0/H1、重算完整 report，
+  得到 deterministic `VERIFIED_PASSED`；report 仍只存在于内存，不是 durable receipt；
 - PostgreSQL 已持有 Capture、Artifact lineage、local ActionAttempt/Receipt 与
   AgentRun truth；
 - Stage 1 S3 Action 仅通过 loopback HTTP 调用独立、文件持久化的 Fake Provider；

@@ -2,8 +2,9 @@
 
 状态：进行中；S1、S2 工程完成，S3 protocol adapter、isolated synthetic Eval Runner
 与本地 attempt durability 工程切片已通过；live-provider smoke 尚未执行。S4 已冻结
-首个 Verifier comparison foundation，并完成 strict Pack loader；12 个 shared
-candidates / 24 次 verifier evaluation 尚未执行
+首个 Verifier comparison foundation，完成 strict Pack loader、12 次 shared candidate
+generation、24 次 VerifierEvaluation 与独立 replay verifier；atomic report store 与
+跨新 JVM 持久核验尚未完成
 
 Owner：项目所有者 + main Codex agent
 
@@ -35,11 +36,12 @@ tool loop、Agent Trace 或 Eval runner。S1 增加 bounded Fake Agent product l
 OpenAI Responses protocol adapter，并形成只接受 frozen PUBLIC synthetic Task 的独立
 Eval Runner。S3 现在另有 production read-only journal verifier 与 7-point fat-JAR
 process-kill/restart evidence。S4 Task Pack 004 已冻结 reference-grounding Verifier
-对照的输入和 expected matrix；独立 offline module 已能以 fixed path、raw hash 与
-exact semantics 加载它，但还没有 candidate generator、comparison runner 或 24-run
-result。当前仍没有 live-provider smoke、real model result、billing receipt 或
-stochastic Harness comparison。较早的 `TemplateArtifactGenerator` 仍是确定性的
-Stage 0 scaffolding。
+对照的输入和 expected matrix；独立 offline module 已以 fixed path、raw hash 与 exact
+semantics 加载它，并完成 12 次 shared candidate generation、24 次
+VerifierEvaluation、integrity-bound report 与独立 deterministic replay。Report 尚未
+原子持久化，也没有跨新 JVM durable verification。当前仍没有 live-provider
+smoke、real model result、billing receipt 或 stochastic Harness comparison。较早的
+`TemplateArtifactGenerator` 仍是确定性的 Stage 0 scaffolding。
 
 S2 已补齐 durable AgentRun、Safe Trace、HarnessRunBundle integrity binding 与
 deterministic Offline golden runner；仍没有 real model、mid-run checkpoint/resume
@@ -367,8 +369,31 @@ then locate it from the Trace.
   missing/null JSON rejection、raw SHA 与完整 semantic binding；default-deny Maven
   dependency allowlist 及 contracts/core/offline production bytecode gate 阻止已知
   JDK network/process escape。
-- Loader 只完成可信 preflight；candidate generator、24 次 verifier evaluation、
-  comparison report、report verifier 与 durable report store 尚未实现。
+- Loader foundation 当时只完成可信 preflight；后续 execution/replay delta 见下一节。
+
+#### S4 O1 execution and replay delta · 2026-07-30
+
+- commit `693a3c7` 冻结 comparison-local canonical encoding、Unicode/safe-integer
+  边界与独立 Node candidate micro-vector。
+- commits `c1cb73c`、`da54365` 增加 offline production product-runtime bytecode
+  denylist，并隔离证明 list-order mutation。
+- commit `8fa96cd` 固定 authoritative Runner 组件：每个 case/repetition 只生成一个
+  immutable Candidate，H0/H1 消费同一 object identity；H1 直接调用 production
+  `AgentDraftReferenceGrounding` facade。
+- 12 个 shared candidates 已生成，H0/H1 各评估 12 次。H0 接受 12 个，其中 9 个
+  reference faults；H1 接受 3 个 grounded candidates，并以 3 个
+  `MISSING_REQUIRED_EVIDENCE`、6 个 `INVALID_EVIDENCE_CLAIM` 拒绝 9 个 faults。
+- 三种“已读取”mode 先调用 typed in-memory `LiteralSyntheticCaptureReader`，成功校验
+  canonical synthetic Capture ref 后才产生 obtained refs 与 counter；这不是 product
+  `capture.read` Tool。
+- 独立 verifier 的 bytecode 不引用 Runner 或 generator；它重建 candidate、重跑 H0/H1、
+  重算 matrix/order、IDs、nested hashes、Summary、OwnedEffects、Issues 与 status，
+  得到 `VERIFIED_PASSED`。
+- 完整 hash-chain re-sign attack、missing/extra/duplicate/reorder、outcome/summary/
+  effects/status mutation 均被固定 failure code 拒绝；最终双独立复审
+  `P0=0、P1=0`。
+- 当前 report 只存在内存。Replay equivalence 不证明历史 Runner invocation、producer
+  identity、系统级零副作用或 signature；durable report store 与跨新 JVM 验证是下一切片。
 
 Stage gate:
 
@@ -529,10 +554,17 @@ baseline.
   核验不改写 evidence，marker 阻断 replay 且 loopback HTTP count 不增加；独立审查
   `P0=0、P1=0`。
 - [x] 2026-07-30：Task Pack 004 与 repository validator 冻结首个
-  reference-grounding Verifier comparison foundation；24-run experiment 未执行。
+  reference-grounding Verifier comparison foundation；该时点尚未执行 comparison。
 - [x] 2026-07-30：commit `623abf3` 增加独立 strict Pack loader。两项原始 P1 与三轮
   adversarial follow-up 已转为 executable Red/Green，独立最终复审
   `P0=0、P1=0`；该结果仍不等于 comparison 已执行。
+- [x] 2026-07-30：commit `8fa96cd` 完成 fixed-component comparison Runner、
+  integrity-bound report 与 independent replay verifier。12 次 shared generation /
+  24 次 VerifierEvaluation 得到 `VERIFIED_PASSED`；完整 re-sign attack 仍被独立
+  candidate oracle 拒绝。
+- [x] 2026-07-30：single Candidate truth、identity audit、typed literal reader、
+  private verdict construction、verifier outer/nested bytecode independence 与四种
+  Node golden fingerprints 经两名独立 reviewer 复核为 `P0=0、P1=0`。
 
 ## Decisions
 
@@ -572,6 +604,12 @@ baseline.
   `UNKNOWN` attempt。
 - 2026-07-30：S4 第一项 Harness 对照只改变 reference-grounding Verifier。H0 只能存在于
   isolated Eval path；冻结 expected matrix 不等于执行过 experiment。
+- 2026-07-30：S4 输出统一称为 12 次 shared candidate generations 与 24 次
+  VerifierEvaluations，不把 Pack legacy `runs` 字段包装成 product `AgentRun` 或
+  `HarnessRunBundle`。
+- 2026-07-30：`VERIFIED` 只表示固定 Pack 上 deterministic replay-equivalent；unkeyed
+  hash 提供 corruption/tamper detection，不提供历史执行 attestation、signature 或
+  producer authentication。
 
 ## Surprises and failures
 
@@ -620,9 +658,16 @@ baseline.
   精确验证这些 boundary，却不是 arbitrary-instruction 或物理断电测试。Path 安全检查仍有
   same-UID TOCTOU；marker body 不参与验证；test launcher 也尚未逐个检查 production
   class 的 CodeSource。
-- Task Pack 004 的 24-run totals 是执行前冻结的 expected matrix。Strict loader
-  Green 只证明输入可信；没有 run artifact 与 report verifier 时，不能把它写成
-  Harness comparison 已通过。
+- Task Pack 004 的 24-run totals 是执行前冻结的 legacy expected matrix。Strict loader
+  Green 当时只证明输入可信；后续才通过 fixed Runner 与 independent verifier 得到
+  24 次 VerifierEvaluation 的 observed result。
+- 第一版 Runner 同时接受独立 snapshot 与 production Candidate，hash 可能绑定 A、
+  H0/H1 实际消费 B；同一入口还可注入未绑定 generator/observer。独立 review 将两项
+  认定为 P0。最终结构只保留一个 Candidate truth、固定 authoritative components，并
+  用 object identity audit 封住每对两臂消费。
+- 第一版 fixture read 只是手动加 counter，不能支持“已读取”的说法。最终加入 typed
+  literal reader：canonical ref 校验成功、返回 literal content 后才记录 read；回执仍
+  明确它不是 product Tool 或历史执行 attestation。
 
 ## Verification receipts
 
@@ -665,12 +710,16 @@ S3 bounded runner 当前状态：
   与
   [S3 Durable Attempt Build Note](../operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
 
-S4 当前完成 Task Pack 004、repository validator 与独立 strict Pack loader。它已经
-拒绝任意 Pack path、JSON/hash/semantic drift、非 allowlist dependency 及已知 JDK
-network/process bytecode reference；2 arms × 4 cases × 3 repetitions 所代表的
-12 个 shared candidate generations / 24 次 verifier evaluations 尚未执行，expected
-totals 不能充当 experiment receipt。Loader 证据见
-[S4 Offline Comparison Loader Build Note](../operations/build-notes/2026-07-30-s2-s4-offline-comparison-loader.md)。
+S4 当前完成 Task Pack 004、repository validator、strict Pack loader、fixed comparison
+Runner 与 independent report verifier。2 arms × 4 cases × 3 repetitions 已实际形成
+12 次 shared candidate generations / 24 次 VerifierEvaluations，并由独立重放得到
+`VERIFIED_PASSED`。该结果只在 deterministic synthetic Pack 与 owned offline seams
+范围内成立；report 尚未持久化，也不是 historical process attestation。证据见
+[S4 Verified Offline Comparison Build Note](../operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)。
+Focused clean reactor 通过 159 tests；latest full Maven reactor 通过 333 tests，
+contract verifier 通过 5 Schemas / 33 fixtures / 4 Packs / 1 environment，73 个
+Markdown files 的 local links 与 `git diff --check` 同时 Green；双独立最终复审
+`P0=0、P1=0`。
 
 ## AI Coding receipt
 
@@ -704,11 +753,12 @@ transaction/FK/CAS 与跨语言 golden hash 形成可审计 Run。owner-led diag
 ## Outcome and next hypothesis
 
 S2 的工程假设已在 focused evidence 中成立：不引入 Runtime framework、real model
-或外部动作，也能形成持久、完整性绑定、可离线重执行的 AgentRun truth。S3 adapter 与
-bounded runner 与本地 durability engineering slice 已通过。下一条自动执行的安全假设是：
-以 Task Pack 004 实现最小 Verifier seam 与 isolated comparison runner，真实执行并重新
-验证 24 个 deterministic runs；它仍不读取 credential、不访问 live provider。唯一一次
-bounded live-provider smoke 仍由 owner 另行批准。没有 live receipt 时不得声称已有
-real-model fixed baseline；即使执行 smoke，也不能由一次结果证明模型质量、账单准确性或
-产品价值。S4 的 offline Harness/fault infrastructure 可以继续研发，但任何 live experiment
-仍保持 Gate closed。学习与市场工作仍暂停且未完成。
+或外部动作，也能形成持久、完整性绑定、可离线重执行的 AgentRun truth。S3 adapter、
+bounded runner 与本地 durability engineering slice 已通过。S4 的第一项 deterministic
+Verifier comparison 也已独立重放验证。下一条自动执行的安全假设是：为该 report 冻结
+deterministic bytes 与 bounded schema，通过 pending write、read-back、file/directory
+`fsync`、atomic move 和真实 process-kill windows，使新 JVM 能只读加载并再次得到相同
+verdict；incomplete evidence 必须保持 `UNKNOWN / INVALID`。唯一一次 bounded
+live-provider smoke 仍由 owner 另行批准。没有 live receipt 时不得声称已有 real-model
+fixed baseline；即使执行 smoke，也不能由一次结果证明模型质量、账单准确性或产品价值。
+学习与市场工作仍暂停且未完成。

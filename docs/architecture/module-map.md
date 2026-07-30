@@ -38,9 +38,10 @@ apps/eval-runner
 
 apps/offline-harness-runner
   独立 deterministic Harness comparison 边界；只依赖 contracts、core 与 Jackson
-  当前只从固定仓库路径严格加载 hash-frozen Pack 004，验证完整 synthetic provenance、
-  单变量 arms/cases/matrix，并用依赖 allowlist 与 production bytecode gate 阻止
-  model、network、process、Connector、DB 和产品 Store 路径；尚未执行 comparison
+  从固定仓库路径严格加载 hash-frozen Pack 004，生成 12 个 shared candidates，
+  执行 24 次 H0/H1 VerifierEvaluation，并由不引用 Runner/generator 的独立 verifier
+  重建、重放和重算 report；依赖 allowlist 与 production bytecode gate 阻止
+  model、network、process、Connector、DB 和产品 Agent Runtime/Store 路径
 
 apps/api
   HTTP DTO、Controller、异常映射、loopback 启动保护、Agent draft 入口、
@@ -90,7 +91,10 @@ flowchart RL
 - `offline-harness-runner` 使用 default-deny dependency allowlist，只允许
   contracts、core、Jackson 与 test-only JUnit；它不依赖任何 Adapter、API、模型 SDK、
   HTTP client 或数据库，并扫描允许 production closure 的已编译 JDK network/process
-  references。该扫描是 fail-closed architecture gate，不是 OS sandbox 或 packet capture。
+  references。本模块 production classes 另有 product-runtime denylist，只放行 H1 facade
+  与最小 domain types；independent verifier 的 outer/nested classes 不得引用 Runner 或
+  generator。以上扫描是 fail-closed architecture evidence，不是 OS sandbox、历史执行
+  attestation 或 packet capture。
 - Maven Enforcer 在 `core`、`contracts` 与 `agent-loop` 构建中阻止依赖越界。
 - Adapter 只能实现 Core Port，不能让 SDK 类型进入 Core。
 - API 负责传输协议，不能包含领域状态转移。

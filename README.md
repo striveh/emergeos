@@ -43,10 +43,16 @@ one-shot replay 继续被 marker 拒绝；shipping CLI 不接受 crash injection
 账单证明。S4 的 Task Pack 004 已冻结第一组 reference-grounding Verifier 对照设计；
 独立 `apps/offline-harness-runner` 现在可以从固定路径严格加载该 Pack，并以 raw hash、
 完整语义、依赖 allowlist 与 production bytecode gate 拒绝漂移或网络/进程逃逸路径。
-它还没有执行 candidate generation 或 24 次 verifier evaluation。完整回执见
+固定 Runner 已在 4 cases × 3 repetitions 上生成 12 个 immutable shared candidates，
+由 isolated H0 与 production H1 各验证一次，共完成 24 次 VerifierEvaluation；独立
+verifier 不调用 Runner/generator，而是重建 candidate、重跑两臂并重算 matrix、IDs、
+hash 与 owned counters，得到 `VERIFIED_PASSED`。这个结果只证明 deterministic
+reference-grounding discrimination 与 replay equivalence；它不是 24 个 product
+`AgentRun`，也不证明真实模型、product `capture.read`、历史进程 provenance 或系统级
+零副作用。完整回执见
 [Stage 2 S3 Durable Attempt Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)
 与
-[Stage 2 S4 Offline Comparison Loader Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-offline-comparison-loader.md)。
+[Stage 2 S4 Verified Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
@@ -238,7 +244,7 @@ ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问 loopback F
 ```text
 apps/api/                 HTTP 入口与依赖装配
 apps/eval-runner/         隔离 synthetic model Eval；默认 zero-egress，live 路径有 one-shot Gate
-apps/offline-harness-runner/ 固定 Pack 004 的 strict offline comparison 边界；当前仅完成可信加载
+apps/offline-harness-runner/ 固定 Pack 004 的 deterministic comparison、report 与独立 replay verifier
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例、AgentKernel 与端口
 adapters/inmemory/        本地适配器、有限 Fake Agent 循环与 Offline golden runner
