@@ -20,6 +20,7 @@
     <module>adapters/inmemory</module>
     <module>adapters/postgres</module>
     <module>apps/api</module>
+    <module>apps/eval-runner</module>
   </modules>
 
   <properties>
