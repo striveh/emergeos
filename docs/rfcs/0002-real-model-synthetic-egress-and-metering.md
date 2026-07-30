@@ -59,6 +59,9 @@ pricingProfile
 idempotencyKey
 environmentSnapshotRef = environment://sha256:<manifest hash>
 componentVersions["model-adapter"]
+componentVersions["execution-profile"]
+componentVersions["execution-profile-fingerprint"]
+componentVersions["pricing-profile-fingerprint"]
 ```
 
 Bundle 版本必须与 Task 版本一致。Task 1.0 的三个新增字段不进入旧 canonical preimage，
@@ -68,6 +71,17 @@ Bundle 版本必须与 Task 版本一致。Task 1.0 的三个新增字段不进�
 V5 把 provider/requested model/pricing profile 同时写入 Task JSON 与 typed columns。
 RUNNING 与 terminal read 均验证两者相等；terminal 还受 Bundle hash 与内嵌 Task 约束。
 V5 不改写旧 V4 Task/Bundle JSON 或 bundle hash。
+
+`AgentExecutionProfile` 是 server-owned immutable route identity，统一承载 schema、
+risk、step/tool/deadline/budget、逐 step token upper bounds、pricing/model adapter、
+Harness experiment、policy/state/context/tool registry、environment、capability 与
+required data class。它的 fingerprint 覆盖所有会改变执行或计量语义的字段；同一个
+profile id 但 fingerprint 不同必须在装配期失败。legacy Fake Kernel 必须保持
+`profile id = null` 且 `profile fingerprint = null`，不能伪装成未绑定路径。
+
+这仍然只证明 structural binding。`PUBLIC` 与 capability string 都不是 synthetic
+provenance 或 operator consent；Eval runner 必须继续证明完整 Task/pack hash 和一次性
+授权。
 
 ## Provider session 与失败事实
 
@@ -111,14 +125,21 @@ exception message、header、prompt、tool content、encrypted reasoning 与 API
 Pricing profile 是 immutable identity。费率变化新增 profile，不能覆写旧 profile。
 S3 的 `costUsd` 是公开 list-price estimate，不是 invoice reconciliation。
 
-金额内部使用 integer nano/micro USD，禁止 `double`。每次真实调用前必须有覆盖完整
+金额内部使用 integer nano/micro USD，禁止 `double`。observed cost 按每次 provider
+call 使用 `HALF_UP` 取整到 micro USD；reservation 不假定 cache hit，并按每次调用先
+`CEILING` 到 micro USD，再乘最大 model step 数。每次真实调用前必须有覆盖完整
 request 的可信 input token upper bound；首个 smoke 使用 pack hash 对应的 reviewed
 upper bound。字符数猜测、经验倍率或上次 usage 都不能放行 egress。
 
 ```text
-reservationMicroUsd =
-  inputTokenUpperBound × 5
-  + maxOutputTokens × 30
+perCallReservationMicroUsd =
+  ceilToMicroUsd(
+    maxInputTokensPerStep × uncachedInputNanoUsdPerToken
+    + maxOutputTokensPerStep × outputNanoUsdPerToken
+  )
+
+wholeRunReservationMicroUsd =
+  perCallReservationMicroUsd × maxModelSteps
 ```
 
 首版不允许 upper bound 超过 272,000 tokens，不假定 cache hit。若缺少上界、预算不足、
@@ -145,7 +166,8 @@ S3 不宣称 invoice-level 对账或全账户 hard spend cap。
 3. seed 为 literal synthetic content，`dataClass=PUBLIC`；
 4. 无真实账号、conversation、Self Model 或个人标识；
 5. 只允许 `capture.read`，无 hosted tool、Connector 或 Action；
-6. execution profile、environment manifest 与 pricing profile hash 全部匹配；
+6. execution profile id/fingerprint、environment manifest 与 pricing profile
+   fingerprint 全部匹配；
 7. 最大 provider requests、deadline、output tokens 与 reservation 有界；
 8. preflight receipt 未过期、未消费，且本机 attempt marker 以 `CREATE_NEW` 取得；
 9. operator 在 TTY 中核对 hash/预算后输入一次性 challenge；

@@ -8,6 +8,7 @@ import io.emergeos.contracts.RunStatus;
 import io.emergeos.core.application.AgentDraftCommand;
 import io.emergeos.core.application.AgentDraftOutcome;
 import io.emergeos.core.application.AgentDraftService;
+import io.emergeos.core.application.AgentExecutionProfile;
 import io.emergeos.core.domain.AgentRun;
 import io.emergeos.core.domain.AgentRunLifecycle;
 import io.emergeos.core.domain.ArtifactLineage;
@@ -65,12 +66,17 @@ public final class OfflineFakeAgentRunner {
                 "art", spec.artifactId()));
     LongSupplier nanoTime = new FrozenNanoTime(spec.kernelLatencyMs());
     var tools = new AgentToolRegistry(List.of(new CaptureReadTool(captures)));
+    var executionProfile =
+        AgentExecutionProfile.legacyFakeV1(
+            spec.maxModelSteps(),
+            spec.maxToolCalls(),
+            spec.taskDeadlineMs());
     var kernel =
         new AgentLoopKernel(
             ScriptedFakeModel.forCaptureDraft(),
             tools,
-            spec.maxModelSteps(),
-            spec.maxToolCalls(),
+            executionProfile.maxModelSteps(),
+            executionProfile.maxToolCalls(),
             nanoTime);
     var service =
         new AgentDraftService(
@@ -78,7 +84,8 @@ public final class OfflineFakeAgentRunner {
             runs,
             captures,
             ids,
-            Clock.fixed(spec.frozenTime(), ZoneOffset.UTC));
+            Clock.fixed(spec.frozenTime(), ZoneOffset.UTC),
+            executionProfile);
 
     AgentDraftOutcome outcome =
         service.draft(

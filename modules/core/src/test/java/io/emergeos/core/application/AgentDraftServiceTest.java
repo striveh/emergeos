@@ -6,8 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.emergeos.contracts.DataClass;
+import io.emergeos.contracts.HarnessExperiment;
 import io.emergeos.contracts.ResourceRole;
+import io.emergeos.contracts.RiskLevel;
 import io.emergeos.contracts.RunStatus;
+import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.AgentDraftProposal;
 import io.emergeos.core.domain.AgentRunOutcome;
 import io.emergeos.core.domain.ArtifactLineage;
@@ -27,6 +30,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class AgentDraftServiceTest {
@@ -473,6 +478,156 @@ class AgentDraftServiceTest {
     assertEquals(0, artifactStore.createCalls);
   }
 
+  @Test
+  void modelBoundProfileProducesTaskAndBundleV11ButKeepsResultAndTraceV10() {
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+    AtomicReference<TaskEnvelope> observedTask = new AtomicReference<>();
+    AgentExecutionProfile profile = modelBoundProfile();
+    AgentDraftService service =
+        service(
+            runs,
+            profileBoundKernel(
+                profile,
+                (task, cancellation) -> {
+                  observedTask.set(task);
+                  return new AgentRunOutcome(
+                      RunStatus.FAILED,
+                      null,
+                      List.of(),
+                      List.of(
+                          new AgentTraceEvent(
+                              1,
+                              AgentTraceEventType.MODEL_STEP,
+                              null,
+                              "FAILED",
+                              "task://" + task.id())),
+                      "gpt-5.6-sol-2026-07-15",
+                      new BigDecimal("0.001000"),
+                      100,
+                      50,
+                      "MODEL_RESPONSE_MALFORMED");
+                }),
+            capture(DataClass.PUBLIC),
+            profile);
+
+    AgentDraftOutcome outcome =
+        service.draft(
+            new AgentDraftCommand(
+                PRINCIPAL, CAPTURE_ID, "Create a synthetic public draft"));
+
+    TaskEnvelope task = observedTask.get();
+    assertEquals("1.1", task.schemaVersion());
+    assertEquals("1.1", outcome.run().bundle().schemaVersion());
+    assertEquals("1.0", outcome.result().schemaVersion());
+    assertEquals("1.0", outcome.run().trace().schemaVersion());
+    assertEquals(DataClass.PUBLIC, task.dataClass());
+    assertEquals(RiskLevel.EXTERNAL, task.risk());
+    assertEquals(profile.modelProvider(), task.modelProvider());
+    assertEquals(profile.modelRequested(), task.modelRequested());
+    assertEquals(profile.pricingProfile(), task.pricingProfile());
+    assertEquals(profile.taskIdempotencyKey(task.id()), task.idempotencyKey());
+    assertEquals(profile.environmentSnapshotRef(), task.environmentSnapshotRef());
+    assertEquals(profile.capabilityRefs(), task.capabilityRefs());
+    assertEquals(profile.experiment(), outcome.run().bundle().experiment());
+    assertEquals(
+        profile.modelAdapterVersion(),
+        outcome.run().bundle().componentVersions().get("model-adapter"));
+    assertEquals(1, runs.startCalls);
+    assertEquals(1, runs.completeCalls);
+    assertEquals(0, artifacts.createCalls);
+  }
+
+  @Test
+  void modelBoundProfileRejectsMissingOrNonPublicCaptureBeforeRunAndKernel() {
+    for (Capture unsafeCapture : List.of(capture(DataClass.PERSONAL))) {
+      assertPreflightDataRejection(unsafeCapture);
+    }
+    assertPreflightDataRejection(null);
+  }
+
+  @Test
+  void modelBoundProfileRejectsAMismatchedKernelAtCompositionTime() {
+    AgentExecutionProfile profile = modelBoundProfile();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            service(
+                new RecordingAgentRunStore(new RecordingArtifactStore()),
+                (task, cancellation) -> {
+                  throw new AssertionError("kernel must not run");
+                },
+                capture(DataClass.PUBLIC),
+                profile));
+  }
+
+  @Test
+  void modelBoundProfileRejectsSameIdWithDifferentFingerprintAtCompositionTime() {
+    AgentExecutionProfile serviceProfile = modelBoundProfile();
+    AgentExecutionProfile kernelProfile =
+        new AgentExecutionProfile(
+            serviceProfile.id(),
+            serviceProfile.taskSchemaVersion(),
+            serviceProfile.risk(),
+            serviceProfile.maxModelSteps(),
+            serviceProfile.maxToolCalls(),
+            serviceProfile.deadlineMs(),
+            serviceProfile.budgetUsd(),
+            serviceProfile.maxInputTokensPerStep(),
+            serviceProfile.maxOutputTokensPerStep(),
+            new PricingProfile(
+                serviceProfile.pricing().id(),
+                serviceProfile.pricing().provider(),
+                serviceProfile.pricing().modelRequested(),
+                serviceProfile.pricing().uncachedInputNanoUsdPerToken(),
+                serviceProfile.pricing().cachedInputNanoUsdPerToken() + 1,
+                serviceProfile.pricing().outputNanoUsdPerToken()),
+            serviceProfile.modelAdapterVersion(),
+            serviceProfile.agentVersion(),
+            serviceProfile.verifierVersion(),
+            serviceProfile.harnessVersion(),
+            serviceProfile.experiment(),
+            serviceProfile.policyVersion(),
+            serviceProfile.stateVersion(),
+            serviceProfile.contextPolicyVersion(),
+            serviceProfile.toolRegistryVersion(),
+            serviceProfile.environmentSnapshotRef(),
+            serviceProfile.capabilityRefs(),
+            serviceProfile.requiredDataClass());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            service(
+                new RecordingAgentRunStore(new RecordingArtifactStore()),
+                profileBoundKernel(
+                    kernelProfile,
+                    (task, cancellation) -> {
+                      throw new AssertionError("kernel must not run");
+                    }),
+                capture(DataClass.PUBLIC),
+                serviceProfile));
+  }
+
+  @Test
+  void legacyFakeProfileRejectsAKernelBoundToAnyLiveProfile() {
+    AgentExecutionProfile liveProfile = modelBoundProfile();
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            service(
+                new RecordingAgentRunStore(new RecordingArtifactStore()),
+                profileBoundKernel(
+                    liveProfile,
+                    (task, cancellation) -> {
+                      throw new AssertionError("kernel must not run");
+                    }),
+                capture(),
+                AgentExecutionProfile.legacyFakeV1()));
+  }
+
   private static AgentDraftService service(
       RecordingArtifactStore artifactStore, AgentKernel kernel) {
     return service(new RecordingAgentRunStore(artifactStore), kernel);
@@ -480,12 +635,107 @@ class AgentDraftServiceTest {
 
   private static AgentDraftService service(
       RecordingAgentRunStore runStore, AgentKernel kernel) {
+    return service(
+        runStore,
+        kernel,
+        capture(),
+        AgentExecutionProfile.legacyFakeV1());
+  }
+
+  private static AgentDraftService service(
+      RecordingAgentRunStore runStore,
+      AgentKernel kernel,
+      Capture capture,
+      AgentExecutionProfile executionProfile) {
     return new AgentDraftService(
         kernel,
         runStore,
-        new FixedCaptureStore(capture()),
+        new FixedCaptureStore(capture),
         prefix -> prefix + "-test",
-        Clock.fixed(Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC));
+        Clock.fixed(Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC),
+        executionProfile);
+  }
+
+  private static void assertPreflightDataRejection(Capture capture) {
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+    AtomicInteger kernelCalls = new AtomicInteger();
+    AgentDraftService service =
+        service(
+            runs,
+            profileBoundKernel(
+                modelBoundProfile(),
+                (task, cancellation) -> {
+                  kernelCalls.incrementAndGet();
+                  throw new AssertionError("kernel must not run");
+                }),
+            capture,
+            modelBoundProfile());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            service.draft(
+                new AgentDraftCommand(
+                    PRINCIPAL, CAPTURE_ID, "Create a synthetic public draft")));
+    assertEquals(0, kernelCalls.get());
+    assertEquals(0, runs.startCalls);
+    assertEquals(0, runs.completeCalls);
+    assertEquals(0, artifacts.createCalls);
+  }
+
+  private static AgentExecutionProfile modelBoundProfile() {
+    return new AgentExecutionProfile(
+        "synthetic-openai-agent-draft-v1",
+        "1.1",
+        RiskLevel.EXTERNAL,
+        2,
+        1,
+        30_000,
+        new BigDecimal("0.022000"),
+        1_000,
+        200,
+        new PricingProfile(
+            "openai-gpt-5.6-sol-2026-07-v1",
+            "openai.responses",
+            "gpt-5.6-sol",
+            5_000,
+            500,
+            30_000),
+        "openai-responses-v1-openai-java-4.43.0",
+        "agent-draft-service-v1",
+        "agent-draft-verifier-v1",
+        "framework-free-agent-kernel-v2",
+        new HarnessExperiment("openai-responses-h0", 1),
+        "synthetic-model-egress-policy-v1",
+        "stage2-s3",
+        "ref-only-v1",
+        "agent-tools-v1",
+        "environment://sha256:" + "a".repeat(64),
+        List.of(AgentExecutionProfile.SYNTHETIC_MODEL_EGRESS_CAPABILITY),
+        DataClass.PUBLIC);
+  }
+
+  private static AgentKernel profileBoundKernel(
+      AgentExecutionProfile profile, AgentKernel delegate) {
+    return new AgentKernel() {
+      @Override
+      public AgentRunOutcome run(
+          TaskEnvelope task,
+          io.emergeos.core.port.CancellationSignal cancellation) {
+        return delegate.run(task, cancellation);
+      }
+
+      @Override
+      public String executionProfileId() {
+        return profile.id();
+      }
+
+      @Override
+      public String executionProfileFingerprint() {
+        return profile.fingerprint();
+      }
+    };
   }
 
   private static void assertBoundaryFailure(AgentKernel kernel, String expectedReason) {
@@ -548,17 +798,21 @@ class AgentDraftServiceTest {
   }
 
   private static Capture capture() {
+    return capture(DataClass.PERSONAL);
+  }
+
+  private static Capture capture(DataClass dataClass) {
     String content = "synthetic owned Capture";
     return new Capture(
         CAPTURE_ID,
         PRINCIPAL,
         "agent-draft-service-test",
         CaptureRequestHashes.sha256(
-            content, CaptureSourceType.TEXT, "synthetic", DataClass.PERSONAL),
+            content, CaptureSourceType.TEXT, "synthetic", dataClass),
         content,
         CaptureSourceType.TEXT,
         "synthetic",
-        DataClass.PERSONAL,
+        dataClass,
         Instant.parse("2026-07-30T00:00:00Z"));
   }
 
@@ -569,6 +823,8 @@ class AgentDraftServiceTest {
   private static final class RecordingAgentRunStore implements AgentRunStore {
     private final RecordingArtifactStore artifacts;
     private AgentRun stored;
+    private int startCalls;
+    private int completeCalls;
 
     private RecordingAgentRunStore(RecordingArtifactStore artifacts) {
       this.artifacts = artifacts;
@@ -576,12 +832,14 @@ class AgentDraftServiceTest {
 
     @Override
     public AgentRun start(AgentRun running) {
+      startCalls++;
       stored = running;
       return running;
     }
 
     @Override
     public CompletionResult complete(AgentRun terminal, ArtifactLineage proposedArtifact) {
+      completeCalls++;
       if (proposedArtifact != null) {
         artifacts.createCalls++;
       }
@@ -610,7 +868,8 @@ class AgentDraftServiceTest {
 
     @Override
     public Optional<Capture> findOwned(String principalId, String captureId) {
-      if (capture.principalId().equals(principalId)
+      if (capture != null
+          && capture.principalId().equals(principalId)
           && capture.captureId().equals(captureId)) {
         return Optional.of(capture);
       }

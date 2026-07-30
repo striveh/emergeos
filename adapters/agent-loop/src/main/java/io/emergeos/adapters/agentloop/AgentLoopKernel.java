@@ -55,6 +55,16 @@ public final class AgentLoopKernel implements AgentKernel {
   }
 
   @Override
+  public String executionProfileId() {
+    return model.executionProfileId();
+  }
+
+  @Override
+  public String executionProfileFingerprint() {
+    return model.executionProfileFingerprint();
+  }
+
+  @Override
   public AgentRunOutcome run(TaskEnvelope task, CancellationSignal cancellation) {
     Objects.requireNonNull(task, "task");
     Objects.requireNonNull(cancellation, "cancellation");

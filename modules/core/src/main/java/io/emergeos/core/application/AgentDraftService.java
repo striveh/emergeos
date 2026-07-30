@@ -8,7 +8,6 @@ import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.ResourceBinding;
 import io.emergeos.contracts.ResourceRole;
 import io.emergeos.contracts.ResultEnvelope;
-import io.emergeos.contracts.RiskLevel;
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.contracts.TraceEventType;
@@ -32,33 +31,45 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 public final class AgentDraftService {
 
-  private static final String SCHEMA_VERSION = "1.0";
-  private static final String AGENT_VERSION = "agent-draft-service-v1";
-  private static final String VERIFIER_VERSION = "agent-draft-verifier-v1";
-  private static final String HARNESS_VERSION = "framework-free-agent-kernel-v1";
+  private static final String RESULT_SCHEMA_VERSION = "1.0";
+  private static final String TRACE_SCHEMA_VERSION = "1.0";
 
   private final AgentKernel kernel;
   private final AgentRunStore runs;
   private final CaptureStore captures;
   private final IdGenerator ids;
   private final Clock clock;
+  private final AgentExecutionProfile executionProfile;
 
   public AgentDraftService(
       AgentKernel kernel,
       AgentRunStore runs,
       CaptureStore captures,
       IdGenerator ids,
-      Clock clock) {
+      Clock clock,
+      AgentExecutionProfile executionProfile) {
     this.kernel = Objects.requireNonNull(kernel, "kernel");
     this.runs = Objects.requireNonNull(runs, "runs");
     this.captures = Objects.requireNonNull(captures, "captures");
     this.ids = Objects.requireNonNull(ids, "ids");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.executionProfile =
+        Objects.requireNonNull(executionProfile, "executionProfile");
+    String kernelProfileId = kernel.executionProfileId();
+    String kernelProfileFingerprint = kernel.executionProfileFingerprint();
+    if (executionProfile.modelBound()
+        ? !executionProfile.id().equals(kernelProfileId)
+            || !executionProfile
+                .fingerprint()
+                .equals(kernelProfileFingerprint)
+        : kernelProfileId != null || kernelProfileFingerprint != null) {
+      throw new IllegalArgumentException(
+          "execution profile and AgentKernel identity disagree");
+    }
   }
 
   public AgentDraftOutcome draft(AgentDraftCommand command) {
@@ -68,6 +79,7 @@ public final class AgentDraftService {
     Capture ownedCapture =
         captures.findOwned(command.principalId(), command.captureId()).orElse(null);
     TaskEnvelope task = task(command, captureRef, ownedCapture);
+    executionProfile.requireTaskBinding(task);
     Instant startedAt = clock.instant();
     runs.start(AgentRun.running(runId, command.principalId(), task, startedAt));
 
@@ -221,7 +233,7 @@ public final class AgentDraftService {
     AgentTraceEnvelope trace = trace(runId, task.id(), safeEvents);
     ResultEnvelope result =
         new ResultEnvelope(
-            SCHEMA_VERSION,
+            RESULT_SCHEMA_VERSION,
             runId,
             task.id(),
             status,
@@ -231,8 +243,8 @@ public final class AgentDraftService {
             List.of(),
             List.of(),
             kernelRun.resolvedModel(),
-            AGENT_VERSION,
-            VERIFIER_VERSION,
+            executionProfile.agentVersion(),
+            executionProfile.verifierVersion(),
             kernelRun.costUsd(),
             kernelRun.tokenCount(),
             kernelRun.latencyMs(),
@@ -240,16 +252,13 @@ public final class AgentDraftService {
             failureReason);
     HarnessRunBundle bundle =
         HarnessRunBundle.create(
-            SCHEMA_VERSION,
+            task.schemaVersion(),
             runId,
             task.id(),
-            null,
+            executionProfile.experiment(),
             kernelRun.resolvedModel(),
-            HARNESS_VERSION,
-            Map.of(
-                "agent", AGENT_VERSION,
-                "verifier", VERIFIER_VERSION,
-                "trace-integrity", IntegrityHashes.PROFILE),
+            executionProfile.harnessVersion(),
+            executionProfile.componentVersions(),
             task.environmentSnapshotRef(),
             task.toolRegistryVersion(),
             task,
@@ -299,14 +308,16 @@ public final class AgentDraftService {
       entries.add(entry);
       root = IntegrityHashes.nextTraceRoot(root, entry.eventHash());
     }
-    return AgentTraceEnvelope.create(SCHEMA_VERSION, runId, taskId, entries);
+    return AgentTraceEnvelope.create(
+        TRACE_SCHEMA_VERSION, runId, taskId, entries);
   }
 
   private TaskEnvelope task(
       AgentDraftCommand command, String captureRef, Capture ownedCapture) {
+    String taskId = ids.next("task");
     return new TaskEnvelope(
-        SCHEMA_VERSION,
-        ids.next("task"),
+        executionProfile.taskSchemaVersion(),
+        taskId,
         null,
         command.principalId(),
         List.of(),
@@ -316,26 +327,26 @@ public final class AgentDraftService {
         List.of(),
         List.of("text"),
         ownedCapture == null ? DataClass.PERSONAL : ownedCapture.dataClass(),
-        RiskLevel.REVERSIBLE,
+        executionProfile.risk(),
         "INTERACTIVE",
         List.of("capture.read"),
         "urn:emergeos:schema:internal:agent-draft-proposal:v1",
         List.of("draft cites the source Capture"),
         false,
-        2,
-        1,
-        5_000,
-        BigDecimal.ZERO,
-        null,
-        null,
-        null,
-        null,
-        "agent-draft-policy-v1",
-        "stage2-s2",
-        "ref-only-v1",
-        "agent-tools-v1",
-        null,
-        List.of(),
+        executionProfile.maxModelSteps(),
+        executionProfile.maxToolCalls(),
+        executionProfile.deadlineMs(),
+        executionProfile.budgetUsd(),
+        executionProfile.modelProvider(),
+        executionProfile.modelRequested(),
+        executionProfile.pricingProfile(),
+        executionProfile.taskIdempotencyKey(taskId),
+        executionProfile.policyVersion(),
+        executionProfile.stateVersion(),
+        executionProfile.contextPolicyVersion(),
+        executionProfile.toolRegistryVersion(),
+        executionProfile.environmentSnapshotRef(),
+        executionProfile.capabilityRefs(),
         List.of(),
         "structured final or non-success");
   }

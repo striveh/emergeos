@@ -21,6 +21,14 @@ public interface AgentModel {
 
   Session open(TaskEnvelope task);
 
+  default String executionProfileId() {
+    return null;
+  }
+
+  default String executionProfileFingerprint() {
+    return null;
+  }
+
   @FunctionalInterface
   interface Session extends AutoCloseable {
 

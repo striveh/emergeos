@@ -18,6 +18,7 @@ import io.emergeos.adapters.postgres.PostgresAgentRunStore;
 import io.emergeos.adapters.postgres.PostgresStage1OperationsProbe;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.application.AgentDraftService;
+import io.emergeos.core.application.AgentExecutionProfile;
 import io.emergeos.core.application.ArtifactLineageService;
 import io.emergeos.core.application.CaptureService;
 import io.emergeos.core.application.LocalActionAuthority;
@@ -79,12 +80,19 @@ class ApiConfiguration {
   }
 
   @Bean
-  AgentKernel agentKernel(PostgresCaptureStore captureStore) {
+  AgentExecutionProfile agentExecutionProfile() {
+    return AgentExecutionProfile.legacyFakeV1();
+  }
+
+  @Bean
+  AgentKernel agentKernel(
+      PostgresCaptureStore captureStore,
+      AgentExecutionProfile agentExecutionProfile) {
     return new AgentLoopKernel(
         ScriptedFakeModel.forCaptureDraft(),
         new AgentToolRegistry(List.of(new CaptureReadTool(captureStore))),
-        2,
-        1);
+        agentExecutionProfile.maxModelSteps(),
+        agentExecutionProfile.maxToolCalls());
   }
 
   @Bean
@@ -93,8 +101,15 @@ class ApiConfiguration {
       PostgresAgentRunStore agentRunStore,
       PostgresCaptureStore captureStore,
       IdGenerator idGenerator,
-      Clock clock) {
-    return new AgentDraftService(agentKernel, agentRunStore, captureStore, idGenerator, clock);
+      Clock clock,
+      AgentExecutionProfile agentExecutionProfile) {
+    return new AgentDraftService(
+        agentKernel,
+        agentRunStore,
+        captureStore,
+        idGenerator,
+        clock,
+        agentExecutionProfile);
   }
 
   @Bean
