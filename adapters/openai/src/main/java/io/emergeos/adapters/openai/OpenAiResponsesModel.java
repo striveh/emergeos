@@ -71,6 +71,12 @@ public final class OpenAiResponsesModel implements AgentModel {
           .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
   private static final String USAGE_LIMIT_EXCEEDED =
       "MODEL_USAGE_LIMIT_EXCEEDED";
+  private static final ResponseCreateParams.PromptCacheOptions
+      EXPLICIT_CACHE_ONLY =
+          ResponseCreateParams.PromptCacheOptions.builder()
+              .mode(
+                  ResponseCreateParams.PromptCacheOptions.Mode.EXPLICIT)
+              .build();
   private static final String INSTRUCTIONS =
       """
       You are the EmergeOS synthetic draft model boundary.
@@ -262,7 +268,8 @@ public final class OpenAiResponsesModel implements AgentModel {
     }
 
     private ResponseCreateParams firstRequest() {
-      return ResponseCreateParams.builder()
+      ResponseCreateParams.Builder builder =
+          ResponseCreateParams.builder()
           .model(profile.modelRequested())
           .instructions(INSTRUCTIONS)
           .inputOfResponse(List.copyOf(history))
@@ -273,13 +280,15 @@ public final class OpenAiResponsesModel implements AgentModel {
           .addInclude(ResponseIncludable.REASONING_ENCRYPTED_CONTENT)
           .addTool(CaptureReadArguments.class)
           .toolChoice(
-              ToolChoiceFunction.builder().name(CAPTURE_TOOL).build())
-          .build();
+              ToolChoiceFunction.builder().name(CAPTURE_TOOL).build());
+      applyReviewedCachePolicy(builder);
+      return builder.build();
     }
 
     private StructuredResponseCreateParams<FinalDraftPayload>
         secondRequest() {
-      return ResponseCreateParams.builder()
+      StructuredResponseCreateParams.Builder<FinalDraftPayload> builder =
+          ResponseCreateParams.builder()
           .model(profile.modelRequested())
           .instructions(INSTRUCTIONS)
           .inputOfResponse(List.copyOf(history))
@@ -290,8 +299,23 @@ public final class OpenAiResponsesModel implements AgentModel {
           .addInclude(ResponseIncludable.REASONING_ENCRYPTED_CONTENT)
           .tools(List.of())
           .toolChoice(ToolChoiceOptions.NONE)
-          .text(FinalDraftPayload.class)
-          .build();
+          .text(FinalDraftPayload.class);
+      applyReviewedCachePolicy(builder);
+      return builder.build();
+    }
+
+    private void applyReviewedCachePolicy(
+        ResponseCreateParams.Builder builder) {
+      if (requiresExplicitCacheOnly(profile.modelRequested())) {
+        builder.promptCacheOptions(EXPLICIT_CACHE_ONLY);
+      }
+    }
+
+    private void applyReviewedCachePolicy(
+        StructuredResponseCreateParams.Builder<?> builder) {
+      if (requiresExplicitCacheOnly(profile.modelRequested())) {
+        builder.promptCacheOptions(EXPLICIT_CACHE_ONLY);
+      }
     }
 
     private RequestOptions requestOptions(ModelCallContext context) {
@@ -527,6 +551,12 @@ public final class OpenAiResponsesModel implements AgentModel {
   private static boolean safeCallId(String value) {
     return value != null
         && value.matches("[A-Za-z0-9][A-Za-z0-9._~-]{0,199}");
+  }
+
+  private static boolean requiresExplicitCacheOnly(
+      String modelRequested) {
+    return "gpt-5.6".equals(modelRequested)
+        || modelRequested.startsWith("gpt-5.6-");
   }
 
   private static ModelStep failed(

@@ -97,12 +97,68 @@ class OpenAiResponsesModelProtocolTest {
     }
   }
 
+  @Test
+  void omitsUnsupportedPromptCacheOptionsForAnEarlierModel()
+      throws Exception {
+    List<String> requests = new ArrayList<>();
+    String response =
+        firstResponse()
+            .replace(
+                "\"model\":\"gpt-5.6-2026-07-15\"",
+                "\"model\":\"gpt-5-mini-2025-08-07\"")
+            .replace(
+                "\"input_tokens_details\":{\"cached_tokens\":20}",
+                "\"input_tokens_details\":{\"cached_tokens\":0}");
+    try (LoopbackResponsesServer server =
+            new LoopbackResponsesServer(requests, response)) {
+      OpenAIClient client =
+          OpenAIOkHttpClient.builder()
+              .apiKey("sentinel-loopback-key")
+              .baseUrl(server.baseUrl())
+              .maxRetries(0)
+              .timeout(Duration.ofSeconds(2))
+              .build();
+      try {
+        AgentExecutionProfile profile =
+            profile("gpt-5-mini", 250, 25, 2_000);
+        TaskEnvelope task =
+            profile.newDraftTask(
+                "task-synthetic-mini-003",
+                "synthetic-owner",
+                "Create a synthetic public draft",
+                "capture://synthetic-003",
+                DataClass.PUBLIC);
+        AgentModel.Session session =
+            new OpenAiResponsesModel(profile, client).open(task);
+
+        AgentModel.ModelStep step =
+            session.next(
+                new AgentModel.Turn(task, List.of()),
+                context(new BigDecimal("0.022000")));
+
+        assertInstanceOf(AgentModel.ToolCall.class, step.decision());
+        assertEquals(1, requests.size());
+        JsonNode request =
+            ObjectMappers.jsonMapper().readTree(requests.getFirst());
+        assertEquals("gpt-5-mini", request.path("model").asText());
+        assertFalse(request.has("prompt_cache_options"));
+      } finally {
+        client.close();
+      }
+    }
+  }
+
   private static void assertFirstRequest(JsonNode request) {
     assertEquals("gpt-5.6", request.path("model").asText());
     assertEquals(200, request.path("max_output_tokens").asInt());
     assertFalse(request.path("store").asBoolean(true));
     assertFalse(request.path("parallel_tool_calls").asBoolean(true));
     assertEquals("default", request.path("service_tier").asText());
+    assertEquals(
+        "explicit",
+        request.at("/prompt_cache_options/mode").asText());
+    assertEquals(1, request.path("prompt_cache_options").size());
+    assertFalse(request.toString().contains("prompt_cache_breakpoint"));
     assertEquals(1, request.path("include").size());
     assertEquals(
         "reasoning.encrypted_content", request.path("include").get(0).asText());
@@ -146,6 +202,11 @@ class OpenAiResponsesModelProtocolTest {
     assertFalse(request.path("store").asBoolean(true));
     assertFalse(request.path("parallel_tool_calls").asBoolean(true));
     assertEquals("default", request.path("service_tier").asText());
+    assertEquals(
+        "explicit",
+        request.at("/prompt_cache_options/mode").asText());
+    assertEquals(1, request.path("prompt_cache_options").size());
+    assertFalse(request.toString().contains("prompt_cache_breakpoint"));
     assertEquals(1, request.path("include").size());
     assertEquals(
         "reasoning.encrypted_content", request.path("include").get(0).asText());
@@ -216,14 +277,22 @@ class OpenAiResponsesModelProtocolTest {
   }
 
   private static AgentExecutionProfile profile() {
+    return profile("gpt-5.6", 5_000, 500, 30_000);
+  }
+
+  private static AgentExecutionProfile profile(
+      String modelRequested,
+      long uncachedInputNanoUsdPerToken,
+      long cachedInputNanoUsdPerToken,
+      long outputNanoUsdPerToken) {
     PricingProfile pricing =
         new PricingProfile(
-            "openai-gpt-5.6-2026-07-v1",
+            "openai-model-protocol-test-v1",
             "openai.responses",
-            "gpt-5.6",
-            5_000,
-            500,
-            30_000);
+            modelRequested,
+            uncachedInputNanoUsdPerToken,
+            cachedInputNanoUsdPerToken,
+            outputNanoUsdPerToken);
     return new AgentExecutionProfile(
         "synthetic-openai-agent-draft-v1",
         "1.1",
