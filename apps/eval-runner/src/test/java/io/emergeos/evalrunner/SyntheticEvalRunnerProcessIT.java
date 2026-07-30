@@ -17,6 +17,17 @@ class SyntheticEvalRunnerProcessIT {
   private static final String EXPECTED_RECEIPT =
       "EVAL_PREFLIGHT_RECEIPT status=PREFLIGHT_READY"
           + " caseId=openai-public-draft-003-r1"
+          + " packSha256=bd44cc3ea0230b9267da5cfb6c29fdd2a7452131fe14864e16e6c39b516c8711"
+          + " environmentSha256=2a788ccc9b3e5be768f5707466b1b05aa340d79caf8ec728f2c6526919c7242b"
+          + " captureRequestHash=72e9f2a45fa1f2cf43cab0963cd0bd5cd16bedb5f8d40c0ae67401014b6f90ea"
+          + " taskHash=b55e73579f63736373337077dc2d928ccb8ed540b14193364800d3ec1d238a0a"
+          + " executionProfileFingerprint=ff3bca47eeb5a6b43305d6d88f4c9ce4c9f9edaba78744f0435920d663db1a96"
+          + " pricingProfileFingerprint=96be6f771a5c8d967424f61571af3737072a1c85ed780f9e7f0ab06ba1c7e28c"
+          + " modelRequested=gpt-5.4-mini-2026-03-17"
+          + " maximumProviderRequests=2 deadlineMs=30000"
+          + " maxInputTokensPerRequest=272000"
+          + " maxOutputTokensPerRequest=1000"
+          + " reservationUsd=0.417000"
           + " keyReads=0 clientFactories=0 modelFactories=0"
           + " runStarts=0 httpRequests=0 markerCreated=false";
 

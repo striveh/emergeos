@@ -11,6 +11,7 @@ const schemaDir = path.join(repoRoot, "contracts", "schemas", "v1");
 const fixtureDir = path.join(repoRoot, "contracts", "fixtures", "v1");
 const goldenDir = path.join(repoRoot, "contracts", "golden", "v1");
 const taskPackDir = path.join(repoRoot, "evals", "task-packs", "synthetic");
+const evalEnvironmentDir = path.join(repoRoot, "evals", "environments");
 
 function readJson(file) {
   try {
@@ -33,6 +34,19 @@ function jsonFiles(directory) {
 function assertNonEmptyStrings(value, label) {
   if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== "string" || item.trim() === "")) {
     throw new Error(`${label} must be a non-empty array of non-empty strings`);
+  }
+}
+
+function assertExactObjectKeys(value, expected, label) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
+    throw new Error(
+      `${label} fields mismatch: expected ${wanted.join(", ")}`
+    );
   }
 }
 
@@ -797,6 +811,226 @@ for (const file of taskPackFiles) {
       }
     }
   }
+
+  if (task.modelEval !== undefined || task.syntheticProvenance !== undefined) {
+    assertExactObjectKeys(
+      task.syntheticProvenance,
+      ["kind", "containsRealUserData", "containsRealAccount"],
+      `${relative}: syntheticProvenance`
+    );
+    if (
+      task.syntheticProvenance.kind !== "LITERAL_CHECKED_IN_SYNTHETIC"
+      || task.syntheticProvenance.containsRealUserData !== false
+      || task.syntheticProvenance.containsRealAccount !== false
+    ) {
+      throw new Error(
+        `${relative}: model egress requires exact literal synthetic provenance`
+      );
+    }
+    assertExactObjectKeys(
+      task.modelEval,
+      [
+        "caseId",
+        "captureId",
+        "clientNonce",
+        "runId",
+        "taskId",
+        "artifactId",
+        "intent",
+        "requiredTools",
+        "maximumProviderRequests"
+      ],
+      `${relative}: modelEval`
+    );
+    for (const field of [
+      "caseId",
+      "captureId",
+      "clientNonce",
+      "runId",
+      "taskId",
+      "artifactId",
+      "intent"
+    ]) {
+      if (
+        typeof task.modelEval[field] !== "string"
+        || task.modelEval[field].trim() === ""
+      ) {
+        throw new Error(
+          `${relative}: modelEval.${field} must be a non-empty string`
+        );
+      }
+    }
+    if (
+      task.schemaVersion !== "0.2"
+      || task.seed.dataClass !== "PUBLIC"
+      || task.risk !== "EXTERNAL"
+      || !task.seed.sourceRef.startsWith("synthetic://eval/")
+      || !task.principalRef.startsWith("synthetic-")
+      || JSON.stringify(task.modelEval.requiredTools)
+        !== JSON.stringify(["capture.read"])
+      || task.modelEval.maximumProviderRequests !== 2
+    ) {
+      throw new Error(
+        `${relative}: modelEval must be the bounded PUBLIC synthetic two-call route`
+      );
+    }
+    if (task.offlineReplay !== undefined || task.expectedReplay !== undefined) {
+      throw new Error(
+        `${relative}: modelEval cannot also be an offlineReplay pack`
+      );
+    }
+  }
 }
 
 process.stdout.write(`Validated ${taskPackFiles.length} synthetic evaluation task packs with unique task IDs.\n`);
+
+const evalEnvironmentFiles = jsonFiles(evalEnvironmentDir);
+if (evalEnvironmentFiles.length === 0) {
+  throw new Error("No synthetic evaluation environment manifests found");
+}
+for (const file of evalEnvironmentFiles) {
+  const environment = readJson(file);
+  const relative = path.relative(repoRoot, file);
+  verifyUnicodeScalarTree(environment, relative);
+  assertExactObjectKeys(
+    environment,
+    [
+      "schemaVersion",
+      "reviewedAt",
+      "javaRelease",
+      "openaiJavaVersion",
+      "protocolVersion",
+      "harnessVersion",
+      "toolRegistryVersion",
+      "tools",
+      "providerApi",
+      "model",
+      "requestPolicy",
+      "pricing",
+      "inputTokenUpperBound",
+      "promptCachePolicy",
+      "operatorGate"
+    ],
+    relative
+  );
+  if (
+    environment.schemaVersion !== "0.1"
+    || !/^\d{4}-\d{2}-\d{2}$/.test(environment.reviewedAt)
+    || environment.javaRelease !== 21
+    || environment.providerApi !== "responses"
+    || JSON.stringify(environment.tools) !== JSON.stringify(["capture.read"])
+  ) {
+    throw new Error(`${relative}: unsupported evaluation environment identity`);
+  }
+  assertExactObjectKeys(
+    environment.model,
+    [
+      "requested",
+      "pricingFamily",
+      "maxInputTokens",
+      "maxOutputTokens",
+      "reference"
+    ],
+    `${relative}: model`
+  );
+  assertExactObjectKeys(
+    environment.requestPolicy,
+    [
+      "store",
+      "parallelToolCalls",
+      "serviceTier",
+      "maxRetries",
+      "productionBaseUrlOverrideAllowed",
+      "maximumProviderRequests",
+      "maximumInputTokensPerRequest",
+      "maximumOutputTokensPerRequest"
+    ],
+    `${relative}: requestPolicy`
+  );
+  assertExactObjectKeys(
+    environment.pricing,
+    [
+      "currency",
+      "unit",
+      "uncachedInput",
+      "cachedInput",
+      "output",
+      "fullRunReservationUsd",
+      "reference"
+    ],
+    `${relative}: pricing`
+  );
+  assertExactObjectKeys(
+    environment.inputTokenUpperBound,
+    ["method", "tokens", "reference"],
+    `${relative}: inputTokenUpperBound`
+  );
+  assertExactObjectKeys(
+    environment.promptCachePolicy,
+    ["mode", "cacheWriteFeeIncluded", "reference"],
+    `${relative}: promptCachePolicy`
+  );
+  assertExactObjectKeys(
+    environment.operatorGate,
+    [
+      "posixOneShotMarkerRequired",
+      "realTtyChallengeRequired",
+      "credentialReadAfterPermit"
+    ],
+    `${relative}: operatorGate`
+  );
+  if (
+    typeof environment.model.requested !== "string"
+    || typeof environment.model.pricingFamily !== "string"
+    || !Number.isSafeInteger(environment.model.maxInputTokens)
+    || environment.model.maxInputTokens < 1
+    || environment.model.maxInputTokens > 272_000
+    || !Number.isSafeInteger(environment.model.maxOutputTokens)
+    || environment.model.maxOutputTokens < 1
+    || environment.requestPolicy.store !== false
+    || environment.requestPolicy.parallelToolCalls !== false
+    || environment.requestPolicy.serviceTier !== "default"
+    || environment.requestPolicy.maxRetries !== 0
+    || environment.requestPolicy.productionBaseUrlOverrideAllowed !== false
+    || environment.requestPolicy.maximumProviderRequests !== 2
+    || environment.requestPolicy.maximumInputTokensPerRequest
+      !== environment.inputTokenUpperBound.tokens
+    || environment.requestPolicy.maximumInputTokensPerRequest
+      !== environment.model.maxInputTokens
+    || environment.requestPolicy.maximumOutputTokensPerRequest
+      > environment.model.maxOutputTokens
+    || environment.inputTokenUpperBound.method
+      !== "OFFICIAL_MODEL_MAX_INPUT"
+    || environment.promptCachePolicy.cacheWriteFeeIncluded !== false
+    || environment.operatorGate.posixOneShotMarkerRequired !== true
+    || environment.operatorGate.realTtyChallengeRequired !== true
+    || environment.operatorGate.credentialReadAfterPermit !== true
+  ) {
+    throw new Error(`${relative}: unsafe synthetic evaluation environment`);
+  }
+  for (const rate of [
+    environment.pricing.uncachedInput,
+    environment.pricing.cachedInput,
+    environment.pricing.output
+  ]) {
+    if (!Number.isSafeInteger(rate) || rate < 0) {
+      throw new Error(`${relative}: pricing rates must be non-negative integers`);
+    }
+  }
+  for (const reference of [
+    environment.model.reference,
+    environment.pricing.reference,
+    environment.inputTokenUpperBound.reference,
+    environment.promptCachePolicy.reference
+  ]) {
+    if (
+      typeof reference !== "string"
+      || !reference.startsWith("https://developers.openai.com/")
+    ) {
+      throw new Error(`${relative}: references must use official OpenAI docs`);
+    }
+  }
+}
+process.stdout.write(
+  `Validated ${evalEnvironmentFiles.length} synthetic evaluation environment manifest.\n`
+);

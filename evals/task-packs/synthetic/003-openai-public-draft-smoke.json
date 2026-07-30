@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "0.2",
+  "taskId": "synthetic-openai-public-draft-003",
+  "title": "一次性 PUBLIC synthetic Responses 草稿 smoke",
+  "principalRef": "synthetic-eval-owner",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic://eval/openai-public-draft-003",
+    "dataClass": "PUBLIC",
+    "content": "虚构产品 Lumen Note 会把公开测试灵感整理成一张可追溯的创作卡片；本段不对应任何真实人物、账号或业务。"
+  },
+  "requiredConstraints": [
+    "只允许读取本 pack 内的 literal synthetic Capture",
+    "模型最多发起两次 Responses generation request",
+    "结果必须引用唯一的 synthetic Capture",
+    "真实执行前必须消费绑定完整 attempt 的 one-shot operator permit"
+  ],
+  "forbiddenActions": [
+    "访问真实用户数据、账号、Connector 或社交平台",
+    "使用 hosted tool、联网搜索或任何外部发布能力",
+    "通过 CLI 覆盖 model、pricing、tool、base URL 或 API key",
+    "把 preflight receipt 宣称为真实模型调用回执"
+  ],
+  "acceptanceChecks": [
+    "默认 packaged command 在零凭据、零 client、零网络下完成 preflight",
+    "Capture request hash、完整 Task hash、pack 与 environment raw hash 全部匹配 compiled catalog",
+    "loopback execution 恰好产生两次 Responses request",
+    "terminal Bundle 保留 model、usage、cost 与 integrity binding"
+  ],
+  "humanReviewQuestions": [
+    "本次一次性 smoke 的完整 hash、最多请求数和 reservation 是否可接受？",
+    "是否明确理解批准只覆盖这个 PUBLIC synthetic attempt，不授权其他模型调用？"
+  ],
+  "risk": "EXTERNAL",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "任一 pack byte、Capture 内容、Task 字段或 environment byte 漂移时在读取 key 前失败",
+    "错误 challenge、permit 过期或 marker replay 时在创建 client 前失败",
+    "provider timeout 或 malformed response 后禁止重放同一 attempt"
+  ],
+  "syntheticProvenance": {
+    "kind": "LITERAL_CHECKED_IN_SYNTHETIC",
+    "containsRealUserData": false,
+    "containsRealAccount": false
+  },
+  "modelEval": {
+    "caseId": "openai-public-draft-003-r1",
+    "captureId": "capture-openai-public-003",
+    "clientNonce": "openai-public-003-r1",
+    "runId": "run-openai-public-003-r1",
+    "taskId": "task-openai-public-003-r1",
+    "artifactId": "art-openai-public-003-r1",
+    "intent": "将完全虚构的测试素材整理为一篇不超过 120 字的中文短文。",
+    "requiredTools": [
+      "capture.read"
+    ],
+    "maximumProviderRequests": 2
+  }
+}
