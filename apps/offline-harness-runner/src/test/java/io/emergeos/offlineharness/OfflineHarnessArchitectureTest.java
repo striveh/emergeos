@@ -1,5 +1,6 @@
 package io.emergeos.offlineharness;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -32,6 +33,93 @@ class OfflineHarnessArchitectureTest {
           "javax/net/",
           "sun/net/",
           "java/rmi/");
+  private static final List<String>
+      PRODUCT_RUNTIME_DENIED_TYPE_PREFIXES =
+          List.of(
+              "io/emergeos/core/application/",
+              "io/emergeos/core/domain/",
+              "io/emergeos/core/port/",
+              "io/emergeos/adapters/",
+              "io/emergeos/api/",
+              "io/emergeos/evalrunner/",
+              "io/emergeos/contracts/AgentTrace",
+              "io/emergeos/contracts/Harness",
+              "io/emergeos/contracts/ResultEnvelope",
+              "io/emergeos/contracts/TaskEnvelope",
+              "io/emergeos/contracts/TraceEventType");
+  private static final Set<String> ALLOWED_OFFLINE_DOMAIN_TYPES =
+      Set.of(
+          "io/emergeos/core/application/"
+              + "AgentDraftReferenceGrounding",
+          "io/emergeos/core/domain/AgentDraftProposal",
+          "io/emergeos/core/domain/ArtifactLineageEntry");
+
+  @Test
+  void offlineProductionHasNoProductAgentRuntimeTypeReferences()
+      throws IOException {
+    Path productionClasses =
+        Path.of(System.getProperty("emerge.offline.classes"))
+            .toAbsolutePath()
+            .normalize();
+
+    List<String> violations =
+        findProductRuntimeViolations(List.of(productionClasses));
+
+    assertTrue(
+        violations.isEmpty(),
+        () -> "forbidden product runtime refs: " + violations);
+  }
+
+  @Test
+  void productRuntimeClassifierDetectsDescriptorsAndReflectiveNames()
+      throws IOException {
+    Path testClasses =
+        Path.of(System.getProperty("emerge.offline.testClasses"))
+            .toAbsolutePath()
+            .normalize();
+
+    List<String> violations =
+        findProductRuntimeViolations(List.of(testClasses));
+
+    assertTrue(
+        violations.stream()
+            .anyMatch(
+                violation ->
+                    violation.contains(
+                            "ForbiddenProductRuntimeTypeFixture")
+                        && violation.contains(
+                            "Lio/emergeos/core/domain/AgentRun;")));
+    assertTrue(
+        violations.stream()
+            .anyMatch(
+                violation ->
+                    violation.contains(
+                            "ForbiddenProductRuntimeTypeFixture")
+                        && violation.contains(
+                            "io.emergeos.core.application.AgentDraftService")));
+    assertTrue(
+        violations.stream()
+            .anyMatch(
+                violation ->
+                    violation.contains(
+                            "ForbiddenProductRuntimeTypeFixture")
+                        && violation.contains(
+                            "Lio/emergeos/core/port/AgentKernel;")
+                        && violation.contains(
+                            "Lio/emergeos/contracts/HarnessRunBundle;")));
+    assertFalse(
+        violations.stream()
+            .filter(
+                violation ->
+                    violation.contains(
+                        "ForbiddenProductRuntimeTypeFixture"))
+            .anyMatch(
+                violation ->
+                    violation.contains(
+                            "AgentDraftReferenceGrounding")
+                        || violation.contains("AgentDraftProposal")
+                        || violation.contains("ArtifactLineageEntry")));
+  }
 
   @Test
   void allowedProductionClosureHasNoKnownJdkNetworkOrProcessReferences()
@@ -112,6 +200,70 @@ class OfflineHarnessArchitectureTest {
       }
     }
     return List.copyOf(violations);
+  }
+
+  private static List<String> findProductRuntimeViolations(
+      List<Path> roots) throws IOException {
+    List<String> violations = new ArrayList<>();
+    for (Path root : roots) {
+      assertTrue(
+          Files.isDirectory(root), () -> "missing classes: " + root);
+      try (var paths = Files.walk(root)) {
+        for (Path classFile :
+            paths.filter(path -> path.toString().endsWith(".class"))
+                .toList()) {
+          for (String reference :
+              classUtf8Constants(Files.readAllBytes(classFile))) {
+            if (containsDeniedProductRuntimeType(reference)) {
+              violations.add(
+                  root.relativize(classFile)
+                      + " references "
+                      + reference);
+            }
+          }
+        }
+      }
+    }
+    return List.copyOf(violations);
+  }
+
+  private static boolean containsDeniedProductRuntimeType(
+      String reference) {
+    String normalized = reference.replace('.', '/');
+    int searchFrom = 0;
+    while (true) {
+      int start = normalized.indexOf("io/emergeos/", searchFrom);
+      if (start < 0) {
+        return false;
+      }
+      int end = start;
+      while (end < normalized.length()
+          && isInternalTypeCharacter(normalized.charAt(end))) {
+        end++;
+      }
+      String type = normalized.substring(start, end);
+      if (!isAllowedOfflineDomainType(type)
+          && PRODUCT_RUNTIME_DENIED_TYPE_PREFIXES.stream()
+              .anyMatch(type::startsWith)) {
+        return true;
+      }
+      searchFrom = Math.max(end, start + 1);
+    }
+  }
+
+  private static boolean isAllowedOfflineDomainType(String type) {
+    return ALLOWED_OFFLINE_DOMAIN_TYPES.stream()
+        .anyMatch(
+            allowed ->
+                type.equals(allowed)
+                    || type.startsWith(allowed + "$"));
+  }
+
+  private static boolean isInternalTypeCharacter(char value) {
+    return value == '/'
+        || value == '$'
+        || value == '_'
+        || Character.isLetterOrDigit(value);
   }
 
   private static boolean isForbidden(String reference) {
