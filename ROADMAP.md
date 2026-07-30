@@ -74,7 +74,8 @@ Gate：
 [Stage 2 AgentKernel and Eval-Driven Development](./docs/plans/2026-07-29-stage-2-agent-kernel-evaluation.md)。
 
 状态：**S1、S2 工程完成；S3 real model protocol adapter、isolated synthetic
-Eval Runner 与本地 attempt durability 工程切片已通过。Live-provider smoke 尚未执行；
+Eval Runner、本地 attempt durability 与 terminal record create-only repair
+工程切片已通过。Live-provider smoke 尚未执行；
 S4 已完成首个 deterministic Verifier comparison、12 个 shared candidates /
 24 次 VerifierEvaluation、independent replay，以及 canonical durable report 的
 packaged multi-writer/process-kill/fresh-JVM 工程切片。完整 fault suite、typed
@@ -97,6 +98,9 @@ S3 bounded runner 回执：
 S3 durability 回执：
 [Durable Eval Attempt Evidence Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
 
+S3 create-only record 回执：
+[Eval Run Record Create-only Build Note](./docs/operations/build-notes/2026-07-31-s2-s3-eval-run-record-create-only.md)。
+
 S4 loader 回执：
 [Offline Comparison Loader Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-offline-comparison-loader.md)。
 
@@ -114,15 +118,17 @@ S4 durable report 回执：
   verified read 与 deterministic Offline golden runner；
 - 普通 API 之外的 isolated synthetic Eval Runner：默认 zero-egress preflight，
   real TTY + exact Task-bound one-shot permit，POSIX attempt marker/journal 与本地
-  atomic terminal run record；
-- production read-only journal verifier 与 7-point fat-JAR process-kill/restart matrix；
+  hard-link create-only terminal run record；
+- production read-only journal verifier 与 8-point fat-JAR process-kill/restart matrix；
 - 固定模型与 Task Pack 的 H0/H1 Harness 对照；
 - 错误工具结果、限流、Context Drift 和 Prompt Injection 故障集。
 
 当前已经完成 synthetic Fake success 的 deterministic baseline、OpenAI Responses
-protocol 的 loopback evidence、bounded runner engineering Gate，以及 7 个选定 durable
-boundary 的 fat-JAR 强制终止/新 JVM 只读核验；仍没有读取 real key、执行
-live-provider smoke、取得 real model result 或 billing receipt。Task Pack 004 已冻结
+protocol 的 loopback evidence、bounded runner engineering Gate，以及 8 个选定
+boundary 的 fat-JAR 强制终止/新 JVM 只读核验。新增 link-commit 窗口固定
+directory `fsync` 后、pending cleanup 前的同 inode residue；precheck 后的竞争 target
+不会被覆盖。仍没有读取 real key、执行 live-provider smoke、取得 real model result
+或 billing receipt。Task Pack 004 已冻结
 reference-grounding Verifier comparison 的输入、arms、cases 与预期矩阵；独立
 offline module 已实际生成 12 个 shared candidates，执行 24 次 H0/H1
 VerifierEvaluation，并由 independent verifier replay 得到 `VERIFIED_PASSED`。

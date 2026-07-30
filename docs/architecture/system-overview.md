@@ -81,7 +81,7 @@ flowchart TB
 - Stage 2 S3 已有独立 `apps/eval-runner`：默认 packaged command 只做
   zero-egress preflight；显式执行路径绑定 frozen PUBLIC synthetic Task、
   real TTY challenge、30 秒 one-shot permit、POSIX attempt marker/journal 和本地
-  atomic terminal run record；
+  hard-link create-only terminal run record；
 - Stage 2 S4 已在 isolated `apps/offline-harness-runner` 对固定 Pack 004 执行
   12 次 shared candidate generation / 24 次 VerifierEvaluation，并用不引用
   Runner/generator 的独立 verifier 重建 candidate、重跑 H0/H1、重算完整 report，
@@ -105,6 +105,9 @@ provider-side idempotency。Journal 的 provider SDK create intent 只能说明�
 发生；若没有完整 observed usage，billing 必须保持 `UNKNOWN`，不能把零 observed cost
 解释成免费。Reservation 是调用前的 authorization ceiling，不是对最终 provider usage 的
 改写上限；任何已观察 usage，即使超过 reservation，也必须进入 Result、Bundle 和本地记录。
+本地 terminal record 的 create-only commit 只证明 tested local POSIX cooperative
+boundary：pending-only 不 authoritative，同 inode target+pending 可解释为 cleanup
+residue，不同 inode fail closed；它不把 provider request 与本地文件组成 transaction。
 
 `apps/offline-harness-runner` 同样属于 Verification/Eval 边界，但与上面的
 real-model protocol Eval Runner 是两个独立组件。它只处理 fixed PUBLIC synthetic

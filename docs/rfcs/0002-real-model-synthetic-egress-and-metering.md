@@ -261,6 +261,32 @@ Focused/package/full verification、contracts、doc links 与最终 Diff 检查�
 仍需 owner 另行明确批准。当前没有读取 real key、发起 live request、产生 real model
 result 或 billing receipt，S4 Harness comparison 也尚未开始。
 
+## Implementation follow-up · 2026-07-31
+
+上面的 2026-07-30 implementation note 与“no-overwrite 后续工作”保留 RFC 接受时的
+历史事实。commit `2b50c66` 已完成该独立 correctness repair：
+
+```text
+CREATE_NEW pending
+  → file fsync + read-back
+  → directory fsync
+  → createLink(target, pending)
+  → directory fsync
+  → RUN_RECORD_LINK_COMMIT_COMPLETE
+  → pending cleanup
+  → directory fsync + target revalidation
+```
+
+precheck 后出现的 target 不会被覆盖；hard link 不支持时 fail closed，不降级为可覆盖
+move。read-only verifier 把 pending-only 解释为
+`PENDING_NON_AUTHORITATIVE`，把同 inode target+pending 解释为 committed cleanup
+residue，把不同 inode 固定为 `INVALID`。8-window fat-JAR process test 在新增的
+link-commit/cleanup 窗口强制终止真实 JVM，并由两个 fresh JVM 只读核验。
+
+这不改变本 RFC 的 egress、operator approval、metering 或 model-binding 决策，也不批准
+live-provider smoke。没有 real key、real request、real model result 或 billing
+receipt；process kill 也不是 power-loss、NFS、跨主机或 provider exactly-once 证据。
+
 ## 参考
 
 - [OpenAI · Function calling](https://developers.openai.com/api/docs/guides/function-calling)

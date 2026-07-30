@@ -12,6 +12,9 @@
 > [Verified Offline Comparison](./2026-07-30-s2-s4-verified-offline-comparison.md)
 > 和
 > [Durable Offline Comparison](./2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+> eval-runner 后续已把 terminal record 修复为 hard-link create-only，并新增第 8 个
+> process-kill window，见
+> [Eval Run Record Create-only](./2026-07-31-s2-s3-eval-run-record-create-only.md)。
 > 本文其余 S4 “下一步”表述保留本回执时点的历史事实。
 
 ## 结果

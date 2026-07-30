@@ -17,4 +17,5 @@ RFC 被接受并落地后，由 ADR 记录最终采用的决定；RFC 历史不�
   — `Accepted`，实现决策见
   [ADR-0006](../architecture/decisions/0006-persistent-agent-run-truth.md)。
 - [RFC-0002：真实模型只经 synthetic Eval egress，并绑定身份与计量](0002-real-model-synthetic-egress-and-metering.md)
-  — `Proposed`，等待 adapter、packaged preflight 与 bounded smoke receipt。
+  — `Accepted`，adapter、packaged preflight、bounded runner 与本地工程验证已完成；
+  live-provider smoke 仍未批准或执行。

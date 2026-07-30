@@ -27,7 +27,7 @@ Do not commit real conversations, voice, Self Model records, complete production
 - **Stochastic quality** checks—usefulness, style, planning quality—run with fixed versions and
   repeated trials. Judge distributions and failure categories, not one answer.
 - **Live-provider smoke** may be scheduled or pre-release because of cost and availability. It must
-  save a HarnessRunBundle、one-shot attempt marker、attempt journal、atomic terminal record
+  save a HarnessRunBundle、one-shot attempt marker、attempt journal、create-only terminal record
   或明确的 billing-`UNKNOWN` failure receipt，且永远不能替代 offline deterministic
   coverage。
 
@@ -93,9 +93,14 @@ Runner 在当前 owner home 下使用：
   以 CAS 消费；
 - journal 在 credential read、client creation、provider SDK create intent、observed
   attribution 与 terminal publish 周围 append、hash-chain、`fsync`；
-- terminal record 当前使用私有 `.pending`、read-back、`ATOMIC_MOVE` 与 directory
-  `fsync` 发布；target 已存在时是否替换是 provider-specific，现有 marker 约束
-  cooperative flow，但 record store 自身的 no-overwrite hardening 仍开放。
+- terminal record 使用私有 `.pending` 的 `CREATE_NEW` write、file `fsync`、
+  read-back、directory `fsync`，再以 `createLink(target, pending)` 做 create-only
+  logical commit；commit 后再次 `fsync` directory、清理 pending 并重验 target；
+- target 在 precheck 后出现时固定 `RUN_RECORD_ALREADY_EXISTS`，原 target 不被覆盖；
+  hard link 不支持时 fail closed，不降级为可覆盖 move；
+- pending-only 始终 non-authoritative；target+pending 只有在二者是同一 non-null
+  file identity 时才是 committed cleanup residue，不同 inode 即使 bytes 相同也
+  `INVALID`。
 
 这些是本机防误触与审计边界，不是跨主机 exactly-once、provider-side idempotency、
 signature、WORM 或 invoice reconciliation。同 UID 恶意进程、owner/root 删除或改写
@@ -121,7 +126,7 @@ signature、WORM 或 invoice reconciliation。同 UID 恶意进程、owner/root 
 
 Runner engineering Gate 已通过：独立安全审查为 `P0=0、P1=0`，focused/package/full
 verification、contracts、doc links 与最终 Diff 检查全部为 Green。Production
-read-only journal verifier 与 7-point fat-JAR process-kill/restart matrix 进一步证明：
+read-only journal verifier 与 8-point fat-JAR process-kill/restart matrix 进一步证明：
 incomplete snapshot 保持 `UNKNOWN`，只有 terminal journal 与 immutable record 完整绑定
 才是 `VERIFIED`，而 marker 仍会阻断 replay。
 
@@ -129,17 +134,28 @@ incomplete snapshot 保持 `UNKNOWN`，只有 terminal journal 与 immutable rec
 key、执行 live-provider smoke、产生 real model result、real token receipt 或 billing
 receipt，也没有物理断电、NFS 或 packet capture 证据。完整 durability 边界见
 [Stage 2 S3 Durable Attempt Build Note](../docs/operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
+create-only 修复、状态矩阵与最新 process evidence 见
+[Stage 2 S3 Eval Run Record Create-only Build Note](../docs/operations/build-notes/2026-07-31-s2-s3-eval-run-record-create-only.md)。
 Preflight receipt、loopback receipt 或 engineering-complete 状态都不能冒充
 live-provider receipt。
 
-## Stage 2 S4 O1 · Verifier comparison foundation
+## Stage 2 S4 O1 · Verifier comparison 与 durable report
 
 `task-packs/synthetic/004-offline-reference-verifier-comparison.json` 已冻结 H0
 `schema-only-eval-v1` 与 H1 `agent-draft-verifier-v1` 的单变量
 reference-grounding 对照。4 cases × 2 arms × 3 repetitions 定义了 24 runs / 12 paired
 candidates，以及执行前 expected matrix。
 
-Repository validator Green 只证明 pack 的 synthetic provenance、zero-network
-约束、arms/cases/repetitions 与 totals 一致。Comparison runner、24-run artifacts、
-aggregate report 与 report verifier 尚未形成；`evals/reports/` 当前没有该实验的
-result，更没有 live report。不得把 expected matrix 宣称为 observed Harness result。
+独立 `apps/offline-harness-runner` 已实际生成 12 个 shared candidates，分别执行 H0/H1，
+形成 24 次 `VerifierEvaluation`，再由不引用 Runner/generator 的独立 verifier 重建
+candidate、重跑两臂并重算 matrix、IDs、hash 与 counters，得到
+`VERIFIED_PASSED`。相同结果已编码为 28,343-byte canonical report，并通过
+owner-local hard-link create-only commit、双 packaged writer、7-point
+process-kill 与两个 fresh read-only JVM 验证。
+
+这是 fixed PUBLIC synthetic Pack 004 上的 deterministic comparison，不是 24 个
+product `AgentRun`，也不是 stochastic 模型质量、真实 `capture.read`、历史执行
+attestation、用户价值或 live-provider 证据。完整回执见
+[Verified Offline Comparison](../docs/operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)
+与
+[Durable Offline Comparison Report](../docs/operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)。

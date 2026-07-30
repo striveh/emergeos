@@ -27,7 +27,7 @@ Stage 2 S3 已把隔离的 OpenAI Responses adapter 装配到独立 `apps/eval-r
 packaged command 只核验 hash-frozen Task Pack、environment、Task/profile/pricing
 identity 与预算，保持零 key read、零 client、零 marker 和零网络；显式 `--execute`
 还必须经过真实 TTY challenge、本机 POSIX one-shot marker、30 秒 Task-bound permit、
-append-only attempt journal 与原子 terminal run record。production client 固定官方
+append-only attempt journal 与 create-only terminal run record。production client 固定官方
 base URL、`Proxy.NO_PROXY`、`maxRetries(0)`、日志关闭和 30 秒 deadline。完整执行目前
 只在本机 loopback `HttpServer` 验证；**尚未读取真实 key、尚未访问 OpenAI、尚无 live
 模型结果或费用回执**。普通 `apps/api` 仍只装配 Fake。adapter 历史回执见
@@ -36,11 +36,15 @@ runner 工程回执见
 [Stage 2 S3 Eval Runner Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)。
 在此基础上，production read-only journal verifier 已能把本地尝试证据区分为
 `VERIFIED / UNKNOWN / INVALID`，并把 billing evidence 与 run record state 分栏解释。
-一个只存在于 `target/test-classes` 的 crash harness 已在 7 个 durable boundary 启动真实
-fat JAR production classes、强制终止进程，再由新 JVM 只读核验 journal/record 并证明
-one-shot replay 继续被 marker 拒绝；shipping CLI 不接受 crash injection 参数。该证据
-只覆盖本机 POSIX filesystem 与 loopback provider，不是断电、NFS、真实 provider 或真实
-账单证明。S4 的 Task Pack 004 已冻结第一组 reference-grounding Verifier 对照设计；
+commit `2b50c66` 又把 terminal record 的 logical commit 从 provider-specific
+`ATOMIC_MOVE` 改为 hard-link create-only：precheck 后出现的竞争 target 只能令 writer
+拒绝，不能被覆盖。一个只存在于 `target/test-classes` 的 crash harness 已在 8 个
+selected boundary 启动真实 fat JAR production classes、强制终止进程，再由新 JVM
+只读核验 journal/record 并证明 one-shot replay 继续被 marker 拒绝；新增窗口固定
+directory `fsync` 后、pending cleanup 前的同 inode committed residue。shipping CLI
+不接受 crash injection 参数。该证据只覆盖 tested local POSIX filesystem、cooperative
+writer 与 loopback provider，不是断电、NFS、真实 provider 或真实账单证明。S4 的
+Task Pack 004 已冻结第一组 reference-grounding Verifier 对照设计；
 独立 `apps/offline-harness-runner` 现在可以从固定路径严格加载该 Pack，并以 raw hash、
 完整语义、依赖 allowlist 与 production bytecode gate 拒绝漂移或网络/进程逃逸路径。
 固定 Runner 已在 4 cases × 3 repetitions 上生成 12 个 immutable shared candidates，
@@ -60,6 +64,8 @@ claim、不同 inode、unsafe path 或不可信 authoritative target 才是 `INV
 断电/NFS durability、hostile-local-user authorization、signature、producer
 attestation 或产品 Receipt。完整回执见
 [Stage 2 S3 Durable Attempt Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)
+、
+[Stage 2 S3 Eval Run Record Create-only Build Note](./docs/operations/build-notes/2026-07-31-s2-s3-eval-run-record-create-only.md)
 与
 [Stage 2 S4 Verified Offline Comparison Build Note](./docs/operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)，
 durable 增量见

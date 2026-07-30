@@ -33,7 +33,8 @@ adapters/openai
 apps/eval-runner
   独立 packaged synthetic Eval 入口；依赖 contracts、core、agent-loop 与 openai
   默认只做 zero-egress preflight；live 路径需要 real TTY、exact Task-bound
-  one-shot permit、POSIX attempt marker/journal 与本地 atomic terminal run record
+  one-shot permit、POSIX attempt marker/journal 与本地 hard-link create-only terminal
+  run record
   不依赖 API、PostgreSQL、Spring、Temporal、产品 Store 或真实用户数据
 
 apps/offline-harness-runner
@@ -179,10 +180,12 @@ key、访问 live provider、产生 real model result 或 billing receipt。当�
   因而这不是 hostile-local-user authorization；
 - attempt journal 在 credential read、client creation、provider SDK create intent 与
   terminal record publish 周围 append + `fsync` hash-chain event；
-- terminal run record 当前通过私有 `.pending` 文件、read-back、`ATOMIC_MOVE` 与目录
-  `fsync` 发布；Java 对 target 已存在时是否替换的行为是 provider-specific，现有
-  `CREATE_NEW` marker 约束 cooperative flow，但 record store 本身尚未形成
-  no-overwrite primitive。它不与 provider 调用形成一个 transaction，也不替代
+- terminal run record 通过私有 `.pending` 的 `CREATE_NEW` write、file/read-back/
+  directory `fsync`，再以 `createLink(target, pending)` 做 create-only logical
+  commit；commit directory `fsync` 后清理 pending、再次 `fsync` 并重验 target；
+- precheck 后出现的 target 不会被覆盖；hard link 不支持时 fail closed，不降级为
+  move。pending-only 不 authoritative；同 inode target+pending 是 committed cleanup
+  residue，不同 inode 是 `INVALID`。它不与 provider 调用形成 transaction，也不替代
   PostgreSQL product `AgentRun`；
 - 同 UID 恶意进程、owner/root 删除或重写文件、换主机重放、签名、WORM 与 invoice
   reconciliation 都不在该 Gate 的保护范围内；

@@ -77,6 +77,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [Stage 2 S3 OpenAI Responses Adapter Build Note](./operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)
 - [Stage 2 S3 Bounded Synthetic Eval Runner Build Note](./operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)
 - [Stage 2 S3 Durable Eval Attempt Evidence Build Note](./operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)
+- [Stage 2 S3 Eval Run Record Create-only Build Note](./operations/build-notes/2026-07-31-s2-s3-eval-run-record-create-only.md)
 - [Stage 2 S4 Offline Comparison Loader Build Note](./operations/build-notes/2026-07-30-s2-s4-offline-comparison-loader.md)
 - [Stage 2 S4 Verified Offline Comparison Build Note](./operations/build-notes/2026-07-30-s2-s4-verified-offline-comparison.md)
 - [Stage 2 S4 Durable Offline Comparison Build Note](./operations/build-notes/2026-07-30-s2-s4-durable-offline-comparison-report.md)

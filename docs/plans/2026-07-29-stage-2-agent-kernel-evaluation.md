@@ -1,7 +1,8 @@
 # ExecPlan: Stage 2 AgentKernel and Eval-Driven Development
 
-状态：进行中；S1、S2 工程完成，S3 protocol adapter、isolated synthetic Eval Runner
-与本地 attempt durability 工程切片已通过；live-provider smoke 尚未执行。S4 已完成
+状态：进行中；S1、S2 工程完成，S3 protocol adapter、isolated synthetic Eval Runner、
+本地 attempt durability 与 terminal record create-only repair 工程切片已通过；
+live-provider smoke 尚未执行。S4 已完成
 首个 deterministic Verifier comparison、canonical durable report、packaged
 multi-writer/process-kill 与 fresh-JVM independent replay 工程切片；完整 fault suite、
 bounded read-only Worker handoff、stochastic Harness、真实 Seed 与用户价值 Gate 尚未完成
@@ -34,8 +35,9 @@ stale-`DISPATCHING` 证据改写成已完成 Gate。
 tool loop、Agent Trace 或 Eval runner。S1 增加 bounded Fake Agent product loop；S2
 增加 durable AgentRun/Trace/Bundle truth 与 offline golden runner；S3 已加入隔离的
 OpenAI Responses protocol adapter，并形成只接受 frozen PUBLIC synthetic Task 的独立
-Eval Runner。S3 现在另有 production read-only journal verifier 与 7-point fat-JAR
-process-kill/restart evidence。S4 Task Pack 004 已冻结 reference-grounding Verifier
+Eval Runner。S3 现在另有 production read-only journal verifier、hard-link create-only
+terminal record 与 8-point fat-JAR process-kill/restart evidence。S4 Task Pack 004 已
+冻结 reference-grounding Verifier
 对照的输入和 expected matrix；独立 offline module 已以 fixed path、raw hash 与 exact
 semantics 加载它，并完成 12 次 shared candidate generation、24 次
 VerifierEvaluation、integrity-bound report、canonical durable bytes 与独立
@@ -350,6 +352,39 @@ then locate it from the Trace.
 - 完整回执见
   [Durable Eval Attempt Evidence Build Note](../operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
 
+#### S3 run-record create-only repair delta · 2026-07-31
+
+- code commit：`2b50c66`（`fix: make eval run record create-only`）。
+- 系统结果：`apps/eval-runner` 的 terminal run record 自身形成 create-only logical
+  commit；即使竞争者在 precheck 之后创建 target，writer 也固定返回
+  `RUN_RECORD_ALREADY_EXISTS`，不能覆盖已有 evidence。
+- Acceptance Red 同时固定两个失败：在 `RUN_RECORD_PENDING_DURABLE` 后创建
+  owner-private competing target 时，旧 `ATOMIC_MOVE` 会在 macOS provider 上覆盖它；
+  同 inode target+pending residue 也会被旧 verifier 误判为 `INVALID`。
+- Green 顺序固定为 `CREATE_NEW pending → file fsync/read-back → directory fsync →
+  createLink(target,pending) → directory fsync → RUN_RECORD_LINK_COMMIT_COMPLETE →
+  cleanup → directory fsync → target revalidation`。hard link 不可用时
+  `RUN_RECORD_LINK_COMMIT_UNSUPPORTED`，其他 I/O failure 保守失败；从不回退到 move。
+- cleanup failure 只允许两个单调结果：pending 与 target 仍为同一 non-null identity，
+  或 pending 已不存在；不同 inode 必须 fail closed。
+- verifier 从不把 pending bytes 当 authoritative。pending-only 是
+  `UNKNOWN / PENDING_NON_AUTHORITATIVE`；target-only 或同 inode
+  target+pending 且无 terminal 是 `UNKNOWN / FINAL_UNSEALED`；不同 inode 即使 bytes
+  相同也 `INVALID`；`VERIFIED` 仍要求 terminal journal 与 authoritative target
+  完整绑定。
+- test-only fat-JAR matrix 从历史 7 个窗口扩展为 8 个；新增窗口在 link commit 的
+  directory `fsync` 完成后、pending cleanup 前强制终止。两个 fresh JVM 只读核验
+  verdict 不变；evidence directory 的 fileKey、mode、owner，以及各 evidence file
+  的 fileKey、mode、owner、size、mtime、SHA-256 snapshot 均不变；
+  marker 继续阻断 replay，loopback HTTP count 不增加。
+- focused suite 通过 39 tests；isolated clean process verification 通过 195 tests：
+  Contracts 26、Core 79、Agent Loop 8、OpenAI 19、Eval Surefire 61、Failsafe 2，
+  总耗时 `18.555 s`。两名独立 code reviewer 均为 `P0=0、P1=0`。
+- 非目标：不把 process kill 冒充 power-loss/NFS durability；不解决 same-UID/root
+  pathname 攻击、`dirfd/openat` anchoring、provider-side idempotency、invoice
+  reconciliation 或 live-provider smoke。完整回执见
+  [Eval Run Record Create-only Build Note](../operations/build-notes/2026-07-31-s2-s3-eval-run-record-create-only.md)。
+
 ### S4 · Harness comparison, faults and bounded handoff
 
 - Compare a minimal H0 loop with one H1 Harness variable at a time.
@@ -598,6 +633,11 @@ baseline.
 - [x] 2026-07-30：7-point fat-JAR process-kill/restart matrix 通过。新 JVM 两次只读
   核验不改写 evidence，marker 阻断 replay 且 loopback HTTP count 不增加；独立审查
   `P0=0、P1=0`。
+- [x] 2026-07-31：commit `2b50c66` 关闭 eval run-record no-overwrite 缺口。旧
+  `ATOMIC_MOVE` 被 adversarial Red 否决；hard-link create-only、cleanup 三分支、
+  same/different identity 状态机与第 8 个 packaged-process kill window 全部 Green。
+  isolated clean verify 通过 195 tests，两名独立 code reviewer 均为
+  `P0=0、P1=0`。
 - [x] 2026-07-30：Task Pack 004 与 repository validator 冻结首个
   reference-grounding Verifier comparison foundation；该时点尚未执行 comparison。
 - [x] 2026-07-30：commit `623abf3` 增加独立 strict Pack loader。两项原始 P1 与三轮
@@ -674,6 +714,10 @@ baseline.
 - 2026-07-30：local POSIX 检查统一解释为 owner/mode-restricted cooperative boundary。
   只有 filesystem provider 暴露 ACL 时才能声称拒绝 visible foreign `ALLOW` ACL；
   不可检查不等于已验证，也不构成 hostile-local-user authorization。
+- 2026-07-31：eval terminal record 的 logical commit 使用
+  `createLink(target,pending)`，不再用 `ATOMIC_MOVE` 充当 no-replace。目录 `fsync`
+  完成后才暴露 link-complete process phase；pending cleanup residue 只按 non-null
+  file identity 解释，pending bytes 永不 authoritative。
 
 ## Surprises and failures
 
@@ -718,7 +762,7 @@ baseline.
   `runCostUsd/runTokenCount`，并用 `meteringMatchesRun=false` 显式暴露差异。
 - Provider SDK create intent 与 provider acceptance 之间没有原子边界。进程在其间死亡
   时不能证明是否计费；journal 必须保留保守证据，后续状态为 `UNKNOWN`，不能当成免费。
-- Process-kill matrix 使用 observer 在 7 个选定 durable operation 后停住进程，因此能
+- 当前 eval-runner Process-kill matrix 使用 observer 在 8 个选定 operation 后停住进程，因此能
   精确验证这些 boundary，却不是 arbitrary-instruction 或物理断电测试。Path 安全检查仍有
   same-UID TOCTOU；marker body 不参与验证；test launcher 也尚未逐个检查 production
   class 的 CodeSource。
@@ -743,6 +787,10 @@ baseline.
 - macOS JDK 不暴露 `AclFileAttributeView`，所以原先“拒绝 foreign ACL”的宽泛表述不成立。
   实现与文档已收窄为“provider 可见时拒绝 foreign `ALLOW` ACL”；POSIX mode 只是
   cooperative boundary，不是 hostile-local-user security claim。
+- eval-runner 复用 S4 durable-report 的 hard-link 思路时，不能直接复制 reader
+  状态机：这里没有 claim file，并且 terminal journal 是闭合条件。新增 Red 固定了
+  pending-only 永不 authoritative、同 inode residue 可以前进、不同 inode不能因
+  bytes 相同或随后消失而升级。
 
 ## Verification receipts
 
@@ -769,10 +817,17 @@ S2 当前已确认：
 
 S3 bounded runner 当前状态：
 
-- 实现、frozen assets、one-shot POSIX Gate、attempt journal、atomic local run record
-  与 loopback fault tests 已形成；read-only journal verifier 与 7-point
+- 实现、frozen assets、one-shot POSIX Gate、attempt journal、hard-link create-only
+  local run record 与 loopback fault tests 已形成；read-only journal verifier 与 8-point
   process-kill/restart matrix 也已形成；
-- 独立安全审查为 `P0=0、P1=0`；
+- create-only code commit `2b50c66` 的 focused suite 通过 39 tests；isolated clean
+  process verification 通过 195 tests（Contracts 26、Core 79、Agent Loop 8、
+  OpenAI 19、Eval Surefire 61、Failsafe 2），总耗时 `18.555 s`；
+- latest full clean reactor 通过 378 tests：Contracts 26、Core 79、Agent Loop 8、
+  OpenAI 19、In-memory 21、PostgreSQL 45、API 32、Eval Runner 65、Offline
+  Harness 83；contract verifier 通过 5 Schemas / 33 fixtures / 2 golden vectors /
+  4 Packs / 1 environment，doc link verifier 通过 74 个 Markdown files；
+- 两名独立 code reviewer 均为 `P0=0、P1=0`；
 - exact commit `e90c704` 的隔离 full `clean verify` 共通过 `246` tests；focused
   Eval reactor、contracts、doc links 与 diff check 同时为 Green；
 - exact commit `23e1773` 的 isolated `clean verify` 通过 165 tests：Contracts 26、
@@ -783,7 +838,9 @@ S3 bounded runner 当前状态：
 - 完整边界与验证结果见
   [S3 Runner Build Note](../operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)
   与
-  [S3 Durable Attempt Build Note](../operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)。
+  [S3 Durable Attempt Build Note](../operations/build-notes/2026-07-30-s2-s3-durable-attempt-evidence.md)，
+  后续修复见
+  [Eval Run Record Create-only Build Note](../operations/build-notes/2026-07-31-s2-s3-eval-run-record-create-only.md)。
 
 S4 的 in-memory 历史快照完成 Task Pack 004、repository validator、strict Pack loader、
 fixed comparison Runner 与 independent report verifier。2 arms × 4 cases ×
@@ -851,11 +908,14 @@ create-only commit、真实 process-kill 与 fresh JVM 能保持同一 verdict�
 pre-link evidence 保持 `UNKNOWN`，committed residue 保持 `FINAL`；冲突或不可信
 authoritative evidence 才是 `INVALID`。
 
-下一条自动执行的安全假设先做 cross-cutting truth repair：`apps/eval-runner` 的 local
-run record 仍使用 provider-specific `ATOMIC_MOVE`；ACL view unavailable 时也只能依赖
-POSIX owner/mode。本轮已先收窄文档声明，下一步用 Red 固定 no-overwrite 与
-visible-ACL 语义，再扩展 S4 tool schema error、timeout/rate limit、Context Drift、
-Prompt Injection 与第一个 typed read-only Worker handoff。唯一一次 bounded
+`apps/eval-runner` 的 local run-record no-overwrite 与 visible-ACL cross-cutting
+truth repair 已由 commit `2b50c66` 关闭。下一条自动执行的最小
+可证伪假设进入 S4 fault suite：当 Model 发出 schema-invalid tool arguments 时，
+Agent Loop 必须在任何 Tool side effect 前返回 typed failure，Trace 明确记录拒绝，
+Artifact/terminal success 都不能产生；这一切先用 deterministic Fake Model、现有
+Tool SPI 与 offline Harness 证明，不调用付费 provider。随后再扩展 timeout/rate
+limit、Context Drift、Prompt Injection 与第一个 typed read-only Worker handoff。
+唯一一次 bounded
 live-provider smoke 仍由 owner 另行批准。没有 live receipt 时不得声称已有 real-model
 fixed baseline；即使执行 smoke，也不能由一次结果证明模型质量、账单准确性或产品价值。
 学习与市场工作仍暂停且未完成。

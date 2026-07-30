@@ -11,6 +11,8 @@
 > [Verified Offline Comparison](./2026-07-30-s2-s4-verified-offline-comparison.md)
 > 和
 > [Durable Offline Comparison](./2026-07-30-s2-s4-durable-offline-comparison-report.md)。
+> eval-runner 自身的后续 create-only record 修复见
+> [Eval Run Record Create-only](./2026-07-31-s2-s3-eval-run-record-create-only.md)。
 > 本文其余 S4 表述保留 `e90c704` 时点的历史事实。
 
 ## 结果

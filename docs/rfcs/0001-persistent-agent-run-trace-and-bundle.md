@@ -307,6 +307,25 @@ Runner 的 engineering-complete 声明以其当前 focused/package/full verifica
 审查全部通过为条件；live-provider smoke 尚未执行，没有 real key、real model result 或
 billing receipt。
 
+### 10. 2026-07-31 implementation follow-up
+
+第 9 节保留的是 RFC 接受时的实现事实。后续 commit `2b50c66` 已完成当时明确延期的
+local record no-overwrite hardening：
+
+- `.pending` 继续使用 `CREATE_NEW`、file `fsync`、read-back 与 directory `fsync`；
+- logical commit 改为 `createLink(target, pending)`；target 已存在时 writer 固定拒绝，
+  不覆盖已有 evidence；
+- commit directory `fsync` 后再暴露 process-kill phase，随后清理 pending、再次
+  `fsync` 并重验 authoritative target；
+- pending-only 永不 authoritative；target+pending 只有在二者是同一 non-null file
+  identity 时才是 committed cleanup residue，不同 inode 即使 bytes 相同也
+  `INVALID`；
+- hard link 不支持时 fail closed，不降级为 `ATOMIC_MOVE`。
+
+这项修复只改变 isolated Eval Runner 的本地文件协议，不改变 RFC-0001 的核心决定：
+PostgreSQL owner-scoped `AgentRun` 仍是产品执行真相，Eval JSON record 仍不是 product
+Store、历史执行证明或 provider transaction。
+
 ## Alternatives
 
 ### 只保存 inline Trace
