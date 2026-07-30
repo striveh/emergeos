@@ -1,13 +1,14 @@
 # ExecPlan: Stage 2 AgentKernel and Eval-Driven Development
 
-Status: proposed; implementation has not started
+Status: active; S1 engineering complete, S2 not started
 
 Owner: project owner + main Codex agent
 
 Entry gate: Stage 1 engineering is complete, but its human-learning and market
-decisions remain open. This plan may be refined now. Production implementation
-starts only after the owner either accepts the existing Stage 1 gate or records
-an explicit Roadmap exception that keeps Stage 1 incomplete.
+decisions remain open. On 2026-07-30 the owner explicitly paused the learning
+plan and authorized the Stage 2 technical lane to proceed while Stage 1 remains
+incomplete. This is the Roadmap exception; it does not convert missing human,
+market or stale-`DISPATCHING` evidence into completed Gates.
 
 ## Five-outcome alignment
 
@@ -25,11 +26,12 @@ an explicit Roadmap exception that keeps Stage 1 incomplete.
 
 ## Context and user result
 
-The repository has stable `TaskEnvelope`, `ResultEnvelope` and
-`HarnessRunBundle` contracts, but no executable AgentKernel, model port, tool
-registry, tool loop, Agent Trace or evaluation runner. The current
-`TemplateArtifactGenerator` is deterministic application scaffolding, not an
-Agent or Fake Model.
+At the S1 baseline the repository had stable `TaskEnvelope`, `ResultEnvelope`
+and `HarnessRunBundle` contracts, but no executable AgentKernel, model port,
+tool registry, tool loop, Agent Trace or evaluation runner. S1 now adds the
+bounded Fake Agent product loop described below. It still has no real-model
+adapter, persistent run/Trace binding or evaluation runner. The older
+`TemplateArtifactGenerator` remains deterministic Stage 0 scaffolding.
 
 The first user-visible result is:
 
@@ -129,6 +131,34 @@ Human checkpoint: without notes, draw the loop and personally change the Fake
 Model to request a forbidden tool or omit Evidence. Predict the terminal status,
 then locate it from the Trace.
 
+#### S1 start delta · 2026-07-30
+
+- Baseline: clean `main@1ff640e`; durable Capture and Artifact lineage exist,
+  but `/api/v1/agent-drafts`, AgentKernel, model/tool loop and Agent Trace do not.
+- First Acceptance Red:
+  `apps/api/src/test/java/io/emergeos/api/AgentDraftHttpIT.java` starts the
+  packaged jar against PostgreSQL, creates an owned synthetic Capture, then
+  expects `POST /api/v1/agent-drafts` to return `201`, one ResultEnvelope,
+  an inline safe event sequence and a persisted Artifact. Before implementation
+  it must reach the healthy packaged app and fail only because the route returns
+  `404`.
+- Owned behavior: server constructs authority, tool allowlist and versioned
+  policy from configuration; the client supplies only `captureId` and `intent`.
+  The initial model turn receives references, the one allowed `capture.read`
+  tool obtains content, and deterministic validation alone commits Artifact v1.
+- File ownership: main thread is the only writer. S1 may change the minimum
+  Core port/use case, existing in-memory adapter, thin API wiring/tests, one
+  synthetic Task Pack and S1 evidence. No public Schema, V4 migration, real
+  model SDK, Runtime framework, Temporal, Connector or external credential.
+- Predicted failures: a decorative tool event hides preloaded raw content; model
+  tool requests bypass the Task allowlist; malformed/evidence-free final output
+  commits product truth; cancellation still permits a later step; Trace leaks
+  raw Seed or hidden reasoning; the API accepts client-owned identity or tool
+  authority.
+- Receipt target: packaged Red/Green, focused loop/authorization/cancellation
+  tests, Artifact GET, independent security/runtime review and full repository
+  verification. The paused human learning exercise is not part of S1 closure.
+
 ### S2 · Trace and HarnessRunBundle binding
 
 - Decide through an RFC whether v1 contracts need `runId`, result binding,
@@ -226,7 +256,46 @@ baseline.
 - [x] 2026-07-29: owner selected strict Gate path A—complete one owner-led
   undisclosed-fault diagnosis plus one real Seed/Concierge/price experiment
   before Stage 2 implementation.
-- [ ] S1 delta and Acceptance Red are recorded before production code.
+- [x] 2026-07-30: owner superseded the sequencing part of path A, paused the
+  learning plan and explicitly authorized product-system implementation as the
+  primary lane. Stage 1 remains incomplete; its evidence is parked, not waived.
+- [x] 2026-07-30: S1 delta, single-writer boundary and first packaged-process
+  Acceptance Red target recorded before production code.
+- [x] 2026-07-30: after correcting one test-only ambiguous `assertEquals(null,
+  ...)` compilation error, the packaged-process Acceptance Red reached a healthy
+  jar and PostgreSQL, created the owned Capture, then failed only at
+  `/api/v1/agent-drafts`: expected `201`, actual `404`. Command:
+  `./mvnw --batch-mode --no-transfer-progress -pl apps/api -am verify
+  -Dit.test=AgentDraftHttpIT -Dfailsafe.failIfNoSpecifiedTests=false`.
+- [x] 2026-07-30: focused Red failed compilation because `AgentKernel`,
+  `AgentDraftService` and their typed outcomes did not exist. The minimum Green
+  introduced a provider-neutral Core port/use case and a framework-free outer
+  loop without changing public schemas, PostgreSQL migrations or Maven
+  dependencies.
+- [x] 2026-07-30: focused Green passed 5 Core verifier tests and 13 loop tests:
+  direct-final Evidence forgery and overclaim rejection, ref-only initial
+  context, exact successful event order, registered-but-undeclared and
+  declared-but-unregistered tool blocking, malicious references, malformed
+  tool-result rejection, prompt-injection isolation, cancellation, deadline
+  exhaustion and model/tool step limits. Command:
+  `./mvnw --batch-mode --no-transfer-progress -pl modules/core,adapters/inmemory
+  -am -Dtest=AgentDraftServiceTest,FrameworkFreeAgentKernelTest
+  -Dsurefire.failIfNoSpecifiedTests=false test`.
+- [x] 2026-07-30: packaged-process Green built the executable jar, started real
+  PostgreSQL, created a Capture over HTTP, ran the Fake Agent and observed the
+  six safe events in order. The test records the first JVM PID, asserts that it
+  is alive, forcibly terminates it, asserts that it is dead, starts a different
+  JVM PID against the same PostgreSQL container and reads Artifact v1 through
+  the original `Location`. The same command as Acceptance Red now passes.
+- [x] 2026-07-30: an additional PostgreSQL-backed API security test proved
+  `X-Principal-Id` cannot replace server identity and JSON attempts to inject
+  `principalId`, `requiredTools`, `model` or `budgetUsd` return `400`; its two
+  cases also prove foreign/missing Capture equivalence and that one successful
+  draft creates one Artifact and zero ActionAttempt/Receipt rows.
+- [x] 2026-07-30: independent architecture/security and test-coverage review
+  closed at `P0=0`, `P1=0`, `P2=0`. Full `./mvnw verify` passed 98 tests;
+  contracts passed 4 Schemas, 8 fixtures and 1 Task Pack; all 63 Markdown links
+  and `git diff --check` passed.
 
 ## Decisions
 
@@ -241,6 +310,9 @@ baseline.
   mastery evidence.
 - 2026-07-29: keep Stage 2 production code frozen until the selected Stage 1
   learning and market checks have real evidence; planning is not Gate passage.
+- 2026-07-30: supersede the freeze above for sequencing only. Begin Stage 2 S1
+  under an explicit owner-authorized technical-lane exception while preserving
+  every unfinished Stage 1 claim and keeping the learning exercise paused.
 
 ## Surprises and failures
 
@@ -249,42 +321,72 @@ baseline.
 - `HarnessRunBundle` does not directly bind a result/run in the way repeated
   experiments may require. S2 must prove the need and use an RFC before changing
   the public schema.
-- The Stage 1 plan explicitly blocks automatic Stage 2 expansion while human
-  and market gates remain undecided.
+- The Stage 1 plan blocks automatic Stage 2 expansion while human and market
+  gates remain undecided. The 2026-07-30 owner decision is an explicit
+  exception, not an automatic interpretation of engineering completion.
+- The first Green compile exposed an omitted `TaskEnvelope.intent` argument.
+  Fixing the explicit constructor call kept the Task server-owned and showed why
+  the stable envelope must be exercised by executable code, not treated as
+  decorative documentation.
+- Spring Framework 7.0.8 deprecates `ResponseEntity.unprocessableEntity()` in
+  favor of `unprocessableContent()`; the implementation follows the repository's
+  installed API rather than stale examples.
+- The first post-implementation review found four P1 boundaries that the happy
+  path did not expose: claimed Evidence was not yet proof of tool execution,
+  untrusted tool fields could enter Trace, a final could arrive after
+  cancellation/deadline, and invalid model content could be misclassified as
+  client input. Focused adversarial tests now hold all four fixes.
+- A second review found that cross-JVM persistence behavior was proven but the
+  process-death evidence did not explicitly assert liveness, death and distinct
+  PIDs. Tightening those assertions closed the final P2 without changing
+  production code.
 
 ## Verification receipts
 
-- Planning-only review: repository contracts, architecture, Roadmap,
-  curriculum and current code were inspected at clean `main`.
-- No AgentKernel, real model, framework, credential, API route or product
-  behavior has been added by this plan.
+- Acceptance Red/Green and the focused Green commands are recorded in Progress.
+- S1 adds no contract fixture, migration, runtime framework, model SDK,
+  credential or external action. PostgreSQL Capture and Artifact truth are
+  reused.
+- Independent review closed at `P0=0`, `P1=0`, `P2=0`.
+- `./mvnw --batch-mode --no-transfer-progress verify` passed 98 tests: Core 28,
+  in-memory 19, PostgreSQL 22, API unit 22 and packaged integration 7.
+- After tightening the process assertions, the focused packaged
+  `AgentDraftHttpIT` verification passed again with a confirmed forced stop and
+  distinct restart PID.
+- `verify-contracts.sh` passed 4 Schemas, 8 fixtures and 1 Task Pack;
+  `verify-doc-links.sh` passed 63 Markdown files; `git diff --check` passed.
 
 ## AI Coding receipt
 
-Two read-only agents independently inspected the proposed vertical behavior and
-exact code gaps. The main thread rejected immediate framework selection and a
-premature multi-module eval platform in favor of a smaller first Red.
+Two read-only agents inspected the proposed behavior and code gaps before Red.
+Implementation then followed packaged Acceptance Red → focused Red → minimum
+Green → real-process Green → adversarial review → regression Green. Two
+independent read-only review passes closed at `P0=0`, `P1=0`, `P2=0`.
 
 ## Agent Engineering receipt
 
-The next mechanism is now bounded: model decision, tool authorization, tool
-result, structured final, deterministic commit and Trace. Human implementation
-and fault diagnosis remain pending.
+The executable mechanism is now bounded: model decision, registry plus Task
+authorization, owner-scoped tool result, structured proposal, deterministic
+evidence validation, Artifact commit and safe Trace projection. Cancellation
+and deadline checks occur between steps. There is still no durable checkpoint,
+real model, stochastic evaluation or persistent Trace.
 
 ## Career receipt
 
-Proposed future evidence: one tool-loop state diagram, failing/green acceptance,
-safe Trace, fault diagnosis and framework trade-off. None is claimed complete.
+The repository now contains a replayable tool-loop implementation, failing/green
+acceptance and safe Trace evidence. Owner-led diagnosis, no-notes explanation
+and framework trade-off defense remain deferred with the paused learning plan.
 
 ## Business receipt
 
 No new interview, real Seed, reuse, price request or payment was created by
-planning. Those Stage 1 facts remain open.
+this slice. Those Stage 1 facts remain open.
 
 ## Outcome and next hypothesis
 
-The proposed first Agent slice is small enough to test without a framework:
-one Fake Model, one read tool, one structured draft and zero external effects.
-The owner chose to satisfy the remaining Stage 1 learning and market checks
-first. S1 begins with its Acceptance Red only after both checks have evidence;
-planning alone does not unlock implementation.
+The first Agent slice now works without a framework: one Fake Model, one read
+tool, one validated structured draft, a PostgreSQL Artifact and zero external
+effects. The next falsifiable hypothesis is S2: a persisted, integrity-bound
+run/Trace and `HarnessRunBundle` can improve replay and failure attribution
+without letting SDK types or model proposals own product truth. Learning and
+market work remain paused and incomplete.

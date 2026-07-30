@@ -7,20 +7,27 @@ import io.emergeos.adapters.inmemory.LocalDraftActionExecutor;
 import io.emergeos.adapters.inmemory.LocalWorkingSelfProjector;
 import io.emergeos.adapters.inmemory.TemplateArtifactGenerator;
 import io.emergeos.adapters.inmemory.UuidIdGenerator;
+import io.emergeos.adapters.inmemory.agent.CaptureReadTool;
+import io.emergeos.adapters.inmemory.agent.FakeAgentKernel;
+import io.emergeos.adapters.inmemory.agent.InMemoryToolRegistry;
+import io.emergeos.adapters.inmemory.agent.ScriptedFakeModel;
 import io.emergeos.adapters.postgres.PostgresActionAttemptStore;
 import io.emergeos.adapters.postgres.PostgresArtifactLineageStore;
 import io.emergeos.adapters.postgres.PostgresCaptureStore;
 import io.emergeos.adapters.postgres.PostgresStage1OperationsProbe;
 import io.emergeos.contracts.RiskLevel;
+import io.emergeos.core.application.AgentDraftService;
 import io.emergeos.core.application.ArtifactLineageService;
 import io.emergeos.core.application.CaptureService;
 import io.emergeos.core.application.LocalActionAuthority;
 import io.emergeos.core.application.ManifestationService;
 import io.emergeos.core.application.RecoverableActionService;
+import io.emergeos.core.port.AgentKernel;
 import io.emergeos.core.port.IdGenerator;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.boot.health.contributor.HealthIndicator;
@@ -68,6 +75,23 @@ class ApiConfiguration {
       Clock clock) {
     return new ArtifactLineageService(
         artifactLineageStore, captureStore, idGenerator, clock);
+  }
+
+  @Bean
+  AgentKernel agentKernel(PostgresCaptureStore captureStore) {
+    return new FakeAgentKernel(
+        ScriptedFakeModel.forCaptureDraft(),
+        new InMemoryToolRegistry(List.of(new CaptureReadTool(captureStore))),
+        2,
+        1);
+  }
+
+  @Bean
+  AgentDraftService agentDraftService(
+      AgentKernel agentKernel,
+      ArtifactLineageService artifactLineageService,
+      IdGenerator idGenerator) {
+    return new AgentDraftService(agentKernel, artifactLineageService, idGenerator);
   }
 
   @Bean

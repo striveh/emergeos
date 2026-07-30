@@ -72,8 +72,10 @@ Gate：
 
 Proposed execution plan:
 [Stage 2 AgentKernel and Eval-Driven Development](./docs/plans/2026-07-29-stage-2-agent-kernel-evaluation.md).
-Implementation remains blocked until the Stage 1 gate is decided or an explicit
-Roadmap exception is recorded.
+Status: **S1 engineering complete under the owner's 2026-07-30 Roadmap
+exception; S2 not started.** Stage 1 learning, market and real-Connector Gates
+remain incomplete and are not implied by Stage 2 engineering progress. S1
+receipt: [Fake Agent Draft Loop Build Note](./docs/operations/build-notes/2026-07-30-s2-s1-fake-agent-draft-loop.md).
 
 产品/工程：
 

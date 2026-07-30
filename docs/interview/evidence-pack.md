@@ -89,8 +89,11 @@ Remaining risk
 > PostgreSQL new-database restore 验证了可操作边界。复核也推翻了一个过强结论：现有 crash
 > 发生在数据库已记录 `UNKNOWN` 之后，尚未证明 provider success 后、local commit 前遗留
 > `DISPATCHING` 的安全接管，所以 ADR 仍为 Proposed，真实 Connector Gate 保持关闭。
-> Manifestation 其余状态
-> 仍在内存，系统也没有生产认证、真实模型、Temporal 或真实平台 Connector。研发中我把 Codex
+> Stage 2 的第一个技术切片还用 framework-free Fake AgentKernel 证明了 references-first
+> 上下文、工具白名单、真实工具取证、模型提案与确定性 Artifact 提交的边界；一次独立审查
+> 发现模型曾能伪造 Evidence 引用，修复后 Evidence 只来自已验证的 ToolResult。
+> Manifestation 其余状态仍在内存，系统也没有生产认证、真实模型、Temporal 或真实平台
+> Connector。研发中我把 Codex
 > 当受监督的工程团队，主线程整合需求与验证证据，Subagent 做边界清楚的探索、测试设计和独立
 > 审查，但风险接受和里程碑 go/no-go 由我负责。真实访谈、复用与价格实验仍需项目所有者开始
 > 记录。

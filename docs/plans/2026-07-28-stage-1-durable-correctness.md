@@ -473,6 +473,10 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   Concierge workspace template prepared; this is preparation only.
 - [ ] Owner selects one eligible participant and authorizes/sends the invitation;
   consent, Seed, delivery, price response and payment remain unclaimed.
+- [x] 2026-07-30: owner paused the learning plan and prioritized product-system
+  implementation. The diagnostic worktree and private P-001 packet remain
+  parked without completion claims; an explicit Roadmap exception allows
+  Stage 2 S1 to begin while this Stage remains active.
 
 ## Decisions
 
@@ -530,6 +534,10 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   but production AgentKernel code remains frozen until the owner-led unknown
   fault diagnosis and one consented real Seed/Concierge/price experiment are
   recorded. Neither activity may be replaced by Codex self-assessment.
+- 2026-07-30, owner sequencing override: pause the learning plan and prioritize
+  product-system implementation. This supersedes the Stage 2 freeze, not the
+  unfinished evidence: the fault diagnosis, market checks and Stage 1 Gate
+  remain open and cannot be cited as completed.
 
 ## Surprises, failures and verification receipts
 

@@ -9,7 +9,7 @@ exercise.
 | AI Coding | Slice a task, design Red evidence, reject a bad Agent change, debug and verify | S1–S4 Red → fault → process/restore Receipts; owner review/transfer pending | Unassessed |
 | Java domain design | Rebuild and defend state/invariant boundaries | Core, ADRs, domain tests | Unassessed |
 | SQL/distributed correctness | Resolve CAS, duplicate delivery and ambiguous external success | S1 uniqueness, S2 four-field CAS, S3 atomic budget/idempotency uniqueness, rollback injection and multi-process recovery; [initial ambiguous-success Teach-back passed](notes/2026-07-29-s4-operating-evidence.md), hands-on transfer/debugging pending | L1 |
-| Agent loop/harness | Build Fake/real AgentKernel and explain runtime boundaries | Contracts/design only | L0/unassessed |
+| Agent loop/harness | Build Fake/real AgentKernel and explain runtime boundaries | Framework-free Fake AgentKernel, bounded tool loop, obtained-Evidence verifier, safe response Trace and process-restart Artifact acceptance; real model, persistent run/Trace and repeated Harness evaluation absent | L0/unassessed |
 | Context/memory/Self | Reject unsupported inference; correct/delete with provenance | Architecture only | L0/unassessed |
 | Agent evaluation | Run fixed `model × harness` repetitions and attribute failures | Plan/task pack only | L0/unassessed |
 | Capability/security | Threat-model identity, approval, tools, secrets and injection | S1–S3 configured authority, owner-scoped access, exact Capability mutation matrix, unknown-field rejection and loopback tests; human defense pending | Unassessed |

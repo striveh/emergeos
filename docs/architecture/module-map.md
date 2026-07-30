@@ -8,17 +8,19 @@ modules/contracts
 
 modules/core
   domain       领域实体、值对象、状态机、不变量
-  application  用例编排
-  port         对外能力端口
+  application  用例编排与 Agent 结果的确定性验收/提交
+  port         对外能力端口，包括 provider-neutral AgentKernel
 
 adapters/inmemory
   内存 Ledger、确定性草稿生成、Policy、Action Stub
+  framework-free 有限工具循环、脚本 Fake Model、工具注册表与 capture.read
 
 adapters/postgres
   S1 Capture、S2 Artifact lineage、S3 local Action 的 JdbcClient 适配器与前向 Flyway migrations
 
 apps/api
-  HTTP DTO、Controller、异常映射、loopback 启动保护、S3 模拟 Provider HTTP adapter、依赖装配
+  HTTP DTO、Controller、异常映射、loopback 启动保护、Agent draft 入口、
+  S3 模拟 Provider HTTP adapter、依赖装配
 ```
 
 ## 依赖规则
@@ -59,6 +61,7 @@ flowchart RL
 | policy | 风险、审批、Capability 和撤销 |
 | action | Connector、幂等、Receipt 和对账 |
 | reflection | 用户修改、结果反馈、候选晋升 |
+| agent | Task 权限、结构化提案验收、Artifact 提交与 Result |
 | verification | Readiness、Verifier、故障归因和回归 |
 
 当一个领域拥有独立数据、不变量、维护者和发布节奏时，再将其提升为独立构建模块或服务。
@@ -66,6 +69,7 @@ flowchart RL
 ## 当前与后续 Adapter
 
 ```text
+adapters/inmemory/agent    # 已实现：有界 Fake Agent 基线，不含真实模型 SDK
 adapters/postgres            # 已实现：S1 Capture、S2 Artifact lineage、S3 local Action
 adapters/object-storage
 adapters/agent-agentscope
@@ -74,5 +78,7 @@ adapters/temporal
 adapters/connectors/*
 ```
 
-除已标记的 PostgreSQL Capture/Artifact/local Action 适配器外，其余都是计划，不应在存在真实
-实现前创建空目录。S3 模拟 Provider 属于 API 外层的 test-only 协议，不代表真实 Connector。
+除已标记的 in-memory Agent 基线与 PostgreSQL Capture/Artifact/local Action 适配器外，其余
+都是计划，不应在存在真实实现前创建空目录。S3 模拟 Provider 属于 API 外层的 test-only
+协议，不代表真实 Connector。S1 Agent Trace 只投影到当前 HTTP 响应，尚无持久化 run/Trace
+绑定。

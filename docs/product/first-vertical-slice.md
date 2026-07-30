@@ -91,13 +91,34 @@ PUT  /api/v1/artifacts/{artifactId}
 这条边界不持久化旧的 Stage 0 `Manifestation`、Working Self、ActionPlan 或 Reflection，也不
 引入认证、模型、Temporal、Connector 或通用 outbox。
 
+## Stage 2 · Framework-free Fake Agent Draft
+
+第一条可执行 Agent 路径只替换“如何从 Capture 产生 Artifact”这一个变量：
+
+```text
+POST /api/v1/agent-drafts
+```
+
+- 客户端只提交 `captureId + intent`；主体、模型、预算、工具白名单和策略版本由服务端拥有；
+- 初始模型回合只获得 Capture 引用，必须请求唯一声明的 `capture.read` 才能看到正文；
+- 工具同时经过注册、Task allowlist、输入引用和 owner-scoped 查询检查；
+- 模型 structured final 只是提案；缺少正文或 Capture Evidence 时，Core 不创建 Artifact；
+- 成功后复用 PostgreSQL Artifact lineage 写入 v1，并返回 `ResultEnvelope` 与安全事件摘要；
+- Trace 只包含事件类型、工具、状态和引用，不保存正文或 hidden chain-of-thought；
+- 步数、工具次数、deadline 与协作取消有界，越权工具、畸形工具结果和无证据结果都不能落库。
+
+这条路径使用脚本 Fake Model，成本为零且没有外部网络副作用。它没有证明真实模型质量、
+个性化、持久 Agent checkpoint、异步取消或生产自治。S2 将先决定 run/Trace 的持久化与
+`HarnessRunBundle` 绑定，再接一个真实模型适配器。
+
 ## 后续切片
 
 依次替换：
 
 1. ActionAttempt / Receipt → PostgreSQL 与独立 Fake Provider；
-2. Template Generator → AgentKernel Fake / real adapter；
-3. 同步用例 → Temporal Workflow；
-4. Local Draft Stub → 可撤销真实平台草稿。
+2. Template Generator → AgentKernel Fake（S1 已完成）/ real adapter；
+3. endpoint-local Trace → 可解析 run/Trace 与 HarnessRunBundle；
+4. 同步用例 → Temporal Workflow；
+5. Local Draft Stub → 可撤销真实平台草稿。
 
 每次只替换一个变量，并保留上一实现作对照。

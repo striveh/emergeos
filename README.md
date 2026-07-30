@@ -14,8 +14,11 @@ readiness、populated schema 升级、incompatible migration fail-fast 与 Postg
 backup/restore 已有可重放证据。但 provider success 后、local outcome 持久化前崩溃可能遗留
 `DISPATCHING`，当前没有安全 lease/fencing 接管；ADR-0004 仍为 Proposed，真实 Connector
 Gate 保持关闭。
+Stage 2 S1 另增加一条无框架 Fake Agent 草稿闭环：脚本 Fake Model 必须通过声明的
+`capture.read` 工具读取 owner-scoped Capture，结构化结果经确定性校验后才能写入 Artifact；
+响应只返回不含原文的安全 Trace 摘要。它是 Agent Runtime 基线，不是真实模型质量证明。
 真实模型、Temporal、生产认证、加密存储和平台连接器尚未接入，不应将演示结果理解为生产
-能力或真实平台结果。
+自治能力或真实平台结果。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
 中的单用户 `local-user`，没有实现登录或多租户身份验证。主体不接受 Header 或请求体覆盖，
@@ -49,6 +52,18 @@ Stage 0 Manifestation 闭环仍刻意使用内存存储和确定性 Stub。Stage
 Artifact lineage 和 local ActionAttempt/Receipt 边界替换为 PostgreSQL；S3 Action 只连接
 loopback-only 模拟 Provider；S4 只增加薄 operations/readiness 边界和迁移/恢复证据，没有
 增加新的领域状态、V4 schema 或通用运维平台。
+
+当前 Stage 2 S1 Agent 路径是：
+
+```text
+PostgreSQL Capture reference
+  → server-owned TaskEnvelope
+  → scripted Fake Model
+  → capture.read
+  → structured draft proposal
+  → deterministic evidence validation
+  → PostgreSQL Artifact v1 + safe inline Trace
+```
 
 ## 快速开始
 
@@ -104,6 +119,15 @@ curl -s \
   -H 'Content-Type: application/json' \
   -d '{
     "captureId": "{captureId from the latest response}",
+    "intent": "把这个想法整理成一篇有证据的中文文章"
+  }' \
+  http://localhost:8080/api/v1/agent-drafts
+
+# 也可以绕过 Fake Agent，直接用确定性内容创建 Artifact v1
+curl -s \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "captureId": "{captureId from the latest response}",
     "content": "把这个想法整理成一篇有证据的文章"
   }' \
   http://localhost:8080/api/v1/artifacts
@@ -142,9 +166,10 @@ curl -s \
   http://localhost:8080/api/v1/manifestations/{manifestationId}/approve
 ```
 
-Capture 与独立 Artifact lineage 写入本机 PostgreSQL；Manifestation 仍只写入应用进程内存
-中的草稿回执。独立 local ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问
-loopback Fake Provider 并产生模拟对象。它们都不会访问或发布到任何真实外部平台。
+Capture、Agent 生成的 Artifact 与独立 Artifact lineage 写入本机 PostgreSQL；Agent Trace
+在 S1 只随响应返回，不持久化。Manifestation 仍只写入应用进程内存中的草稿回执。独立 local
+ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问 loopback Fake Provider 并产生
+模拟对象。它们都不会访问或发布到任何真实外部平台。
 
 状态含义、`UNKNOWN` 恢复入口、迁移/备份演练和明确限制见
 [Stage 1 Operating Runbook](./docs/operations/stage1-operating-runbook.md)。
@@ -154,8 +179,8 @@ loopback Fake Provider 并产生模拟对象。它们都不会访问或发布到
 ```text
 apps/api/                 HTTP 入口与依赖装配
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
-modules/core/             纯 Java 领域、用例与端口
-adapters/inmemory/        本地开发与测试适配器
+modules/core/             纯 Java 领域、用例、AgentKernel 与端口
+adapters/inmemory/        本地适配器、有限 Fake Agent 循环与脚本模型
 adapters/postgres/        S1 Capture、S2 Artifact、S3 local Action 的薄 PostgreSQL 适配器
 contracts/                跨语言 JSON Schema
 evals/                    合成任务与回归证据

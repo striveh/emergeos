@@ -72,9 +72,11 @@ flowchart TB
 - 一个 Spring Boot API 进程；
 - 纯 Java Core；
 - 内存适配器保留 Stage 0 确定性演示；
+- Stage 2 S1 已有 framework-free、固定步数/工具预算的 Fake Agent 循环；它只注册
+  `capture.read`，结果仍由 Core 校验和提交；
 - PostgreSQL 已持有独立的 S1 Capture、S2 Artifact lineage 和 S3 local ActionAttempt/Receipt；
 - S3 仅通过 loopback HTTP 调用独立、文件持久化的 Fake Provider；
-- Temporal、AgentScope 和真实 Connector 仍是后续外层适配器，不是当前实现。
+- 真实模型、Temporal、AgentScope 和真实 Connector 仍是后续外层适配器，不是当前实现。
 
 此时拆微服务只会增加一致性、部署和调试成本，不能增加用户价值。未来只有出现独立扩缩、故障隔离、团队所有权或合规边界时才拆服务。
 

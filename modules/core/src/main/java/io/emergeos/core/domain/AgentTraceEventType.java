@@ -1,0 +1,10 @@
+package io.emergeos.core.domain;
+
+public enum AgentTraceEventType {
+  MODEL_STEP,
+  TOOL_REQUEST,
+  TOOL_RESULT,
+  TOOL_REJECTED,
+  STRUCTURED_FINAL,
+  ARTIFACT_COMMITTED
+}
