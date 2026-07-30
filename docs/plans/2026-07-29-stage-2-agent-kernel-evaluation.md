@@ -256,10 +256,12 @@ then locate it from the Trace.
   contracts 26、Core 65、Agent Loop 8、OpenAI adapter 18、in-memory 21、PostgreSQL 45、
   API unit + packaged integration 32；failures/errors/skipped 均为 0。
 - `./scripts/verify-contracts.sh` 通过 5 个 Schema、33 个 fixtures、2 个 Task hash vectors
-  与 2 个 synthetic Task Packs；`./scripts/verify-doc-links.sh` 通过 67 个 Markdown files；
+  与 2 个 synthetic Task Packs；`./scripts/verify-doc-links.sh` 通过 68 个 Markdown files；
   `apps/api` dependency tree 不含 `com.openai:*`；`git diff --check` 通过。
 - 这些回执仍全部是离线/loopback evidence，不是 live provider receipt，也不证明真实模型
   质量、账单金额或产品价值。
+- 完整回执见
+  [Stage 2 S3 Build Note](../operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)。
 
 ### S4 · Harness comparison, faults and bounded handoff
 

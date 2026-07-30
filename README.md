@@ -27,7 +27,8 @@ Stage 2 S3 已增加隔离的 OpenAI Responses adapter，并只用本机 loopbac
 验证 strict tool、manual item replay、structured output、usage/cost、timeout、零重试、
 错误映射与交错 Session 隔离。它尚未接入 API 或 Eval runner，也没有读取真实 key、访问
 OpenAI 或产生真实模型结果。Temporal、生产认证、加密存储和平台连接器仍未接入，不应将
-这些测试理解为生产自治能力或真实平台结果。
+这些测试理解为生产自治能力或真实平台结果。S3 adapter 的 Red/Green、安全审查、计量与
+非声明见 [Stage 2 S3 Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
 中的单用户 `local-user`，没有实现登录或多租户身份验证。主体不接受 Header 或请求体覆盖，
