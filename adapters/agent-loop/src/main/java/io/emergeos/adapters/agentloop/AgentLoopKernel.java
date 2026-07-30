@@ -194,22 +194,6 @@ public final class AgentLoopKernel implements AgentKernel {
 
       String priorResolvedModel = state.resolvedModel;
       state.resolvedModel = step.resolvedModel();
-      if (priorResolvedModel != null && !priorResolvedModel.equals(step.resolvedModel())) {
-        state.trace.add(
-            event(
-                state.trace,
-                AgentTraceEventType.MODEL_STEP,
-                null,
-                "FAILED",
-                "task://" + task.id()));
-        return outcome(
-            task,
-            RunStatus.FAILED,
-            null,
-            state,
-            "MODEL_IDENTITY_DRIFT",
-            startedNanos);
-      }
       if (state.costUsd.compareTo(task.budgetUsd()) > 0) {
         state.trace.add(
             event(
@@ -226,8 +210,40 @@ public final class AgentLoopKernel implements AgentKernel {
             "MODEL_BUDGET_EXHAUSTED",
             startedNanos);
       }
+      if (priorResolvedModel != null && !priorResolvedModel.equals(step.resolvedModel())) {
+        state.trace.add(
+            event(
+                state.trace,
+                AgentTraceEventType.MODEL_STEP,
+                null,
+                "FAILED",
+                "task://" + task.id()));
+        return outcome(
+            task,
+            RunStatus.FAILED,
+            null,
+            state,
+            "MODEL_IDENTITY_DRIFT",
+            startedNanos);
+      }
 
       AgentModel.Decision decision = step.decision();
+      if (decision instanceof AgentModel.Failed failed) {
+        state.trace.add(
+            event(
+                state.trace,
+                AgentTraceEventType.MODEL_STEP,
+                null,
+                "FAILED",
+                "task://" + task.id()));
+        return outcome(
+            task,
+            RunStatus.FAILED,
+            null,
+            state,
+            failed.failureReason(),
+            startedNanos);
+      }
       state.trace.add(
           event(
               state.trace,

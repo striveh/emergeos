@@ -113,8 +113,8 @@ class Stage1MigrationAndRecoveryTest {
     assertEquals(9, businessTableCount(fresh));
 
     System.out.println(
-        "S2_V4_MIGRATION_RECEIPT fromV1=V4-stable fromV2=V4-stable "
-            + "fromV3=V4-stable fresh=V4 tables=9 synthetic=true");
+        "S2_V5_MIGRATION_RECEIPT fromV1=V5-stable fromV2=V5-stable "
+            + "fromV3=V5-stable fresh=V5 tables=9 synthetic=true");
   }
 
   @Test
@@ -387,7 +387,7 @@ class Stage1MigrationAndRecoveryTest {
   private static void assertCurrent(Flyway flyway) {
     assertTrue(flyway.validateWithResult().validationSuccessful);
     assertEquals(
-        MigrationVersion.fromVersion("4"),
+        MigrationVersion.fromVersion("5"),
         flyway.info().current().getVersion());
     assertEquals(0, flyway.info().pending().length);
   }

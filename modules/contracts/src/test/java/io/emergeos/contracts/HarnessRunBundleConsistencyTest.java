@@ -189,6 +189,21 @@ class HarnessRunBundleConsistencyTest {
                 "task-001"));
   }
 
+  @Test
+  void legacyBundleKeepsReadingPreviouslyAllowedAdditionalComponentVersions() {
+    bundle(
+        Map.of(
+            "agent", "agent-draft-service-v1",
+            "verifier", "agent-draft-verifier-v1",
+            "trace-integrity", IntegrityHashes.PROFILE,
+            "model-adapter", "historical-adapter-v1"),
+        "task-001");
+  }
+
+  static HarnessRunBundle goldenBundle() {
+    return bundle(components("agent", "verifier"), "task-001");
+  }
+
   private static HarnessRunBundle bundle(
       Map<String, String> componentVersions, String bundleTaskId) {
     TaskEnvelope task = task();
@@ -253,6 +268,9 @@ class HarnessRunBundleConsistencyTest {
         1,
         5_000,
         BigDecimal.ZERO,
+        null,
+        null,
+        null,
         null,
         "agent-draft-policy-v1",
         "stage2-s2",

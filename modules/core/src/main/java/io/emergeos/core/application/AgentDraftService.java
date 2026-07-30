@@ -327,6 +327,9 @@ public final class AgentDraftService {
         5_000,
         BigDecimal.ZERO,
         null,
+        null,
+        null,
+        null,
         "agent-draft-policy-v1",
         "stage2-s2",
         "ref-only-v1",
@@ -351,7 +354,10 @@ public final class AgentDraftService {
           || candidate.latencyMs()
               > io.emergeos.contracts.ContractValueDomains.MAX_DURATION_MS
           || candidate.latencyMs() > task.deadlineMs()
-          || candidate.costUsd().compareTo(task.budgetUsd()) > 0) {
+          || (candidate.costUsd().compareTo(task.budgetUsd()) > 0
+              && !("1.1".equals(task.schemaVersion())
+                  && !success
+                  && "MODEL_BUDGET_EXHAUSTED".equals(candidate.failureReason())))) {
         return safeFailure("UNSAFE_AGENT_OUTCOME");
       }
       io.emergeos.contracts.ContractValueDomains.requireUsd(

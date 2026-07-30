@@ -1,0 +1,181 @@
+# RFC-0002：真实模型只经 synthetic Eval egress，并绑定身份与计量
+
+- 状态：Proposed，待 adapter 与 packaged Eval receipt 验证后转 Accepted
+- 日期：2026-07-30
+- 范围：Stage 2 S3
+
+## 决策摘要
+
+首个真实模型 adapter 不进入普通 `apps/api`，也不处理现有个人 Capture。它只由独立
+`apps/eval-runner` 对一份 checked-in、hash-frozen、PUBLIC 且明确 synthetic 的 Task Pack
+调用。默认命令只做 preflight，绝不读取 API key、构建 live client 或发起网络请求；
+一次真实 smoke 仍需项目所有者看到 pack hash、最大请求数与最大 reservation 后完成
+interactive operator approval。
+
+```text
+apps/api → ScriptedFakeModel
+apps/api -X→ adapters/openai
+
+apps/eval-runner
+  → frozen synthetic pack
+  → server-owned execution profile
+  → adapters/openai
+  → provider-neutral AgentLoopKernel
+  → Core verification
+  → Trace + Bundle + receipt
+```
+
+`PUBLIC` 不等于 synthetic，也不等于同意第三方 egress；三者必须分别证明。
+
+## 为什么隔离 live route
+
+普通 Agent draft 入口当前能读取 PERSONAL Capture。若只靠 Spring Profile、环境变量或
+客户端 `model` 参数切换 OpenAI，同一个 API 进程就可能在没有明确授权时把个人内容送出。
+因此：
+
+- `apps/api` 永久保持 Fake baseline，且构建时禁止 `com.openai:*`；
+- HTTP command 不增加 provider、model、pricing、base URL、API key 或 live 开关；
+- production adapter 不接受任意 base URL；
+- loopback base URL 只允许测试构造器使用。
+
+## Versioned execution identity
+
+历史 Fake Run 保持：
+
+```text
+TaskEnvelope 1.0
+HarnessRunBundle 1.0
+model binding = absent/null
+```
+
+任何 billable/provider SDK execution 必须使用：
+
+```text
+TaskEnvelope 1.1
+HarnessRunBundle 1.1
+modelProvider
+modelRequested
+pricingProfile
+idempotencyKey
+environmentSnapshotRef = environment://sha256:<manifest hash>
+componentVersions["model-adapter"]
+```
+
+Bundle 版本必须与 Task 版本一致。Task 1.0 的三个新增字段不进入旧 canonical preimage，
+但 constructor、JSON semantic verifier 与 PostgreSQL V5 constraint 会拒绝任何非 null
+值，避免形成不受 hash 保护的 routing metadata。
+
+V5 把 provider/requested model/pricing profile 同时写入 Task JSON 与 typed columns。
+RUNNING 与 terminal read 均验证两者相等；terminal 还受 Bundle hash 与内嵌 Task 约束。
+V5 不改写旧 V4 Task/Bundle JSON 或 bundle hash。
+
+## Provider session 与失败事实
+
+一个 Agent Run 打开一个 provider Session；并发 Run 不能共享 response ID、function
+call ID 或 replay state。每个 model step 返回：
+
+```text
+decision + resolvedModel + usage
+```
+
+如果 provider 已返回可校验的 model identity 与 usage，但 final JSON、tool call 或
+attribution 不能接受，adapter 返回 typed `Failed` decision，而不是抛掉 usage。只有
+401/429/5xx、timeout、transport disconnect 或 usage 缺失等没有完整 receipt 的路径才抛
+typed `AgentModelFailure`。
+
+跨 step resolved model 漂移立即失败，但两步已观察 usage 都保留。raw response、
+exception message、header、prompt、tool content、encrypted reasoning 与 API key 均不得
+进入 Trace、Bundle、receipt 或日志。
+
+## Responses API 边界
+
+首版固定：
+
+- OpenAI Java SDK `4.43.0`；
+- Responses API；
+- `store=false`；
+- manual Item replay，不使用 `previous_response_id` 或 conversation；
+- 请求 encrypted reasoning item 以支持 stateless replay，但不解析、不持久化；
+- `parallel_tool_calls=false`；
+- strict `capture.read` function schema；
+- 第一轮强制唯一 tool，第二轮禁止 tool 并要求 strict structured final；
+- SDK `maxRetries(0)`；
+- 每次 request timeout 使用 Run 的 remaining deadline；
+- `service_tier=default`；
+- text input/output、无 hosted tools、无外部 Action。
+
+自动测试只连 loopback `HttpServer`，使用 sentinel key；永远不访问真实 provider。
+
+## Pricing 与 budget
+
+Pricing profile 是 immutable identity。费率变化新增 profile，不能覆写旧 profile。
+S3 的 `costUsd` 是公开 list-price estimate，不是 invoice reconciliation。
+
+金额内部使用 integer nano/micro USD，禁止 `double`。每次真实调用前必须有覆盖完整
+request 的可信 input token upper bound；首个 smoke 使用 pack hash 对应的 reviewed
+upper bound。字符数猜测、经验倍率或上次 usage 都不能放行 egress。
+
+```text
+reservationMicroUsd =
+  inputTokenUpperBound × 5
+  + maxOutputTokens × 30
+```
+
+首版不允许 upper bound 超过 272,000 tokens，不假定 cache hit。若缺少上界、预算不足、
+profile 不匹配或 pack hash 漂移，在建立 socket 前失败。
+
+`budgetUsd` 是 requested ceiling：
+
+- 成功 Result 不得超过 ceiling；
+- provider 已产生可归因 usage 时，非成功 Result 允许如实记录 actual cost 超出 ceiling，
+  failure 为 `MODEL_BUDGET_EXHAUSTED`；
+- timeout/断线后 outcome 可能未知、usage 也可能未知，`costUsd=0` 只表示未观测，不能
+  宣称 provider 没有计费；
+- 不自动 retry outcome-unknown 调用。
+
+完整 reservation/unknown billing 审计需要后续 per-call metering receipt；在该结构落地前，
+S3 不宣称 invoice-level 对账或全账户 hard spend cap。
+
+## Synthetic preflight
+
+只有同时满足下列条件才可能进入 interactive smoke：
+
+1. pack 位于 approved repository path；
+2. pack SHA-256 位于 compiled catalog；
+3. seed 为 literal synthetic content，`dataClass=PUBLIC`；
+4. 无真实账号、conversation、Self Model 或个人标识；
+5. 只允许 `capture.read`，无 hosted tool、Connector 或 Action；
+6. execution profile、environment manifest 与 pricing profile hash 全部匹配；
+7. 最大 provider requests、deadline、output tokens 与 reservation 有界；
+8. preflight receipt 未过期、未消费，且本机 attempt marker 以 `CREATE_NEW` 取得；
+9. operator 在 TTY 中核对 hash/预算后输入一次性 challenge；
+10. 前九步完成后才读取 `OPENAI_API_KEY`。
+
+默认、`--help`、invalid pack、missing TTY、错误 challenge 与 replayed receipt 都必须证明
+key read count、model factory count、HTTP request count 均为零。
+
+## 不做的事
+
+S3 不：
+
+- 把现有 PERSONAL Task Pack 发送给真实模型；
+- 给普通 API 增加 live route；
+- 自动 retry outcome-unknown provider call；
+- 保存 raw prompt/response/reasoning；
+- 声称一次 smoke 证明模型质量、用户价值或 production readiness；
+- 接入社交平台 Connector；
+- 解决 stale RUNNING/崩溃恢复；这仍需要 lease/fencing 与独立 RFC。
+
+## Acceptance
+
+RFC 转为 Accepted 前必须具备：
+
+- Java/Node v1.0 与 v1.1 cross-language golden hashes；
+- populated V4 → V5 真实 PostgreSQL migration rehearsal；
+- v1.0 old JSON/hash verified read；
+- v1.1 JSON/typed columns 双向一致与 tamper tests；
+- OpenAI adapter loopback protocol、retry=0、timeout、failure mapping、usage retention tests；
+- `apps/api` dependency isolation；
+- packaged Eval preflight 的 zero-egress evidence；
+- 一份中文 Build Note 和独立 security/metering review；
+- 只有 owner 明确批准后，才允许最多一次 bounded live smoke。

@@ -153,6 +153,44 @@ class AgentLoopKernelModelSessionTest {
   }
 
   @Test
+  void budgetExhaustionTakesPrecedenceWhenTheSameStepAlsoDrifts() {
+    AgentModel model =
+        task ->
+            new AgentModel.Session() {
+              private int step;
+
+              @Override
+              public AgentModel.ModelStep next(
+                  AgentModel.Turn turn, AgentModel.ModelCallContext context) {
+                step++;
+                return new AgentModel.ModelStep(
+                    step == 1
+                        ? new AgentModel.ToolCall("capture.read", CAPTURE_REF)
+                        : new AgentModel.FinalDraft("must not commit", List.of(CAPTURE_REF)),
+                    step == 1 ? "provider-model-a" : "provider-model-b",
+                    new AgentModel.ModelUsage(new BigDecimal("0.006000"), 10));
+              }
+            };
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(
+            model,
+            new AgentToolRegistry(List.of(captureReadTool())),
+            2,
+            1);
+
+    var outcome =
+        kernel.run(
+            task("drift-and-over-budget-task", 5_000, new BigDecimal("0.010000")),
+            CancellationSignal.never());
+
+    assertEquals(RunStatus.BLOCKED, outcome.status());
+    assertEquals("MODEL_BUDGET_EXHAUSTED", outcome.failureReason());
+    assertEquals("provider-model-b", outcome.resolvedModel());
+    assertEquals(new BigDecimal("0.012000"), outcome.costUsd());
+    assertEquals(20, outcome.tokenCount());
+  }
+
+  @Test
   void mapsTypedProviderFailureWithoutPersistingItsRawMessage() {
     String providerSecret = "RAW_PROVIDER_BODY_WITH_SECRET";
     AgentModel model =
@@ -170,6 +208,28 @@ class AgentLoopKernelModelSessionTest {
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("MODEL_RATE_LIMITED", outcome.failureReason());
     assertTrue(outcome.toString().contains(providerSecret) == false);
+  }
+
+  @Test
+  void preservesUsageWhenProviderReturnsAnAttributedFailureReceipt() {
+    AgentModel model =
+        task ->
+            (turn, context) ->
+                new AgentModel.ModelStep(
+                    new AgentModel.Failed("MODEL_RESPONSE_MALFORMED"),
+                    "provider-model-snapshot",
+                    new AgentModel.ModelUsage(new BigDecimal("0.004000"), 41));
+    AgentLoopKernel kernel =
+        new AgentLoopKernel(model, new AgentToolRegistry(List.of()), 2, 1);
+
+    var outcome =
+        kernel.run(task("attributed-failure-task"), CancellationSignal.never());
+
+    assertEquals(RunStatus.FAILED, outcome.status());
+    assertEquals("MODEL_RESPONSE_MALFORMED", outcome.failureReason());
+    assertEquals("provider-model-snapshot", outcome.resolvedModel());
+    assertEquals(new BigDecimal("0.004000"), outcome.costUsd());
+    assertEquals(41, outcome.tokenCount());
   }
 
   @Test
@@ -220,8 +280,13 @@ class AgentLoopKernelModelSessionTest {
   }
 
   private static TaskEnvelope task(String id, long deadlineMs) {
+    return task(id, deadlineMs, new BigDecimal("0.010000"));
+  }
+
+  private static TaskEnvelope task(
+      String id, long deadlineMs, BigDecimal budgetUsd) {
     return new TaskEnvelope(
-        "1.0",
+        "1.1",
         id,
         null,
         "synthetic-eval-owner",
@@ -241,13 +306,16 @@ class AgentLoopKernelModelSessionTest {
         2,
         1,
         deadlineMs,
-        new BigDecimal("0.010000"),
+        budgetUsd,
+        "openai.responses",
+        "gpt-5.6-sol",
+        "openai-gpt-5.6-sol-2026-07-v1",
         "synthetic-eval-" + id,
         "synthetic-egress-policy-v1",
         "stage2-s3",
         "ref-only-v1",
         "agent-tools-v1",
-        "environment://synthetic-openai-eval-v1",
+        "environment://sha256:" + "b".repeat(64),
         List.of("capability://model-egress/synthetic-openai-v1"),
         List.of(),
         "structured final or non-success");

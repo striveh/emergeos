@@ -35,12 +35,17 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.stream.Stream;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.postgresql.ds.PGSimpleDataSource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -108,6 +113,204 @@ class PostgresAgentRunStoreTest {
     assertEquals(fixture.terminal().bundle().integrityHash(), loaded.bundle().integrityHash());
     assertTrue(store().findOwned("foreign-owner", fixture.running().runId()).isEmpty());
     assertTrue(store().findOwned(PRINCIPAL, "missing-run").isEmpty());
+  }
+
+  @Test
+  void legacyV10StoresNullModelBindingColumns() {
+    Fixture fixture = fixture("run-v10-null-model-binding");
+
+    store().start(fixture.running());
+
+    assertEquals(
+        new ModelBindingColumns(null, null, null),
+        modelBindingColumns(fixture.running().runId()));
+  }
+
+  @Test
+  void modelBoundV11RoundTripsItsFrozenBindingAcrossStoreInstances() {
+    ModelBoundFixture fixture = modelBoundFixture("run-v11-model-bound");
+    PostgresAgentRunStore first = store();
+
+    first.start(fixture.running());
+    assertEquals(
+        new ModelBindingColumns(
+            "openai.responses",
+            "gpt-5.6-sol",
+            "openai-gpt-5.6-sol-2026-07-v1"),
+        modelBindingColumns(fixture.running().runId()));
+    first.complete(fixture.failed(), null);
+
+    assertEquals(
+        fixture.failed(),
+        store().findOwned(PRINCIPAL, fixture.running().runId()).orElseThrow());
+  }
+
+  @Test
+  void databaseRejectsJsonAndTypedModelBindingDrift() {
+    Fixture legacy = fixture("run-v10-binding-drift");
+    ModelBoundFixture bound = modelBoundFixture("run-v11-binding-drift");
+    PostgresAgentRunStore store = store();
+    store.start(legacy.running());
+    store.start(bound.running());
+
+    assertThrows(
+        RuntimeException.class,
+        () ->
+            jdbc.sql(
+                    """
+                    UPDATE agent_runs
+                    SET model_provider = 'openai.responses'
+                    WHERE principal_id = :principalId AND run_id = :runId
+                    """)
+                .param("principalId", PRINCIPAL)
+                .param("runId", legacy.running().runId())
+                .update());
+    assertThrows(
+        RuntimeException.class,
+        () ->
+            jdbc.sql(
+                    """
+                    UPDATE agent_runs
+                    SET pricing_profile = 'openai-gpt-5.6-sol-2026-07-v2'
+                    WHERE principal_id = :principalId AND run_id = :runId
+                    """)
+                .param("principalId", PRINCIPAL)
+                .param("runId", bound.running().runId())
+                .update());
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("invalidCoordinatedModelBindings")
+  void databaseConstraintRejectsCoordinatedInvalidModelBindings(
+      String caseName,
+      String schemaVersion,
+      String modelProvider,
+      String modelRequested,
+      String pricingProfile,
+      boolean nullBindings) {
+    ModelBoundFixture fixture =
+        modelBoundFixture("run-v11-db-constraint-" + caseName);
+    store().start(fixture.running());
+
+    assertThrows(
+        DataIntegrityViolationException.class,
+        () ->
+            jdbc.sql(
+                    """
+                    UPDATE agent_runs
+                    SET task_envelope = jsonb_set(
+                            jsonb_set(
+                                jsonb_set(
+                                    jsonb_set(
+                                        task_envelope,
+                                        '{schemaVersion}',
+                                        to_jsonb(CAST(:schemaVersion AS text))
+                                    ),
+                                    '{modelProvider}',
+                                    CASE
+                                        WHEN :nullBindings THEN 'null'::jsonb
+                                        ELSE to_jsonb(CAST(:modelProvider AS text))
+                                    END
+                                ),
+                                '{modelRequested}',
+                                CASE
+                                    WHEN :nullBindings THEN 'null'::jsonb
+                                    ELSE to_jsonb(CAST(:modelRequested AS text))
+                                END
+                            ),
+                            '{pricingProfile}',
+                            CASE
+                                WHEN :nullBindings THEN 'null'::jsonb
+                                ELSE to_jsonb(CAST(:pricingProfile AS text))
+                            END
+                        ),
+                        model_provider = CASE
+                            WHEN :nullBindings THEN NULL
+                            ELSE CAST(:modelProvider AS varchar)
+                        END,
+                        model_requested = CASE
+                            WHEN :nullBindings THEN NULL
+                            ELSE CAST(:modelRequested AS varchar)
+                        END,
+                        pricing_profile = CASE
+                            WHEN :nullBindings THEN NULL
+                            ELSE CAST(:pricingProfile AS varchar)
+                        END
+                    WHERE principal_id = :principalId AND run_id = :runId
+                    """)
+                .param("schemaVersion", schemaVersion)
+                .param("modelProvider", modelProvider)
+                .param("modelRequested", modelRequested)
+                .param("pricingProfile", pricingProfile)
+                .param("nullBindings", nullBindings)
+                .param("principalId", PRINCIPAL)
+                .param("runId", fixture.running().runId())
+                .update());
+  }
+
+  private static Stream<Arguments> invalidCoordinatedModelBindings() {
+    return Stream.of(
+        Arguments.of(
+            "coordinated-null",
+            "1.1",
+            "openai.responses",
+            "gpt-5.6-sol",
+            "openai-gpt-5.6-sol-2026-07-v1",
+            true),
+        Arguments.of(
+            "invalid-provider",
+            "1.1",
+            "OpenAI.responses",
+            "gpt-5.6-sol",
+            "openai-gpt-5.6-sol-2026-07-v1",
+            false),
+        Arguments.of(
+            "overlong-model",
+            "1.1",
+            "openai.responses",
+            "m".repeat(513),
+            "openai-gpt-5.6-sol-2026-07-v1",
+            false),
+        Arguments.of(
+            "invalid-pricing",
+            "1.1",
+            "openai.responses",
+            "gpt-5.6-sol",
+            "OpenAI/gpt-5.6-sol/v1",
+            false),
+        Arguments.of(
+            "unknown-schema",
+            "1.2",
+            "openai.responses",
+            "gpt-5.6-sol",
+            "openai-gpt-5.6-sol-2026-07-v1",
+            false));
+  }
+
+  @Test
+  void verifiedTerminalReadRejectsCoordinatedJsonAndColumnTampering() {
+    ModelBoundFixture fixture = modelBoundFixture("run-v11-coordinated-tamper");
+    PostgresAgentRunStore store = store();
+    store.start(fixture.running());
+    store.complete(fixture.failed(), null);
+    jdbc.sql(
+            """
+            UPDATE agent_runs
+            SET task_envelope = jsonb_set(
+                    task_envelope,
+                    '{modelProvider}',
+                    to_jsonb('openai.responses-alt'::text)
+                ),
+                model_provider = 'openai.responses-alt'
+            WHERE principal_id = :principalId AND run_id = :runId
+            """)
+        .param("principalId", PRINCIPAL)
+        .param("runId", fixture.running().runId())
+        .update();
+
+    assertThrows(
+        AgentRunIntegrityException.class,
+        () -> store.findOwned(PRINCIPAL, fixture.running().runId()));
   }
 
   @Test
@@ -493,6 +696,135 @@ class PostgresAgentRunStoreTest {
         new PostgresArtifactLineageStore(dataSource, transactions));
   }
 
+  private static ModelBindingColumns modelBindingColumns(String runId) {
+    return jdbc.sql(
+            """
+            SELECT model_provider, model_requested, pricing_profile
+            FROM agent_runs
+            WHERE principal_id = :principalId AND run_id = :runId
+            """)
+        .param("principalId", PRINCIPAL)
+        .param("runId", runId)
+        .query(
+            (resultSet, rowNumber) ->
+                new ModelBindingColumns(
+                    resultSet.getString("model_provider"),
+                    resultSet.getString("model_requested"),
+                    resultSet.getString("pricing_profile")))
+        .single();
+  }
+
+  private static ModelBoundFixture modelBoundFixture(String runId) {
+    String taskId = "task-" + runId;
+    TaskEnvelope task =
+        new TaskEnvelope(
+            "1.1",
+            taskId,
+            null,
+            PRINCIPAL,
+            List.of(),
+            "MODEL_EVAL",
+            "Evaluate one frozen synthetic prompt",
+            List.of(),
+            List.of(),
+            List.of("text"),
+            DataClass.PUBLIC,
+            RiskLevel.READ_ONLY,
+            "INTERACTIVE",
+            List.of(),
+            "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+            List.of("uses only frozen synthetic evidence"),
+            false,
+            1,
+            1,
+            30_000,
+            new BigDecimal("0.010000"),
+            "openai.responses",
+            "gpt-5.6-sol",
+            "openai-gpt-5.6-sol-2026-07-v1",
+            "synthetic-" + runId,
+            "synthetic-model-egress-policy-v1",
+            "stage2-s3",
+            "ref-only-v1",
+            "agent-tools-v1",
+            "environment://sha256:" + "b".repeat(64),
+            List.of("capability://model-egress/synthetic-openai-v1"),
+            List.of(),
+            "structured final or non-success");
+    AgentRun running = AgentRun.running(runId, PRINCIPAL, task, STARTED);
+    String taskRef = "task://" + taskId;
+    AgentTraceEntry failedStep =
+        AgentTraceEntry.create(
+            1,
+            TraceEventType.MODEL_STEP,
+            null,
+            "FAILED",
+            taskRef,
+            IntegrityHashes.emptyTraceRoot());
+    AgentTraceEnvelope trace =
+        AgentTraceEnvelope.create("1.0", runId, taskId, List.of(failedStep));
+    ResultEnvelope result =
+        new ResultEnvelope(
+            "1.0",
+            runId,
+            taskId,
+            RunStatus.FAILED,
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            "gpt-5.6-sol",
+            "agent-draft-service-v1",
+            "agent-draft-verifier-v1",
+            new BigDecimal("0.001000"),
+            100,
+            100,
+            "/api/v1/agent-runs/" + runId + "/trace",
+            "MODEL_RESPONSE_MALFORMED");
+    HarnessRunBundle bundle =
+        HarnessRunBundle.create(
+            "1.1",
+            runId,
+            taskId,
+            new io.emergeos.contracts.HarnessExperiment("openai-responses-h0", 1),
+            result.resolvedModel(),
+            "framework-free-agent-kernel-v2",
+            Map.of(
+                "agent", result.agentVersion(),
+                "verifier", result.verifierVersion(),
+                "trace-integrity", IntegrityHashes.PROFILE,
+                "model-adapter", "openai-responses-v1-openai-java-4.43.0"),
+            task.environmentSnapshotRef(),
+            task.toolRegistryVersion(),
+            task,
+            result,
+            null,
+            result.traceRef(),
+            trace.rootHash(),
+            List.of(),
+            List.of(),
+            List.of(),
+            null,
+            result.failureReason(),
+            result.status(),
+            result.costUsd(),
+            result.tokenCount(),
+            result.latencyMs());
+    AgentRun failed =
+        new AgentRun(
+            runId,
+            PRINCIPAL,
+            task,
+            AgentRunLifecycle.FAILED,
+            result,
+            trace,
+            bundle,
+            STARTED,
+            COMPLETED);
+    return new ModelBoundFixture(running, failed);
+  }
+
   private static AgentRun failedTerminal(Fixture fixture) {
     TaskEnvelope task = fixture.running().task();
     String runId = fixture.running().runId();
@@ -645,6 +977,9 @@ class PostgresAgentRunStoreTest {
             1,
             deadlineMs,
             budgetUsd,
+            null,
+            null,
+            null,
             null,
             "agent-draft-policy-v1",
             "stage2-s2",
@@ -803,6 +1138,13 @@ class PostgresAgentRunStoreTest {
       AgentRun running,
       AgentRun terminal,
       ArtifactLineage artifact) {}
+
+  private record ModelBoundFixture(AgentRun running, AgentRun failed) {}
+
+  private record ModelBindingColumns(
+      String provider,
+      String requestedModel,
+      String pricingProfile) {}
 
   private record TraceSpec(
       TraceEventType type, String toolName, String status, String reference) {}

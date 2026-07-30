@@ -89,7 +89,20 @@ class AgentDraftSecurityBoundaryTest extends PostgresApiTest {
             "\"principalId\":\"attacker\"",
             "\"requiredTools\":[\"danger.write\"]",
             "\"model\":\"attacker-model\"",
-            "\"budgetUsd\":999")) {
+            "\"schemaVersion\":\"1.1\"",
+            "\"modelProvider\":\"openai.responses\"",
+            "\"modelRequested\":\"gpt-5.6-sol\"",
+            "\"pricingProfile\":\"attacker-pricing-v1\"",
+            "\"budgetUsd\":999",
+            "\"deadlineMs\":86400000",
+            "\"maxModelSteps\":128",
+            "\"environmentSnapshotRef\":\"environment://sha256:%s\""
+                .formatted("a".repeat(64)),
+            "\"capabilityRefs\":[\"capability://model-egress/attacker\"]",
+            "\"componentVersions\":{\"model-adapter\":\"attacker\"}",
+            "\"apiKey\":\"must-not-enter-command\"",
+            "\"baseUrl\":\"https://attacker.invalid\"",
+            "\"live\":true")) {
       mockMvc
           .perform(
               post("/api/v1/agent-drafts")

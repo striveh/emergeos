@@ -16,6 +16,12 @@
       "minLength": 1,
       "maxLength": 200,
       "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    },
+    "safeModel512": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}$"
     }
   },
   "required": [
@@ -51,7 +57,7 @@
     "returnControlWhen"
   ],
   "properties": {
-    "schemaVersion": {"const": "1.0"},
+    "schemaVersion": {"enum": ["1.0", "1.1"]},
     "id": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
@@ -86,6 +92,17 @@
       "maximum": 999999.999999,
       "multipleOf": 0.000001
     },
+    "modelProvider": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "modelRequested": {
+      "oneOf": [{"$ref": "#/$defs/safeModel512"}, {"type": "null"}]
+    },
+    "pricingProfile": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9._-]{0,199}$"
+    },
     "idempotencyKey": {
       "oneOf": [{"$ref": "#/$defs/safeName200"}, {"type": "null"}]
     },
@@ -99,5 +116,33 @@
     "capabilityRefs": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
     "unresolvedDecisions": {"type": "array", "items": {"$ref": "#/$defs/safeText2048"}},
     "returnControlWhen": {"$ref": "#/$defs/safeText2048"}
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"schemaVersion": {"const": "1.1"}},
+        "required": ["schemaVersion"]
+      },
+      "then": {
+        "required": ["modelProvider", "modelRequested", "pricingProfile"],
+        "properties": {
+          "modelProvider": {"type": "string"},
+          "modelRequested": {"$ref": "#/$defs/safeModel512"},
+          "pricingProfile": {"type": "string"},
+          "idempotencyKey": {"$ref": "#/$defs/safeName200"},
+          "environmentSnapshotRef": {
+            "type": "string",
+            "pattern": "^environment://sha256:[a-f0-9]{64}$"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "modelProvider": {"type": "null"},
+          "modelRequested": {"type": "null"},
+          "pricingProfile": {"type": "null"}
+        }
+      }
+    }
+  ]
 }

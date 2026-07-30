@@ -49,6 +49,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [五结果研发制度 ADR](./architecture/decisions/0005-five-outcome-development-system.md)
 - [持久 AgentRun 真相 ADR](./architecture/decisions/0006-persistent-agent-run-truth.md)
 - [RFC-0001：持久 AgentRun、Safe Trace 与 HarnessRunBundle](./rfcs/0001-persistent-agent-run-trace-and-bundle.md)
+- [RFC-0002：真实模型 synthetic egress 与计量边界](./rfcs/0002-real-model-synthetic-egress-and-metering.md)
 
 ### 想参与研究与共同进化
 

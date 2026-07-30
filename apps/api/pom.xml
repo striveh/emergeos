@@ -82,6 +82,32 @@
   <build>
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>keep-live-model-egress-out-of-api</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>com.openai:*</exclude>
+                    <exclude>io.emergeos:emerge-adapter-openai</exclude>
+                  </excludes>
+                  <searchTransitive>true</searchTransitive>
+                  <message>
+                    The ordinary API must not carry a live OpenAI SDK route.
+                  </message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
         <executions>

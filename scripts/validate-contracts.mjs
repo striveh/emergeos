@@ -360,6 +360,26 @@ function verifyTask(instance, relative) {
   if (!isUsdDomain(instance.budgetUsd)) {
     throw new Error(`${relative}: budgetUsd is outside the shared six-decimal USD domain`);
   }
+  if (instance.schemaVersion === "1.0") {
+    if (
+      (instance.modelProvider !== undefined && instance.modelProvider !== null)
+      || (instance.modelRequested !== undefined && instance.modelRequested !== null)
+      || (instance.pricingProfile !== undefined && instance.pricingProfile !== null)
+    ) {
+      throw new Error(`${relative}: TaskEnvelope 1.0 cannot carry a model binding`);
+    }
+    return;
+  }
+  if (
+    instance.schemaVersion !== "1.1"
+    || typeof instance.modelProvider !== "string"
+    || typeof instance.modelRequested !== "string"
+    || typeof instance.pricingProfile !== "string"
+    || typeof instance.idempotencyKey !== "string"
+    || typeof instance.environmentSnapshotRef !== "string"
+  ) {
+    throw new Error(`${relative}: TaskEnvelope 1.1 requires a complete model binding`);
+  }
 }
 
 function equalJson(left, right) {
@@ -372,6 +392,8 @@ function verifyBundle(instance, relative) {
   verifyTask(task, `${relative}.task`);
   verifyResult(result, `${relative}.result`);
   if (
+    instance.schemaVersion !== task.schemaVersion
+    ||
     instance.runId !== result.runId
     || instance.taskId !== task.id
     || instance.taskId !== result.taskId
@@ -384,7 +406,10 @@ function verifyBundle(instance, relative) {
     || instance.costUsd !== result.costUsd
     || instance.tokenCount !== result.tokenCount
     || instance.latencyMs !== result.latencyMs
-    || instance.costUsd > task.budgetUsd
+    || (instance.costUsd > task.budgetUsd
+      && !(instance.schemaVersion === "1.1"
+        && instance.outcome !== "SUCCEEDED"
+        && instance.failureAttribution === "MODEL_BUDGET_EXHAUSTED"))
     || instance.latencyMs > task.deadlineMs
   ) {
     throw new Error(`${relative}: Bundle fields do not match Task and Result`);
@@ -408,6 +433,8 @@ function verifyBundle(instance, relative) {
     instance.componentVersions.agent !== result.agentVersion
     || instance.componentVersions.verifier !== result.verifierVersion
     || instance.componentVersions["trace-integrity"] !== instance.integrityProfile
+    || (task.schemaVersion === "1.1"
+      && typeof instance.componentVersions["model-adapter"] !== "string")
   ) {
     throw new Error(
       `${relative}: componentVersions do not match Result and integrity profiles`
@@ -449,14 +476,21 @@ function verifyBundle(instance, relative) {
   if (instance.integrityProfile !== INTEGRITY_PROFILE) {
     throw new Error(`${relative}: unsupported integrityProfile`);
   }
-  const preimage = {...instance};
+  const preimage = JSON.parse(JSON.stringify(instance));
   delete preimage.integrityHash;
+  if (preimage.task.schemaVersion === "1.0") {
+    delete preimage.task.modelProvider;
+    delete preimage.task.modelRequested;
+    delete preimage.task.pricingProfile;
+  }
   const expected = domainHash(
     "emergeos.harness-run-bundle.v1",
     canonicalEncode(preimage)
   );
   if (instance.integrityHash !== expected) {
-    throw new Error(`${relative}: integrityHash mismatch`);
+    throw new Error(
+      `${relative}: integrityHash mismatch (expected ${expected})`
+    );
   }
 }
 
@@ -539,16 +573,31 @@ for (const { file, schema } of schemas) {
     const instance = readJson(fixture);
     const schemaValid = validate(instance);
     let semanticValid = false;
+    let semanticError = null;
     if (schemaValid) {
       try {
         verifySemantic(contractName, instance, path.relative(repoRoot, fixture));
         semanticValid = true;
-      } catch {
+      } catch (error) {
+        semanticError = error;
         semanticValid = false;
       }
     }
     if (schemaValid && semanticValid) {
       throw new Error(`${path.relative(repoRoot, fixture)} should be invalid but passed`);
+    }
+    if (
+      path.basename(fixture)
+        === "invalid-v11-over-budget-wrong-failure-correct-hash.json"
+      && (
+        !schemaValid
+        || semanticError === null
+        || !semanticError.message.includes("Bundle fields do not match Task and Result")
+      )
+    ) {
+      throw new Error(
+        `${path.relative(repoRoot, fixture)} must fail the budget/failure semantic check`
+      );
     }
     fixtureCount += 1;
   }

@@ -114,7 +114,11 @@ final class CanonicalEncoding {
       return;
     }
     if (value.getClass().isRecord()) {
-      writeMap(output, recordValues(value, Set.of()));
+      Set<String> excludedFields =
+          value instanceof TaskEnvelope task && "1.0".equals(task.schemaVersion())
+              ? Set.of("modelProvider", "modelRequested", "pricingProfile")
+              : Set.of();
+      writeMap(output, recordValues(value, excludedFields));
       return;
     }
     throw new IllegalArgumentException(

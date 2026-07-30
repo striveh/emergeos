@@ -16,3 +16,5 @@ RFC 被接受并落地后，由 ADR 记录最终采用的决定；RFC 历史不�
 - [RFC-0001：持久 AgentRun、Safe Trace 与 HarnessRunBundle 完整性绑定](0001-persistent-agent-run-trace-and-bundle.md)
   — `Accepted`，实现决策见
   [ADR-0006](../architecture/decisions/0006-persistent-agent-run-truth.md)。
+- [RFC-0002：真实模型只经 synthetic Eval egress，并绑定身份与计量](0002-real-model-synthetic-egress-and-metering.md)
+  — `Proposed`，等待 adapter、packaged preflight 与 bounded smoke receipt。

@@ -36,8 +36,8 @@ public record HarnessRunBundle(
     String integrityHash) {
 
   public HarnessRunBundle {
-    if (!"1.0".equals(schemaVersion)) {
-      throw new IllegalArgumentException("HarnessRunBundle supports schemaVersion 1.0");
+    if (!List.of("1.0", "1.1").contains(schemaVersion)) {
+      throw new IllegalArgumentException("HarnessRunBundle supports schemaVersion 1.0 and 1.1");
     }
     requireId(runId, "runId");
     requireId(taskId, "taskId");
@@ -78,6 +78,7 @@ public record HarnessRunBundle(
     ContractValueDomains.requireDuration(latencyMs, "latencyMs", true);
 
     verifyConsistency(
+        schemaVersion,
         runId,
         taskId,
         modelResolved,
@@ -209,6 +210,7 @@ public record HarnessRunBundle(
   }
 
   private static void verifyConsistency(
+      String schemaVersion,
       String runId,
       String taskId,
       String modelResolved,
@@ -228,6 +230,10 @@ public record HarnessRunBundle(
       long tokenCount,
       long latencyMs,
       String integrityProfile) {
+    if (!schemaVersion.equals(task.schemaVersion())) {
+      throw new IllegalArgumentException(
+          "Bundle schemaVersion must match its embedded TaskEnvelope");
+    }
     if (!runId.equals(result.runId())
         || !taskId.equals(task.id())
         || !taskId.equals(result.taskId())
@@ -240,7 +246,9 @@ public record HarnessRunBundle(
         || costUsd.compareTo(result.costUsd()) != 0
         || tokenCount != result.tokenCount()
         || latencyMs != result.latencyMs()
-        || costUsd.compareTo(task.budgetUsd()) > 0
+        || (costUsd.compareTo(task.budgetUsd()) > 0
+            && !permitsObservedBudgetOverage(
+                schemaVersion, outcome, failureAttribution))
         || latencyMs > task.deadlineMs()) {
       throw new IllegalArgumentException("Bundle fields do not match Task and Result");
     }
@@ -249,6 +257,11 @@ public record HarnessRunBundle(
         || !integrityProfile.equals(componentVersions.get("trace-integrity"))) {
       throw new IllegalArgumentException(
           "Bundle componentVersions do not match Result and integrity profiles");
+    }
+    if ("1.1".equals(schemaVersion)
+        && !componentVersions.containsKey("model-adapter")) {
+      throw new IllegalArgumentException(
+          "A model-bound Task requires a model-adapter component version");
     }
     verifyGlobalBindingOrder(bindings);
     verifyBindingRefs(bindings, ResourceRole.EVIDENCE, result.evidenceRefs());
@@ -269,6 +282,13 @@ public record HarnessRunBundle(
       throw new IllegalArgumentException(
           "A successful CREATE_ARTICLE_DRAFT Run requires exactly one Artifact");
     }
+  }
+
+  private static boolean permitsObservedBudgetOverage(
+      String schemaVersion, RunStatus outcome, String failureAttribution) {
+    return "1.1".equals(schemaVersion)
+        && outcome != RunStatus.SUCCEEDED
+        && "MODEL_BUDGET_EXHAUSTED".equals(failureAttribution);
   }
 
   private static void verifyGlobalBindingOrder(List<ResourceBinding> bindings) {

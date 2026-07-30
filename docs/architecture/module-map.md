@@ -21,7 +21,8 @@ adapters/inmemory
 
 adapters/postgres
   Capture、Artifact lineage、local Action 与 AgentRun 的 JdbcClient 适配器
-  以及前向 Flyway migrations
+  以及前向 Flyway migrations；V5 将 model execution binding 同时冻结在
+  Task JSON 与 typed columns，并在读取时双向核验
 
 apps/api
   HTTP DTO、Controller、异常映射、loopback 启动保护、Agent draft 入口、
@@ -82,7 +83,7 @@ flowchart RL
 adapters/agent-loop        # 已实现：provider-neutral、framework-free 有界 Loop 与 Tool SPI
 adapters/inmemory/agent    # 已实现：脚本 Fake Model 与 Offline golden baseline
 adapters/postgres          # 已实现：Capture、Artifact、local Action、AgentRun/Trace
-adapters/openai
+adapters/openai            # S3 计划：只供独立 synthetic Eval runner 使用
 adapters/object-storage
 adapters/agent-agentscope
 adapters/agent-pi

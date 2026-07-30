@@ -2,6 +2,7 @@ package io.emergeos.adapters.agentloop;
 
 import io.emergeos.contracts.ContractText;
 import io.emergeos.contracts.ContractValueDomains;
+import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.port.CancellationSignal;
 import java.math.BigDecimal;
@@ -78,7 +79,7 @@ public interface AgentModel {
     }
   }
 
-  sealed interface Decision permits ToolCall, FinalDraft {}
+  sealed interface Decision permits ToolCall, FinalDraft, Failed {}
 
   record ToolCall(String toolName, String reference) implements Decision {
 
@@ -92,6 +93,22 @@ public interface AgentModel {
 
     public FinalDraft {
       evidenceRefs = List.copyOf(Objects.requireNonNull(evidenceRefs, "evidenceRefs"));
+    }
+  }
+
+  /**
+   * A provider response whose model identity and usage are attributable, but whose decision cannot
+   * be accepted. Keeping this inside {@link ModelStep} prevents paid usage from disappearing into
+   * an exception-only path.
+   */
+  record Failed(String failureReason) implements Decision {
+
+    public Failed {
+      if (failureReason == null
+          || !failureReason.matches("[A-Z][A-Z0-9_]{0,127}")) {
+        throw new IllegalArgumentException(
+            "failureReason must be a stable uppercase code");
+      }
     }
   }
 

@@ -29,3 +29,19 @@ Versioning rules:
   compatible merely because existing payloads still validate against the newer schema.
 - Removing fields, changing meaning, narrowing enums or changing identity/idempotency semantics is breaking.
 - Breaking changes require a new schema major version and migration notes.
+
+## 当前 unpublished model binding 规则
+
+- `TaskEnvelope 1.0` 与 `HarnessRunBundle 1.0` 是已有 Fake/历史运行格式；三个
+  model binding 字段必须缺失或为 `null`，且不进入旧 hash preimage。
+- `TaskEnvelope 1.1` 必须完整绑定 `modelProvider`、`modelRequested`、
+  `pricingProfile`、server-owned `idempotencyKey` 与 content-addressed
+  `environmentSnapshotRef`。
+- `HarnessRunBundle.schemaVersion` 必须与内嵌 Task 一致；1.1 Bundle 还必须完整性绑定
+  `componentVersions["model-adapter"]`。
+- 1.0 的保证是 storage/hash backward-read compatible：旧 JSON 与旧 Bundle hash
+  可以被新代码验证读取。它不承诺新 producer 的 JSON 一定能被旧
+  `additionalProperties: false` validator 接受。
+- 对 1.1 而言，`budgetUsd` 是 requested ceiling。成功结果仍不得超预算；若 provider
+  已产生可归因 usage，非成功结果允许如实记录实际 cost 超过 ceiling，不能把真实消费
+  改写成零。

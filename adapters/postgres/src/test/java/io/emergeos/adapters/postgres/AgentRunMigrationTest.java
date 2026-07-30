@@ -33,9 +33,9 @@ class AgentRunMigrationTest {
   }
 
   @Test
-  void freshInstallCreatesTheV4AgentRunAggregate() {
+  void freshInstallCreatesTheV5ModelBoundAgentRunAggregate() {
     assertEquals(
-        "4",
+        "5",
         jdbc.sql(
                 """
                 SELECT version

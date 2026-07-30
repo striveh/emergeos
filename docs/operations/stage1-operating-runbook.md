@@ -102,16 +102,21 @@ Run the real PostgreSQL upgrade and restore game day:
 ```bash
 ./mvnw --batch-mode --no-transfer-progress \
   -pl adapters/postgres -am \
-  -Dtest=Stage1MigrationAndRecoveryTest \
+  -Dtest=Stage1MigrationAndRecoveryTest,AgentRunModelBindingMigrationTest \
   -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
-该测试创建独立的 populated V1、V2、V3 schema 和一个 fresh install，再全部升级到
-V4。升级前后逐列比较既有稳定业务 truth：S1 Capture/request/content hash、S2
-Artifact head/version/lineage，以及 S3 Action plan/artifact hash、budget、transition
-和 Receipt。所有路径最终都在 V4；fresh schema 有九张业务表，旧六张表的数据保持
-不变，新增三张 AgentRun/Trace/binding 表；V4 还为 Capture identity/request hash
-增加 composite unique constraint。
+`Stage1MigrationAndRecoveryTest` 创建独立的 populated V1、V2、V3 schema 和一个
+fresh install，再全部升级到 V5。升级前后逐列比较既有稳定业务 truth：S1
+Capture/request/content hash、S2 Artifact head/version/lineage，以及 S3 Action
+plan/artifact hash、budget、transition 和 Receipt。
+
+`AgentRunModelBindingMigrationTest` 另外创建真正 populated 的 raw V4 AgentRun
+1.0 数据，再升级到 V5，验证旧 Task JSON、Bundle JSON 与 Bundle hash 原样保持，
+三个新 model binding typed columns 为 `NULL`，且新版 Store 可以读回历史记录。
+V4 新增三张 AgentRun/Trace/binding 表，fresh schema 仍有九张业务表；V5 只为
+AgentRun 增加三个 model binding typed columns。所有路径最终都在 V5；V4 还为
+Capture identity/request hash 增加 composite unique constraint。
 
 Run the incompatible migration process check:
 
@@ -122,7 +127,7 @@ Run the incompatible migration process check:
   -Dfailsafe.failIfNoSpecifiedTests=false
 ```
 
-该测试先应用 V1–V4，再故意修改已应用 V3 的 checksum，然后启动 packaged
+该测试先应用 V1–V5，再故意修改已应用 V3 的 checksum，然后启动 packaged
 application。Flyway validation 必须让进程在 readiness 变成 `UP` 之前 non-zero
 退出；测试同时确认 synthetic database password 不会出现在失败日志。
 
@@ -172,7 +177,7 @@ S2 的 durable evidence 由独立 packaged restart acceptance 覆盖。
 ## Scope and open Gates
 
 - Fake Provider objects are simulated and contain no real user data.
-- 当前已有 framework-free `AgentKernel`、scripted Fake Model，以及 V4 持久
+- 当前已有 framework-free `AgentKernel`、scripted Fake Model，以及 V5 持久
   AgentRun/Safe Trace；仍没有 real model、real Connector、authentication、
   LAN/public listener、Temporal、正式 UI、general outbox 或 metrics platform。
 - ADR-0004 is `Proposed`: S3 proves recovery after durable `UNKNOWN`, but not

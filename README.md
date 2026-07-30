@@ -59,7 +59,10 @@ Artifact lineage 和 local ActionAttempt/Receipt 边界替换为 PostgreSQL；S3
 loopback-only 模拟 Provider；S4 只增加薄 operations/readiness 边界和迁移/恢复证据，没有
 增加通用运维平台。Stage 2 S2 的 additive V4 新增三张 AgentRun/Trace/binding 表，并通过
 V1/V2/V3 → V4 升级与恢复演练保持旧 truth；V4 同时为 Capture identity/request hash
-增加 composite unique constraint。
+增加 composite unique constraint。Stage 2 S3 的 additive V5 不新增业务表，只加入
+`model_provider`、`model_requested`、`pricing_profile` 三个 typed columns；真实模型
+Task 1.1 的 routing/pricing identity 必须与 Task JSON 双向一致，而历史 Task 1.0 JSON
+与 Bundle hash 不被改写。当前 schema version 是 V5。
 
 当前 Stage 2 S1 + S2 Agent 路径是：
 

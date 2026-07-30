@@ -52,7 +52,7 @@
     "integrityHash"
   ],
   "properties": {
-    "schemaVersion": {"const": "1.0"},
+    "schemaVersion": {"enum": ["1.0", "1.1"]},
     "runId": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
@@ -90,7 +90,8 @@
       "properties": {
         "agent": {"$ref": "#/$defs/safeName200"},
         "verifier": {"$ref": "#/$defs/safeName200"},
-        "trace-integrity": {"$ref": "#/$defs/safeName200"}
+        "trace-integrity": {"$ref": "#/$defs/safeName200"},
+        "model-adapter": {"$ref": "#/$defs/safeName200"}
       },
       "propertyNames": {"$ref": "#/$defs/safeName200"},
       "additionalProperties": {"$ref": "#/$defs/safeName200"}
@@ -180,5 +181,46 @@
     "latencyMs": {"type": "integer", "minimum": 0, "maximum": 86400000},
     "integrityProfile": {"const": "emergeos-length-prefixed-sha256-v1"},
     "integrityHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"schemaVersion": {"const": "1.1"}},
+        "required": ["schemaVersion"]
+      },
+      "then": {
+        "properties": {
+          "task": {
+            "allOf": [
+              {"$ref": "urn:emergeos:schema:v1:task-envelope"},
+              {
+                "type": "object",
+                "properties": {"schemaVersion": {"const": "1.1"}}
+              }
+            ]
+          },
+          "componentVersions": {
+            "type": "object",
+            "required": ["model-adapter"],
+            "properties": {
+              "model-adapter": {"$ref": "#/$defs/safeName200"}
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "task": {
+            "allOf": [
+              {"$ref": "urn:emergeos:schema:v1:task-envelope"},
+              {
+                "type": "object",
+                "properties": {"schemaVersion": {"const": "1.0"}}
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

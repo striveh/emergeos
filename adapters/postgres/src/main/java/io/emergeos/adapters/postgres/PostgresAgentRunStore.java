@@ -36,6 +36,7 @@ public final class PostgresAgentRunStore implements AgentRunStore {
       bundle_hash, trace_root_hash, last_event_sequence,
       resolved_model, agent_version, verifier_version, harness_version,
       tool_registry_version, policy_version, state_version, context_policy_version,
+      model_provider, model_requested, pricing_profile,
       cost_usd, token_count, latency_ms, failure_attribution, started_at, completed_at
       """;
 
@@ -79,11 +80,13 @@ public final class PostgresAgentRunStore implements AgentRunStore {
                 INSERT INTO agent_runs (
                     principal_id, run_id, task_id, lifecycle_status, task_envelope,
                     tool_registry_version, policy_version, state_version,
-                    context_policy_version, started_at
+                    context_policy_version, model_provider, model_requested,
+                    pricing_profile, started_at
                 ) VALUES (
                     :principalId, :runId, :taskId, 'RUNNING', CAST(:taskJson AS jsonb),
                     :toolRegistryVersion, :policyVersion, :stateVersion,
-                    :contextPolicyVersion, :startedAt
+                    :contextPolicyVersion, :modelProvider, :modelRequested,
+                    :pricingProfile, :startedAt
                 )
                 ON CONFLICT (principal_id, run_id) DO NOTHING
                 """)
@@ -95,6 +98,9 @@ public final class PostgresAgentRunStore implements AgentRunStore {
             .param("policyVersion", running.task().policyVersion())
             .param("stateVersion", running.task().stateVersion())
             .param("contextPolicyVersion", running.task().contextPolicyVersion())
+            .param("modelProvider", running.task().modelProvider(), Types.VARCHAR)
+            .param("modelRequested", running.task().modelRequested(), Types.VARCHAR)
+            .param("pricingProfile", running.task().pricingProfile(), Types.VARCHAR)
             .param("startedAt", Timestamp.from(running.startedAt()))
             .update();
     if (inserted == 1) {
@@ -287,7 +293,10 @@ public final class PostgresAgentRunStore implements AgentRunStore {
         || !row.toolRegistryVersion().equals(task.toolRegistryVersion())
         || !row.policyVersion().equals(task.policyVersion())
         || !row.stateVersion().equals(task.stateVersion())
-        || !row.contextPolicyVersion().equals(task.contextPolicyVersion())) {
+        || !row.contextPolicyVersion().equals(task.contextPolicyVersion())
+        || !Objects.equals(row.modelProvider(), task.modelProvider())
+        || !Objects.equals(row.modelRequested(), task.modelRequested())
+        || !Objects.equals(row.pricingProfile(), task.pricingProfile())) {
       throw new AgentRunIntegrityException();
     }
     AgentRunLifecycle lifecycle = AgentRunLifecycle.valueOf(row.lifecycleStatus());
@@ -459,6 +468,9 @@ public final class PostgresAgentRunStore implements AgentRunStore {
         resultSet.getString("policy_version"),
         resultSet.getString("state_version"),
         resultSet.getString("context_policy_version"),
+        resultSet.getString("model_provider"),
+        resultSet.getString("model_requested"),
+        resultSet.getString("pricing_profile"),
         resultSet.getBigDecimal("cost_usd"),
         resultSet.getLong("token_count"),
         resultSet.getLong("latency_ms"),
@@ -515,6 +527,9 @@ public final class PostgresAgentRunStore implements AgentRunStore {
       String policyVersion,
       String stateVersion,
       String contextPolicyVersion,
+      String modelProvider,
+      String modelRequested,
+      String pricingProfile,
       java.math.BigDecimal costUsd,
       long tokenCount,
       long latencyMs,

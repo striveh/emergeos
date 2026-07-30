@@ -27,6 +27,9 @@ public record TaskEnvelope(
     int maxToolCalls,
     long deadlineMs,
     BigDecimal budgetUsd,
+    String modelProvider,
+    String modelRequested,
+    String pricingProfile,
     String idempotencyKey,
     String policyVersion,
     String stateVersion,
@@ -39,8 +42,8 @@ public record TaskEnvelope(
 
   public TaskEnvelope {
     ContractText.require(schemaVersion, "schemaVersion", ContractText.MAX_NAME_LENGTH);
-    if (!"1.0".equals(schemaVersion)) {
-      throw new IllegalArgumentException("TaskEnvelope supports schemaVersion 1.0");
+    if (!Set.of("1.0", "1.1").contains(schemaVersion)) {
+      throw new IllegalArgumentException("TaskEnvelope supports schemaVersion 1.0 and 1.1");
     }
     requireId(id, "id");
     requireOptionalId(parentId, "parentId");
@@ -65,6 +68,13 @@ public record TaskEnvelope(
     ContractValueDomains.requireExecutionLimit(maxToolCalls, "maxToolCalls");
     ContractValueDomains.requireDuration(deadlineMs, "deadlineMs", false);
     ContractValueDomains.requireUsd(budgetUsd, "budgetUsd");
+    verifyModelBinding(
+        schemaVersion,
+        modelProvider,
+        modelRequested,
+        pricingProfile,
+        idempotencyKey,
+        environmentSnapshotRef);
     delegationChain = ContractText.copyStrings(delegationChain, "delegationChain");
     inputRefs = ContractText.copyStrings(inputRefs, "inputRefs");
     evidenceRefs = ContractText.copyStrings(evidenceRefs, "evidenceRefs");
@@ -93,6 +103,46 @@ public record TaskEnvelope(
   private static void requireOptionalId(String value, String name) {
     if (value != null) {
       requireId(value, name);
+    }
+  }
+
+  private static void verifyModelBinding(
+      String schemaVersion,
+      String modelProvider,
+      String modelRequested,
+      String pricingProfile,
+      String idempotencyKey,
+      String environmentSnapshotRef) {
+    if ("1.0".equals(schemaVersion)) {
+      if (modelProvider != null || modelRequested != null || pricingProfile != null) {
+        throw new IllegalArgumentException(
+            "TaskEnvelope 1.0 cannot carry a model execution binding");
+      }
+      return;
+    }
+    ContractText.require(
+        modelProvider, "modelProvider", ContractText.MAX_NAME_LENGTH);
+    ContractText.require(
+        modelRequested, "modelRequested", ContractText.MAX_MODEL_LENGTH);
+    ContractText.require(
+        pricingProfile, "pricingProfile", ContractText.MAX_NAME_LENGTH);
+    if (!modelProvider.matches("[a-z][a-z0-9._-]{0,127}")) {
+      throw new IllegalArgumentException("modelProvider must be a stable lowercase slug");
+    }
+    if (!modelRequested.matches("[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}")) {
+      throw new IllegalArgumentException("modelRequested is outside the safe model domain");
+    }
+    if (!pricingProfile.matches("[a-z][a-z0-9._-]{0,199}")) {
+      throw new IllegalArgumentException("pricingProfile must be a stable lowercase slug");
+    }
+    if (idempotencyKey == null) {
+      throw new IllegalArgumentException(
+          "TaskEnvelope 1.1 requires a server-owned idempotencyKey");
+    }
+    if (environmentSnapshotRef == null
+        || !environmentSnapshotRef.matches("environment://sha256:[a-f0-9]{64}")) {
+      throw new IllegalArgumentException(
+          "TaskEnvelope 1.1 requires a content-addressed environment snapshot");
     }
   }
 
