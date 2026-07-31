@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/** Exact server-owned profile for Pack007's single read-only Worker. */
+/** Exact server-owned profile for Pack007's offline read-only Worker. */
 public record ReadOnlyWorkerExecutionProfile(
     String id,
     String registryVersion,
@@ -26,7 +26,8 @@ public record ReadOnlyWorkerExecutionProfile(
     String verifierVersion,
     String harnessVersion,
     String expectedContextPolicyVersion,
-    String expectedToolRegistryVersion) {
+    String expectedToolRegistryVersion)
+    implements ReadOnlyWorkerProfile {
 
   public static final String REGISTRY_VERSION = "agent-workers-v1";
   public static final String WORKER_NAME = "article-draft.read-v1";
@@ -79,6 +80,11 @@ public record ReadOnlyWorkerExecutionProfile(
         "agent-tools-v2");
   }
 
+  @Override
+  public long deadlineMs() {
+    return maxDeadlineMs;
+  }
+
   public String validatePreparation(
       TaskEnvelope parent,
       WorkerHandoffRequest request,
@@ -111,6 +117,24 @@ public record ReadOnlyWorkerExecutionProfile(
       throw new IllegalArgumentException(
           "parent Task violates the read-only Worker profile: " + rejection);
     }
+  }
+
+  @Override
+  public void requireParentProfileBinding(
+      AgentExecutionProfile parentProfile) {
+    Objects.requireNonNull(parentProfile, "parentProfile");
+    if (!parentExecutionProfile().equals(parentProfile)
+        || !expectedToolRegistryVersion.equals(
+            parentProfile.toolRegistryVersion())) {
+      throw new IllegalArgumentException(
+          "parent execution profile does not bind the Pack007 Worker");
+    }
+  }
+
+  @Override
+  public AgentExecutionProfile parentExecutionProfile() {
+    return AgentExecutionProfile.readOnlyWorkerFakeV1(
+        expectedContextPolicyVersion);
   }
 
   public TaskEnvelope newChildTask(

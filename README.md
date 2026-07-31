@@ -96,6 +96,21 @@ PUBLIC synthetic control、context-policy drift、PostgreSQL constraint、真实
 process-kill 和两个 fresh JVM read-back 已形成可重放证据。这不是通用 multi-agent、
 parallel Worker、checkpoint/resume、lease/fencing、live model、write-capable Worker
 或用户价值证明。
+Pack008 继续把 OpenAI model route 收缩到 exact child Worker：parent 仍是
+non-model-bound Fake Conductor、没有 Tool authority；child Task 1.1 单独绑定
+model/pricing/environment/profile identity。因为 parent 不产生 provider usage，
+其 Result 的 cost/token 必须与唯一 child exact-equal，不能同步重算出额外计量。
+独立 Eval CLI 新增显式
+`--worker-preflight`，只核验 hash-frozen PUBLIC synthetic graph，保持零 key read、
+无 credential/client/model/provider invocation construction path、零 Run/marker；
+指定 local HTTP sentinel 收到 0 request，但这不是 system-wide socket
+instrumentation。test-only integration 才用 process-local graph permit 与 loopback
+`HttpServer`。V6 PostgreSQL reader 可同时解释 Pack007 与
+Pack008 terminal truth，并拒绝 registration-order fallback。Pack008 目前没有
+live execute route、durable graph marker/journal、fresh-JVM/process-kill 或普通 API
+wiring，不能把这项 baseline 描述成真实模型已经运行。设计与证据边界见
+[RFC-0005](./docs/rfcs/0005-model-bound-read-only-worker-eval-baseline.md) 与
+[Pack008 Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-model-bound-read-only-worker-baseline.md)。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
@@ -164,6 +179,10 @@ npm ci
 
 # 默认只做 zero-egress preflight；不会读取 OPENAI_API_KEY
 java -jar apps/eval-runner/target/emerge-eval-runner-0.1.0-SNAPSHOT.jar
+
+# Pack008 child-only model Worker 也只做 zero-egress preflight；没有 execute route
+java -jar apps/eval-runner/target/emerge-eval-runner-0.1.0-SNAPSHOT.jar \
+  --worker-preflight
 
 # 在临时 owner home 执行 fixed Pack 004 并由 fresh invocation 只读重放
 comparison_home=$(mktemp -d /tmp/emerge-comparison.XXXXXX)
@@ -309,7 +328,7 @@ Manifestation 仍只写入应用进程内存中的草稿回执。独立 local Ac
 
 ```text
 apps/api/                 HTTP 入口与依赖装配
-apps/eval-runner/         隔离 synthetic model Eval；默认 zero-egress，live 路径有 one-shot Gate
+apps/eval-runner/         隔离 synthetic model Eval；Pack003 default/execute 与 Pack008 preflight 分离
 apps/offline-harness-runner/ 固定 Pack 004 comparison、canonical durable report、packaged CLI 与独立 replay verifier
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例、AgentKernel 与端口
@@ -317,7 +336,7 @@ adapters/inmemory/        Fake Conductor/Worker、有限 Agent loop 与 Offline 
 adapters/postgres/        Capture、Artifact、Action、AgentRun/Trace/WorkerResult 的 PostgreSQL 适配器
 adapters/openai/          隔离 Responses adapter；已接 Eval Runner、未接产品 API，当前无 live receipt
 contracts/                跨语言 JSON Schema
-evals/                    Pack 001–007 合成任务、Harness 对照与故障回归证据
+evals/                    Pack 001–008 合成任务、Harness 对照与故障回归证据
 docs/                     产品、架构、研究、运营和共同治理
 ```
 

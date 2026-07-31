@@ -290,6 +290,115 @@ class AgentDraftServiceTest {
   }
 
   @Test
+  void modelBoundWorkerParentCannotInflateVerifiedChildCost() {
+    assertModelBoundWorkerParentUsageRejected(
+        new BigDecimal("0.001001"), 10);
+  }
+
+  @Test
+  void modelBoundWorkerParentCannotInflateVerifiedChildTokens() {
+    assertModelBoundWorkerParentUsageRejected(
+        new BigDecimal("0.001000"), 11);
+  }
+
+  private static void assertModelBoundWorkerParentUsageRejected(
+      BigDecimal parentCost, long parentTokens) {
+    String captureRef = "capture://" + CAPTURE_ID;
+    String childRef = "agent-run://pack008-inflated-usage-child";
+    String content = "Model-bound Worker 的计量只能由 parent 原样聚合。";
+    String contentHash = IntegrityHashes.utf8ContentHash(content);
+    BigDecimal childCost = new BigDecimal("0.001000");
+    long childTokens = 10;
+    ModelBoundReadOnlyWorkerExecutionProfile worker =
+        pack008WorkerProfile();
+    AgentExecutionProfile parentProfile =
+        AgentExecutionProfile.readOnlyWorkerModelV1(worker);
+    AgentKernel kernel =
+        workerBoundKernel(
+            parentProfile,
+            worker,
+            (context, cancellation) ->
+                new AgentRunOutcome(
+                    RunStatus.SUCCEEDED,
+                    new AgentDraftProposal(content, List.of(captureRef)),
+                    List.of(captureRef),
+                    List.of(
+                        new AgentTraceEvent(
+                            1,
+                            AgentTraceEventType.MODEL_STEP,
+                            null,
+                            "COMPLETED",
+                            "task://" + context.task().id()),
+                        new AgentTraceEvent(
+                            2,
+                            AgentTraceEventType.HANDOFF_REQUEST,
+                            null,
+                            "REQUESTED",
+                            childRef),
+                        new AgentTraceEvent(
+                            3,
+                            AgentTraceEventType.HANDOFF_RESULT,
+                            null,
+                            "SUCCEEDED",
+                            childRef),
+                        new AgentTraceEvent(
+                            4,
+                            AgentTraceEventType.MODEL_STEP,
+                            null,
+                            "COMPLETED",
+                            "task://" + context.task().id()),
+                        new AgentTraceEvent(
+                            5,
+                            AgentTraceEventType.STRUCTURED_FINAL,
+                            null,
+                            "PROPOSED",
+                            "proposal://sha256:" + contentHash)),
+                    "fake-pack008-conductor-v1",
+                    parentCost,
+                    parentTokens,
+                    1,
+                    null,
+                    List.of(
+                        new AgentHandoffObservation(
+                            childRef,
+                            "a".repeat(64),
+                            "worker-result://pack008-inflated-usage-child",
+                            "b".repeat(64),
+                            "proposal://sha256:" + contentHash,
+                            contentHash,
+                            List.of(captureRef),
+                            RunStatus.SUCCEEDED,
+                            childCost,
+                            childTokens))));
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+    AgentDraftService service =
+        new AgentDraftService(
+            kernel,
+            runs,
+            new FixedCaptureStore(capture(DataClass.PUBLIC)),
+            prefix -> prefix + "-test",
+            Clock.fixed(
+                Instant.parse("2026-07-30T00:00:00Z"),
+                ZoneOffset.UTC),
+            parentProfile,
+            worker,
+            exactPermit(parentProfile));
+
+    AgentDraftOutcome outcome =
+        service.draft(
+            new AgentDraftCommand(
+                PRINCIPAL,
+                CAPTURE_ID,
+                "Create a synthetic public draft"));
+
+    assertEquals(RunStatus.FAILED, outcome.result().status());
+    assertEquals(
+        "UNSAFE_HANDOFF_OUTCOME", outcome.result().failureReason());
+    assertEquals(0, artifacts.createCalls);
+  }
+
+  @Test
   void forgedPostRequestRejectionMappingCannotBecomeDurableTruth() {
     AgentExecutionProfile profile =
         AgentExecutionProfile.readOnlyWorkerFakeV1();
@@ -1523,6 +1632,25 @@ class AgentDraftServiceTest {
         DataClass.PUBLIC);
   }
 
+  private static ModelBoundReadOnlyWorkerExecutionProfile
+      pack008WorkerProfile() {
+    return ModelBoundReadOnlyWorkerExecutionProfile.pack008OpenAiV1(
+        new PricingProfile(
+            "pack008-core-openai-v1",
+            "openai.responses",
+            "gpt-5.6",
+            5_000,
+            500,
+            30_000),
+        "openai-responses-v1-openai-java-4.43.0",
+        "f".repeat(64),
+        "environment://sha256:" + "e".repeat(64),
+        new HarnessExperiment("openai-worker-h0", 1),
+        1_000,
+        200,
+        new BigDecimal("0.022000"));
+  }
+
   private static AgentExecutionProfile copyWithVerifier(
       AgentExecutionProfile source, String verifierVersion) {
     return new AgentExecutionProfile(
@@ -1577,6 +1705,13 @@ class AgentDraftServiceTest {
     ReadOnlyWorkerExecutionProfile worker =
         ReadOnlyWorkerExecutionProfile.pack007FakeV1(
             profile.contextPolicyVersion());
+    return workerBoundKernel(profile, worker, delegate);
+  }
+
+  private static AgentKernel workerBoundKernel(
+      AgentExecutionProfile profile,
+      ReadOnlyWorkerProfile worker,
+      AgentKernel delegate) {
     return new AgentKernel() {
       @Override
       public AgentRunOutcome run(

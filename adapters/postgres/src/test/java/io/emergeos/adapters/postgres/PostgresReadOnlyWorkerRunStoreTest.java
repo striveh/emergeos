@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.emergeos.contracts.AgentTraceEntry;
 import io.emergeos.contracts.AgentTraceEnvelope;
 import io.emergeos.contracts.DataClass;
+import io.emergeos.contracts.HarnessExperiment;
 import io.emergeos.contracts.HarnessRunBundle;
 import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.ResourceBinding;
@@ -17,7 +18,11 @@ import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.contracts.TraceEventType;
 import io.emergeos.contracts.WorkerResultEnvelope;
+import io.emergeos.core.application.AgentExecutionProfile;
+import io.emergeos.core.application.ModelBoundReadOnlyWorkerExecutionProfile;
+import io.emergeos.core.application.PricingProfile;
 import io.emergeos.core.application.ReadOnlyWorkerExecutionProfile;
+import io.emergeos.core.application.ReadOnlyWorkerProfileRegistry;
 import io.emergeos.core.domain.AgentRun;
 import io.emergeos.core.domain.AgentRunLifecycle;
 import io.emergeos.core.domain.ArtifactLineage;
@@ -35,7 +40,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -167,6 +174,392 @@ class PostgresReadOnlyWorkerRunStoreTest {
   }
 
   @Test
+  void freshRegistryReadsHistoricalPack007AndPack008GraphsFromSameDatabase() {
+    Pack007 pack007 = fixture();
+    PostgresAgentRunStore pack007Store = store();
+    AgentRunContext parent007 =
+        AgentRunContext.fromRunning(
+            pack007Store.start(pack007.parentRunning()));
+    pack007Store.startWorker(parent007, pack007.childRunning());
+    pack007Store.completeWorker(
+        parent007, pack007.childTerminal(), pack007.workerResult());
+    pack007Store.complete(pack007.parentTerminal(), pack007.artifact());
+
+    Pack008 pack008 = pack008Fixture();
+    ReadOnlyWorkerProfileRegistry forward =
+        ReadOnlyWorkerProfileRegistry.of(
+            WORKER_PROFILE, pack008.profile());
+    PostgresAgentRunStore pack008Store = registryStore(forward);
+    AgentRunContext parent008 =
+        AgentRunContext.fromRunning(
+            pack008Store.start(pack008.parentRunning()));
+    pack008Store.startWorker(parent008, pack008.childRunning());
+    pack008Store.completeWorker(
+        parent008, pack008.childTerminal(), pack008.workerResult());
+    PostgresAgentRunStore crashGapReader =
+        registryStore(
+            ReadOnlyWorkerProfileRegistry.of(
+                pack008.profile(), WORKER_PROFILE));
+    DatabaseSnapshot gapBefore = DatabaseSnapshot.capture(jdbc);
+    assertEquals(
+        AgentRunLifecycle.RUNNING,
+        crashGapReader
+            .findOwned(
+                PRINCIPAL, pack008.parentRunning().runId())
+            .orElseThrow()
+            .lifecycle());
+    assertEquals(
+        pack008.childTerminal(),
+        crashGapReader
+            .findOwned(
+                PRINCIPAL, pack008.childRunning().runId())
+            .orElseThrow());
+    assertEquals(
+        pack008.workerResult(),
+        crashGapReader
+            .findWorkerOwned(
+                parent008, pack008.childRunning().runId())
+            .orElseThrow()
+            .workerResult());
+    assertEquals(gapBefore, DatabaseSnapshot.capture(jdbc));
+    crashGapReader.complete(
+        pack008.parentTerminal(), pack008.artifact());
+
+    DatabaseSnapshot before = DatabaseSnapshot.capture(jdbc);
+    PostgresAgentRunStore restarted =
+        registryStore(
+            ReadOnlyWorkerProfileRegistry.of(
+                pack008.profile(), WORKER_PROFILE));
+
+    assertEquals(
+        pack007.parentTerminal(),
+        restarted
+            .findOwned(PRINCIPAL, pack007.parentRunning().runId())
+            .orElseThrow());
+    assertEquals(
+        pack007.childTerminal(),
+        restarted
+            .findOwned(PRINCIPAL, pack007.childRunning().runId())
+            .orElseThrow());
+    assertEquals(
+        pack008.parentTerminal(),
+        restarted
+            .findOwned(PRINCIPAL, pack008.parentRunning().runId())
+            .orElseThrow());
+    assertEquals(
+        pack008.childTerminal(),
+        restarted
+            .findOwned(PRINCIPAL, pack008.childRunning().runId())
+            .orElseThrow());
+    assertEquals(
+        pack008.workerResult(),
+        restarted
+            .findWorkerOwned(
+                parent008, pack008.childRunning().runId())
+            .orElseThrow()
+            .workerResult());
+    assertEquals(before, DatabaseSnapshot.capture(jdbc));
+    assertEquals(4L, count("agent_runs"));
+    assertEquals(2L, count("agent_worker_results"));
+    assertEquals(2L, count("artifacts"));
+
+    assertNull(
+        jdbc.sql(
+                """
+                SELECT model_provider
+                FROM agent_runs
+                WHERE principal_id = :principalId
+                  AND run_id = :runId
+                """)
+            .param("principalId", PRINCIPAL)
+            .param("runId", pack008.parentRunning().runId())
+            .query(String.class)
+            .optional()
+            .orElse(null));
+    assertEquals(
+        pack008.profile().modelProvider(),
+        jdbc.sql(
+                """
+                SELECT model_provider
+                FROM agent_runs
+                WHERE principal_id = :principalId
+                  AND run_id = :runId
+                """)
+            .param("principalId", PRINCIPAL)
+            .param("runId", pack008.childRunning().runId())
+            .query(String.class)
+            .single());
+    assertThrows(
+        AgentRunIntegrityException.class,
+        () ->
+            store()
+                .findOwned(
+                    PRINCIPAL, pack008.parentRunning().runId()));
+    assertThrows(
+        AgentRunIntegrityException.class,
+        () ->
+            registryStore(
+                    ReadOnlyWorkerProfileRegistry.of(
+                        pack008.profile()))
+                .findOwned(
+                    PRINCIPAL, pack007.parentRunning().runId()));
+  }
+
+  @Test
+  void pack008ParentCannotClaimChildModelRouteOrDriftExperiment() {
+    Pack008 pack008 = pack008Fixture();
+    PostgresAgentRunStore store =
+        registryStore(
+            ReadOnlyWorkerProfileRegistry.of(
+                WORKER_PROFILE, pack008.profile()));
+    AgentRunContext parent =
+        AgentRunContext.fromRunning(
+            store.start(pack008.parentRunning()));
+    store.startWorker(parent, pack008.childRunning());
+    store.completeWorker(
+        parent, pack008.childTerminal(), pack008.workerResult());
+
+    Map<String, String> expanded =
+        new LinkedHashMap<>(
+            pack008
+                .parentTerminal()
+                .bundle()
+                .componentVersions());
+    expanded.put(
+        "model-adapter", "forbidden-parent-model-route");
+    AgentRun expandedParent =
+        withParentBundle(
+            pack008.parentTerminal(),
+            pack008.parentTerminal().bundle().experiment(),
+            expanded);
+    AgentRun driftedExperiment =
+        withParentBundle(
+            pack008.parentTerminal(),
+            new HarnessExperiment("openai-worker-drift", 1),
+            pack008
+                .parentTerminal()
+                .bundle()
+                .componentVersions());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> store.complete(expandedParent, pack008.artifact()));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            store.complete(
+                driftedExperiment, pack008.artifact()));
+    assertEquals(0L, count("artifacts"));
+    assertEquals(
+        AgentRunLifecycle.RUNNING,
+        registryStore(
+                ReadOnlyWorkerProfileRegistry.of(
+                    pack008.profile(), WORKER_PROFILE))
+            .findOwned(
+                PRINCIPAL, pack008.parentRunning().runId())
+            .orElseThrow()
+            .lifecycle());
+  }
+
+  @Test
+  void pack008RejectsCoherentlyRehashedParentCostInflation() {
+    Pack008 pack008 = pack008Fixture();
+    assertPack008ParentUsageRejected(
+        pack008,
+        pack008
+            .childTerminal()
+            .result()
+            .costUsd()
+            .add(new BigDecimal("0.000001")),
+        pack008.childTerminal().result().tokenCount());
+  }
+
+  @Test
+  void pack008RejectsCoherentlyRehashedParentTokenInflation() {
+    Pack008 pack008 = pack008Fixture();
+    assertPack008ParentUsageRejected(
+        pack008,
+        pack008.childTerminal().result().costUsd(),
+        pack008.childTerminal().result().tokenCount() + 1);
+  }
+
+  private void assertPack008ParentUsageRejected(
+      Pack008 pack008, BigDecimal parentCost, long parentTokens) {
+    PostgresAgentRunStore store =
+        registryStore(
+            ReadOnlyWorkerProfileRegistry.of(
+                WORKER_PROFILE, pack008.profile()));
+    AgentRunContext parent =
+        AgentRunContext.fromRunning(
+            store.start(pack008.parentRunning()));
+    store.startWorker(parent, pack008.childRunning());
+    store.completeWorker(
+        parent, pack008.childTerminal(), pack008.workerResult());
+    AgentRun inflatedParent =
+        withUsage(
+            pack008.parentTerminal(),
+            parentCost,
+            parentTokens);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> store.complete(inflatedParent, pack008.artifact()));
+    assertEquals(0L, count("artifacts"));
+    assertEquals(
+        AgentRunLifecycle.RUNNING,
+        store
+            .findOwned(PRINCIPAL, pack008.parentRunning().runId())
+            .orElseThrow()
+            .lifecycle());
+  }
+
+  @Test
+  void freshStoreRejectsCoherentlyTamperedPack008ParentCost()
+      throws Exception {
+    assertFreshStoreRejectsPack008ParentUsageTamper(true);
+  }
+
+  @Test
+  void freshStoreRejectsCoherentlyTamperedPack008ParentTokens()
+      throws Exception {
+    assertFreshStoreRejectsPack008ParentUsageTamper(false);
+  }
+
+  private void assertFreshStoreRejectsPack008ParentUsageTamper(
+      boolean inflateCost) throws Exception {
+    Pack008 pack008 = pack008Fixture();
+    ReadOnlyWorkerProfileRegistry registry =
+        ReadOnlyWorkerProfileRegistry.of(
+            WORKER_PROFILE, pack008.profile());
+    PostgresAgentRunStore writer = registryStore(registry);
+    AgentRunContext parent =
+        AgentRunContext.fromRunning(
+            writer.start(pack008.parentRunning()));
+    writer.startWorker(parent, pack008.childRunning());
+    writer.completeWorker(
+        parent, pack008.childTerminal(), pack008.workerResult());
+    writer.complete(pack008.parentTerminal(), pack008.artifact());
+    BigDecimal parentCost =
+        inflateCost
+            ? pack008
+                .childTerminal()
+                .result()
+                .costUsd()
+                .add(new BigDecimal("0.000001"))
+            : pack008.childTerminal().result().costUsd();
+    long parentTokens =
+        inflateCost
+            ? pack008.childTerminal().result().tokenCount()
+            : pack008.childTerminal().result().tokenCount() + 1;
+    AgentRun tampered =
+        withUsage(
+            pack008.parentTerminal(), parentCost, parentTokens);
+    jdbc.sql(
+            """
+            UPDATE agent_runs
+            SET result_envelope = CAST(:resultJson AS jsonb),
+                bundle = CAST(:bundleJson AS jsonb),
+                bundle_hash = :bundleHash,
+                cost_usd = :costUsd,
+                token_count = :tokenCount
+            WHERE principal_id = :principalId
+              AND run_id = :runId
+            """)
+        .param(
+            "resultJson",
+            JSON.writeValueAsString(tampered.result()))
+        .param(
+            "bundleJson",
+            JSON.writeValueAsString(tampered.bundle()))
+        .param("bundleHash", tampered.bundle().integrityHash())
+        .param("costUsd", tampered.result().costUsd())
+        .param("tokenCount", tampered.result().tokenCount())
+        .param("principalId", PRINCIPAL)
+        .param("runId", pack008.parentRunning().runId())
+        .update();
+    DatabaseSnapshot before = DatabaseSnapshot.capture(jdbc);
+    PostgresAgentRunStore reader =
+        registryStore(
+            ReadOnlyWorkerProfileRegistry.of(
+                pack008.profile(), WORKER_PROFILE));
+
+    assertThrows(
+        AgentRunIntegrityException.class,
+        () ->
+            reader.findOwned(
+                PRINCIPAL, pack008.parentRunning().runId()));
+    assertThrows(
+        AgentRunIntegrityException.class,
+        () ->
+            reader.findOwned(
+                PRINCIPAL, pack008.childRunning().runId()));
+    assertThrows(
+        AgentRunIntegrityException.class,
+        () ->
+            reader.findWorkerOwned(
+                parent, pack008.childRunning().runId()));
+    assertEquals(before, DatabaseSnapshot.capture(jdbc));
+  }
+
+  @Test
+  void terminalParentProfileDriftFailsOnEveryVerifiedReadSurface() {
+    Pack007 fixture = fixture();
+    PostgresAgentRunStore writer = store();
+    AgentRunContext parent =
+        AgentRunContext.fromRunning(
+            writer.start(fixture.parentRunning()));
+    writer.startWorker(parent, fixture.childRunning());
+    writer.completeWorker(
+        parent, fixture.childTerminal(), fixture.workerResult());
+    writer.complete(fixture.parentTerminal(), fixture.artifact());
+
+    AgentRun driftedParent =
+        withParentBundle(
+            fixture.parentTerminal(),
+            new HarnessExperiment("pack007-profile-drift", 1),
+            fixture
+                .parentTerminal()
+                .bundle()
+                .componentVersions());
+    jdbc.sql(
+            """
+            UPDATE agent_runs
+            SET bundle = CAST(:bundleJson AS jsonb),
+                bundle_hash = :bundleHash
+            WHERE principal_id = :principalId
+              AND run_id = :runId
+            """)
+        .param(
+            "bundleJson",
+            JSON.writeValueAsString(driftedParent.bundle()))
+        .param(
+            "bundleHash",
+            driftedParent.bundle().integrityHash())
+        .param("principalId", PRINCIPAL)
+        .param("runId", fixture.parentRunning().runId())
+        .update();
+    DatabaseSnapshot before = DatabaseSnapshot.capture(jdbc);
+    PostgresAgentRunStore reader = store();
+
+    assertThrows(
+        AgentRunIntegrityException.class,
+        () ->
+            reader.findOwned(
+                PRINCIPAL, fixture.parentRunning().runId()));
+    assertThrows(
+        AgentRunIntegrityException.class,
+        () ->
+            reader.findOwned(
+                PRINCIPAL, fixture.childRunning().runId()));
+    assertThrows(
+        AgentRunIntegrityException.class,
+        () ->
+            reader.findWorkerOwned(
+                parent, fixture.childRunning().runId()));
+    assertEquals(before, DatabaseSnapshot.capture(jdbc));
+  }
+
+  @Test
   void exactParentRunScopeRejectsSameTaskFromAnotherRun() {
     Pack007 fixture = fixture();
     PostgresAgentRunStore store = store();
@@ -217,6 +610,43 @@ class PostgresReadOnlyWorkerRunStoreTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> store.start(expandedParent));
+    assertEquals(0L, count("agent_runs"));
+  }
+
+  @Test
+  void missingOrAmbiguousHistoricalProfileFailsBeforeRunInsert() {
+    Pack007 fixture = fixture();
+    Pack008 pack008 = pack008Fixture();
+    PostgresAgentRunStore missing =
+        registryStore(
+            ReadOnlyWorkerProfileRegistry.of(pack008.profile()));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> missing.start(fixture.parentRunning()));
+    assertEquals(0L, count("agent_runs"));
+
+    ReadOnlyWorkerExecutionProfile sibling =
+        new ReadOnlyWorkerExecutionProfile(
+            WORKER_PROFILE.id(),
+            "agent-workers-v1-ambiguous",
+            WORKER_PROFILE.workerName(),
+            WORKER_PROFILE.maxModelSteps(),
+            WORKER_PROFILE.maxToolCalls(),
+            WORKER_PROFILE.maxDeadlineMs(),
+            "agent-draft-worker-v1-ambiguous",
+            WORKER_PROFILE.verifierVersion(),
+            WORKER_PROFILE.harnessVersion(),
+            WORKER_PROFILE.expectedContextPolicyVersion(),
+            WORKER_PROFILE.expectedToolRegistryVersion());
+    PostgresAgentRunStore ambiguous =
+        registryStore(
+            ReadOnlyWorkerProfileRegistry.of(
+                WORKER_PROFILE, sibling));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ambiguous.start(fixture.parentRunning()));
     assertEquals(0L, count("agent_runs"));
   }
 
@@ -649,6 +1079,420 @@ class PostgresReadOnlyWorkerRunStoreTest {
         artifact);
   }
 
+  private static Pack008 pack008Fixture() {
+    String captureId = "pack008-postgres-capture";
+    String captureRef = "capture://" + captureId;
+    String captureContent =
+        "完全虚构的公开素材：概率程序需要可审计的运行时状态。";
+    String captureSource = "synthetic-pack-008";
+    ModelBoundReadOnlyWorkerExecutionProfile profile =
+        ModelBoundReadOnlyWorkerExecutionProfile.pack008OpenAiV1(
+            new PricingProfile(
+                "pack008-postgres-openai-v1",
+                "openai.responses",
+                "gpt-5.6",
+                5_000,
+                500,
+                30_000),
+            "openai-responses-v1-openai-java-4.43.0",
+            "f".repeat(64),
+            "environment://sha256:" + "e".repeat(64),
+            new HarnessExperiment("openai-worker-h0", 1),
+            1_000,
+            200,
+            new BigDecimal("0.022000"));
+    AgentExecutionProfile parentProfile =
+        AgentExecutionProfile.readOnlyWorkerModelV1(profile);
+    TaskEnvelope parentTask =
+        parentProfile.newDraftTask(
+            "pack008-postgres-parent-task",
+            PRINCIPAL,
+            "把完全虚构的公开素材整理成一篇短文",
+            captureRef,
+            DataClass.PUBLIC);
+    TaskEnvelope childTask =
+        profile.newChildTask(
+            parentTask,
+            new WorkerHandoffRequest(
+                profile.workerName(),
+                parentTask.intent(),
+                parentTask.inputRefs()),
+            new AgentWorkerRuntime.ExecutionWindow(
+                parentTask.deadlineMs(),
+                parentTask.budgetUsd(),
+                CancellationSignal.never()),
+            "pack008-postgres-child-task");
+    Capture capture =
+        new Capture(
+            captureId,
+            PRINCIPAL,
+            "pack008-postgres-nonce",
+            CaptureRequestHashes.sha256(
+                captureContent,
+                CaptureSourceType.TEXT,
+                captureSource,
+                DataClass.PUBLIC),
+            captureContent,
+            CaptureSourceType.TEXT,
+            captureSource,
+            DataClass.PUBLIC,
+            STARTED);
+    new PostgresCaptureStore(dataSource, transactions)
+        .saveOrFindByNonce(capture);
+
+    String parentRunId = "pack008-postgres-parent-run";
+    String childRunId = "pack008-postgres-child-run";
+    String artifactId = "pack008-postgres-artifact";
+    String artifactRef = "artifact-version://" + artifactId + "/1";
+    String childRunRef = "agent-run://" + childRunId;
+    String content = "一篇完全虚构、可追溯的短文。";
+    WorkerResultEnvelope workerResult =
+        WorkerResultEnvelope.create(
+            childRunId,
+            childTask.id(),
+            childTask.outputSchema(),
+            content,
+            List.of(captureRef));
+
+    AgentTraceEnvelope childTrace =
+        traceWithTools(
+            childRunId,
+            childTask.id(),
+            List.of(
+                new ToolTraceSpec(
+                    TraceEventType.MODEL_STEP,
+                    null,
+                    "COMPLETED",
+                    "task://" + childTask.id()),
+                new ToolTraceSpec(
+                    TraceEventType.TOOL_REQUEST,
+                    "capture.read",
+                    "REQUESTED",
+                    captureRef),
+                new ToolTraceSpec(
+                    TraceEventType.TOOL_RESULT,
+                    "capture.read",
+                    "SUCCEEDED",
+                    captureRef),
+                new ToolTraceSpec(
+                    TraceEventType.MODEL_STEP,
+                    null,
+                    "COMPLETED",
+                    "task://" + childTask.id()),
+                new ToolTraceSpec(
+                    TraceEventType.STRUCTURED_FINAL,
+                    null,
+                    "PROPOSED",
+                    "proposal://sha256:"
+                        + workerResult.contentHash())));
+    String childTraceRef =
+        "/api/v1/agent-runs/" + childRunId + "/trace";
+    BigDecimal observedCost = new BigDecimal("0.001830");
+    long observedTokens = 320;
+    ResultEnvelope childResult =
+        new ResultEnvelope(
+            "1.0",
+            childRunId,
+            childTask.id(),
+            RunStatus.SUCCEEDED,
+            List.of(),
+            List.of(captureRef),
+            List.of(),
+            List.of(),
+            List.of(),
+            "gpt-5.6-2026-07-15",
+            profile.agentVersion(),
+            profile.verifierVersion(),
+            observedCost,
+            observedTokens,
+            10,
+            childTraceRef,
+            null);
+    HarnessRunBundle childBundle =
+        HarnessRunBundle.create(
+            childTask.schemaVersion(),
+            childRunId,
+            childTask.id(),
+            profile.experiment(),
+            childResult.resolvedModel(),
+            profile.harnessVersion(),
+            profile.componentVersions(),
+            childTask.environmentSnapshotRef(),
+            childTask.toolRegistryVersion(),
+            childTask,
+            childResult,
+            null,
+            childTraceRef,
+            childTrace.rootHash(),
+            List.of(),
+            List.of(),
+            List.of(
+                new ResourceBinding(
+                    ResourceRole.EVIDENCE,
+                    0,
+                    captureRef,
+                    capture.requestHash()),
+                new ResourceBinding(
+                    ResourceRole.WORKER_RESULT,
+                    0,
+                    workerResult.workerResultRef(),
+                    workerResult.integrityHash())),
+            null,
+            null,
+            childResult.status(),
+            childResult.costUsd(),
+            childResult.tokenCount(),
+            childResult.latencyMs());
+
+    AgentTraceEnvelope parentTrace =
+        traceWithTools(
+            parentRunId,
+            parentTask.id(),
+            List.of(
+                new ToolTraceSpec(
+                    TraceEventType.MODEL_STEP,
+                    null,
+                    "COMPLETED",
+                    "task://" + parentTask.id()),
+                new ToolTraceSpec(
+                    TraceEventType.HANDOFF_REQUEST,
+                    null,
+                    "REQUESTED",
+                    childRunRef),
+                new ToolTraceSpec(
+                    TraceEventType.HANDOFF_RESULT,
+                    null,
+                    "SUCCEEDED",
+                    childRunRef),
+                new ToolTraceSpec(
+                    TraceEventType.MODEL_STEP,
+                    null,
+                    "COMPLETED",
+                    "task://" + parentTask.id()),
+                new ToolTraceSpec(
+                    TraceEventType.STRUCTURED_FINAL,
+                    null,
+                    "PROPOSED",
+                    "proposal://sha256:"
+                        + workerResult.contentHash()),
+                new ToolTraceSpec(
+                    TraceEventType.ARTIFACT_COMMITTED,
+                    null,
+                    "SUCCEEDED",
+                    artifactRef)));
+    String parentTraceRef =
+        "/api/v1/agent-runs/" + parentRunId + "/trace";
+    ResultEnvelope parentResult =
+        new ResultEnvelope(
+            parentTask.schemaVersion(),
+            parentRunId,
+            parentTask.id(),
+            RunStatus.SUCCEEDED,
+            List.of(artifactRef),
+            List.of(captureRef),
+            List.of(),
+            List.of(),
+            List.of(),
+            "fake-model-v1",
+            parentProfile.agentVersion(),
+            parentProfile.verifierVersion(),
+            observedCost,
+            observedTokens,
+            11,
+            parentTraceRef,
+            null);
+    HarnessRunBundle parentBundle =
+        HarnessRunBundle.create(
+            parentTask.schemaVersion(),
+            parentRunId,
+            parentTask.id(),
+            profile.experiment(),
+            parentResult.resolvedModel(),
+            parentProfile.harnessVersion(),
+            parentProfile.componentVersions(profile),
+            parentTask.environmentSnapshotRef(),
+            parentTask.toolRegistryVersion(),
+            parentTask,
+            parentResult,
+            null,
+            parentTraceRef,
+            parentTrace.rootHash(),
+            List.of(childRunRef),
+            List.of(),
+            List.of(
+                new ResourceBinding(
+                    ResourceRole.EVIDENCE,
+                    0,
+                    captureRef,
+                    capture.requestHash()),
+                new ResourceBinding(
+                    ResourceRole.ARTIFACT,
+                    0,
+                    artifactRef,
+                    workerResult.contentHash()),
+                new ResourceBinding(
+                    ResourceRole.HANDOFF,
+                    0,
+                    childRunRef,
+                    childBundle.integrityHash())),
+            null,
+            null,
+            parentResult.status(),
+            parentResult.costUsd(),
+            parentResult.tokenCount(),
+            parentResult.latencyMs());
+
+    AgentRun parentRunning =
+        AgentRun.running(parentRunId, PRINCIPAL, parentTask, STARTED);
+    AgentRun childRunning =
+        AgentRun.running(childRunId, PRINCIPAL, childTask, STARTED);
+    AgentRun childTerminal =
+        new AgentRun(
+            childRunId,
+            PRINCIPAL,
+            childTask,
+            AgentRunLifecycle.SUCCEEDED,
+            childResult,
+            childTrace,
+            childBundle,
+            STARTED,
+            CHILD_COMPLETED);
+    AgentRun parentTerminal =
+        new AgentRun(
+            parentRunId,
+            PRINCIPAL,
+            parentTask,
+            AgentRunLifecycle.SUCCEEDED,
+            parentResult,
+            parentTrace,
+            parentBundle,
+            STARTED,
+            PARENT_COMPLETED);
+    ArtifactLineage artifact =
+        new ArtifactLineage(
+            artifactId,
+            PRINCIPAL,
+            captureId,
+            List.of(
+                new ArtifactLineageEntry(
+                    1,
+                    content,
+                    workerResult.contentHash(),
+                    null,
+                    null,
+                    PARENT_COMPLETED)));
+    return new Pack008(
+        profile,
+        parentRunning,
+        childRunning,
+        childTerminal,
+        parentTerminal,
+        workerResult,
+        artifact);
+  }
+
+  private static AgentRun withParentBundle(
+      AgentRun parent,
+      HarnessExperiment experiment,
+      Map<String, String> componentVersions) {
+    HarnessRunBundle original = parent.bundle();
+    HarnessRunBundle changed =
+        HarnessRunBundle.create(
+            original.schemaVersion(),
+            original.runId(),
+            original.taskId(),
+            experiment,
+            original.modelResolved(),
+            original.harnessVersion(),
+            componentVersions,
+            original.environmentSnapshotRef(),
+            original.toolRegistryVersion(),
+            original.task(),
+            original.result(),
+            original.workingSelfRef(),
+            original.traceRef(),
+            original.traceRootHash(),
+            original.handoffRefs(),
+            original.checkpointRefs(),
+            original.resourceBindings(),
+            original.verificationRef(),
+            original.failureAttribution(),
+            original.outcome(),
+            original.costUsd(),
+            original.tokenCount(),
+            original.latencyMs());
+    return new AgentRun(
+        parent.runId(),
+        parent.principalId(),
+        parent.task(),
+        parent.lifecycle(),
+        parent.result(),
+        parent.trace(),
+        changed,
+        parent.startedAt(),
+        parent.completedAt());
+  }
+
+  private static AgentRun withUsage(
+      AgentRun run, BigDecimal costUsd, long tokenCount) {
+    ResultEnvelope originalResult = run.result();
+    ResultEnvelope changedResult =
+        new ResultEnvelope(
+            originalResult.schemaVersion(),
+            originalResult.runId(),
+            originalResult.taskId(),
+            originalResult.status(),
+            originalResult.artifactRefs(),
+            originalResult.evidenceRefs(),
+            originalResult.claims(),
+            originalResult.uncertainty(),
+            originalResult.receiptRefs(),
+            originalResult.resolvedModel(),
+            originalResult.agentVersion(),
+            originalResult.verifierVersion(),
+            costUsd,
+            tokenCount,
+            originalResult.latencyMs(),
+            originalResult.traceRef(),
+            originalResult.failureReason());
+    HarnessRunBundle originalBundle = run.bundle();
+    HarnessRunBundle changedBundle =
+        HarnessRunBundle.create(
+            originalBundle.schemaVersion(),
+            originalBundle.runId(),
+            originalBundle.taskId(),
+            originalBundle.experiment(),
+            originalBundle.modelResolved(),
+            originalBundle.harnessVersion(),
+            originalBundle.componentVersions(),
+            originalBundle.environmentSnapshotRef(),
+            originalBundle.toolRegistryVersion(),
+            originalBundle.task(),
+            changedResult,
+            originalBundle.workingSelfRef(),
+            originalBundle.traceRef(),
+            originalBundle.traceRootHash(),
+            originalBundle.handoffRefs(),
+            originalBundle.checkpointRefs(),
+            originalBundle.resourceBindings(),
+            originalBundle.verificationRef(),
+            originalBundle.failureAttribution(),
+            originalBundle.outcome(),
+            costUsd,
+            tokenCount,
+            originalBundle.latencyMs());
+    return new AgentRun(
+        run.runId(),
+        run.principalId(),
+        run.task(),
+        run.lifecycle(),
+        changedResult,
+        run.trace(),
+        changedBundle,
+        run.startedAt(),
+        run.completedAt());
+  }
+
   private static AgentRun failedChild(Pack007 fixture) {
     TaskEnvelope task = fixture.childRunning().task();
     String runId = fixture.childRunning().runId();
@@ -822,6 +1666,26 @@ class PostgresReadOnlyWorkerRunStoreTest {
     return AgentTraceEnvelope.create("1.0", runId, taskId, events);
   }
 
+  private static AgentTraceEnvelope traceWithTools(
+      String runId, String taskId, List<ToolTraceSpec> specs) {
+    List<AgentTraceEntry> events = new ArrayList<>();
+    String root = IntegrityHashes.emptyTraceRoot();
+    for (ToolTraceSpec spec : specs) {
+      AgentTraceEntry event =
+          AgentTraceEntry.create(
+              events.size() + 1,
+              spec.type(),
+              spec.toolName(),
+              spec.status(),
+              spec.reference(),
+              root);
+      events.add(event);
+      root =
+          IntegrityHashes.nextTraceRoot(root, event.eventHash());
+    }
+    return AgentTraceEnvelope.create("1.0", runId, taskId, events);
+  }
+
   private static TaskEnvelope foreignTask(TaskEnvelope task) {
     return new TaskEnvelope(
         task.schemaVersion(),
@@ -923,6 +1787,136 @@ class PostgresReadOnlyWorkerRunStoreTest {
         WORKER_PROFILE);
   }
 
+  private static PostgresAgentRunStore registryStore(
+      ReadOnlyWorkerProfileRegistry registry) {
+    return new PostgresAgentRunStore(
+        dataSource,
+        transactions,
+        new PostgresArtifactLineageStore(dataSource, transactions),
+        registry);
+  }
+
+  private record DatabaseSnapshot(
+      List<String> captures,
+      List<String> artifacts,
+      List<String> artifactVersions,
+      List<String> actionAttempts,
+      List<String> actionAttemptTransitions,
+      List<String> actionReceipts,
+      List<String> agentRuns,
+      List<String> agentTraceEvents,
+      List<String> agentRunResourceBindings,
+      List<String> agentWorkerResults,
+      List<String> flywaySchemaHistory) {
+
+    private static DatabaseSnapshot capture(JdbcClient jdbc) {
+      return new DatabaseSnapshot(
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, capture_id, xmin::text
+              )::text
+              FROM captures
+              ORDER BY principal_id, capture_id
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, artifact_id, xmin::text
+              )::text
+              FROM artifacts
+              ORDER BY principal_id, artifact_id
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, artifact_id, version, xmin::text
+              )::text
+              FROM artifact_versions
+              ORDER BY principal_id, artifact_id, version
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, attempt_id, xmin::text
+              )::text
+              FROM action_attempts
+              ORDER BY principal_id, attempt_id
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, attempt_id, sequence, xmin::text
+              )::text
+              FROM action_attempt_transitions
+              ORDER BY principal_id, attempt_id, sequence
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, attempt_id, xmin::text
+              )::text
+              FROM action_receipts
+              ORDER BY principal_id, attempt_id
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, run_id, xmin::text
+              )::text
+              FROM agent_runs
+              ORDER BY principal_id, run_id
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, run_id, sequence, xmin::text
+              )::text
+              FROM agent_trace_events
+              ORDER BY principal_id, run_id, sequence
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, run_id, role, ordinal, xmin::text
+              )::text
+              FROM agent_run_resource_bindings
+              ORDER BY principal_id, run_id, role, ordinal
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                principal_id, child_run_id, xmin::text
+              )::text
+              FROM agent_worker_results
+              ORDER BY principal_id, child_run_id
+              """),
+          rows(
+              jdbc,
+              """
+              SELECT jsonb_build_array(
+                installed_rank, xmin::text
+              )::text
+              FROM flyway_schema_history
+              ORDER BY installed_rank
+              """));
+    }
+
+    private static List<String> rows(JdbcClient jdbc, String sql) {
+      return List.copyOf(jdbc.sql(sql).query(String.class).list());
+    }
+  }
+
   private static long count(String table) {
     return jdbc.sql("SELECT count(*) FROM " + table)
         .query(Long.class)
@@ -998,8 +1992,23 @@ class PostgresReadOnlyWorkerRunStoreTest {
       WorkerResultEnvelope workerResult,
       ArtifactLineage artifact) {}
 
+  private record Pack008(
+      ModelBoundReadOnlyWorkerExecutionProfile profile,
+      AgentRun parentRunning,
+      AgentRun childRunning,
+      AgentRun childTerminal,
+      AgentRun parentTerminal,
+      WorkerResultEnvelope workerResult,
+      ArtifactLineage artifact) {}
+
   private record TraceSpec(
       TraceEventType type, String status, String reference) {}
+
+  private record ToolTraceSpec(
+      TraceEventType type,
+      String toolName,
+      String status,
+      String reference) {}
 
   private static final class SyntheticWorkerFinalizationFailure
       extends RuntimeException {}

@@ -50,6 +50,7 @@ public final class AgentDraftService {
   private final IdGenerator ids;
   private final Clock clock;
   private final AgentExecutionProfile executionProfile;
+  private final ReadOnlyWorkerProfile workerProfile;
   private final AgentTaskAuthorizer taskAuthorizer;
   private final AgentDraftVerifier verifier;
   private final String verifierVersion;
@@ -70,6 +71,7 @@ public final class AgentDraftService {
         clock,
         executionProfile,
         legacyOfflineAuthorizer(executionProfile),
+        defaultWorkerProfile(executionProfile),
         ReferenceGroundingAgentDraftVerifier.INSTANCE);
   }
 
@@ -89,6 +91,28 @@ public final class AgentDraftService {
         clock,
         executionProfile,
         taskAuthorizer,
+        defaultWorkerProfile(executionProfile),
+        ReferenceGroundingAgentDraftVerifier.INSTANCE);
+  }
+
+  public AgentDraftService(
+      AgentKernel kernel,
+      AgentRunStore runs,
+      CaptureStore captures,
+      IdGenerator ids,
+      Clock clock,
+      AgentExecutionProfile executionProfile,
+      ReadOnlyWorkerProfile workerProfile,
+      AgentTaskAuthorizer taskAuthorizer) {
+    this(
+        kernel,
+        runs,
+        captures,
+        ids,
+        clock,
+        executionProfile,
+        taskAuthorizer,
+        workerProfile,
         ReferenceGroundingAgentDraftVerifier.INSTANCE);
   }
 
@@ -101,6 +125,28 @@ public final class AgentDraftService {
       AgentExecutionProfile executionProfile,
       AgentTaskAuthorizer taskAuthorizer,
       AgentDraftVerifier verifier) {
+    this(
+        kernel,
+        runs,
+        captures,
+        ids,
+        clock,
+        executionProfile,
+        taskAuthorizer,
+        defaultWorkerProfile(executionProfile),
+        verifier);
+  }
+
+  AgentDraftService(
+      AgentKernel kernel,
+      AgentRunStore runs,
+      CaptureStore captures,
+      IdGenerator ids,
+      Clock clock,
+      AgentExecutionProfile executionProfile,
+      AgentTaskAuthorizer taskAuthorizer,
+      ReadOnlyWorkerProfile workerProfile,
+      AgentDraftVerifier verifier) {
     this.kernel = Objects.requireNonNull(kernel, "kernel");
     this.runs = Objects.requireNonNull(runs, "runs");
     this.captures = Objects.requireNonNull(captures, "captures");
@@ -108,21 +154,23 @@ public final class AgentDraftService {
     this.clock = Objects.requireNonNull(clock, "clock");
     this.executionProfile =
         Objects.requireNonNull(executionProfile, "executionProfile");
+    this.workerProfile = workerProfile;
     this.taskAuthorizer =
         Objects.requireNonNull(taskAuthorizer, "taskAuthorizer");
     this.verifier = Objects.requireNonNull(verifier, "verifier");
     this.verifierVersion =
         Objects.requireNonNull(verifier.version(), "verifier version");
-    this.componentVersions = executionProfile.componentVersions();
+    this.componentVersions =
+        executionProfile.componentVersions(workerProfile);
     if (!executionProfile.verifierVersion().equals(verifierVersion)
         || !verifierVersion.equals(componentVersions.get("verifier"))) {
       throw new IllegalArgumentException(
           "execution profile and AgentDraftVerifier identity disagree");
     }
-    if (executionProfile.modelBound()
+    if (executionProfile.requiresExplicitAuthorization()
         && taskAuthorizer == AgentTaskAuthorizer.allowAll()) {
       throw new IllegalArgumentException(
-          "a model-bound AgentDraftService rejects the unrestricted task authorizer");
+          "an externally authorized AgentDraftService rejects the unrestricted task authorizer");
     }
     String kernelProfileId = kernel.executionProfileId();
     String kernelProfileFingerprint = kernel.executionProfileFingerprint();
@@ -136,15 +184,16 @@ public final class AgentDraftService {
           "execution profile and AgentKernel identity disagree");
     }
     if (executionProfile.workerBound()) {
-      ReadOnlyWorkerExecutionProfile worker =
-          ReadOnlyWorkerExecutionProfile.pack007FakeV1(
-              executionProfile.contextPolicyVersion());
+      ReadOnlyWorkerProfile worker =
+          Objects.requireNonNull(workerProfile, "workerProfile");
+      worker.requireParentProfileBinding(executionProfile);
       if (!worker.registryVersion().equals(kernel.workerRegistryVersion())
           || !worker.fingerprint().equals(kernel.workerProfileFingerprint())) {
         throw new IllegalArgumentException(
             "execution profile and Worker runtime identity disagree");
       }
-    } else if (kernel.workerRegistryVersion() != null
+    } else if (workerProfile != null
+        || kernel.workerRegistryVersion() != null
         || kernel.workerProfileFingerprint() != null) {
       throw new IllegalArgumentException(
           "an undeclared Worker runtime cannot be attached to this route");
@@ -180,7 +229,9 @@ public final class AgentDraftService {
     try {
       kernelRun =
           sanitizeKernelOutcome(
-              kernel.run(runContext, cancellation), task);
+              kernel.run(runContext, cancellation),
+              task,
+              workerProfile);
     } catch (RuntimeException unexpectedKernelFailure) {
       kernelRun = safeFailure("AGENT_KERNEL_FAILED");
     }
@@ -426,15 +477,26 @@ public final class AgentDraftService {
   private static AgentTaskAuthorizer legacyOfflineAuthorizer(
       AgentExecutionProfile executionProfile) {
     Objects.requireNonNull(executionProfile, "executionProfile");
-    if (executionProfile.modelBound()) {
+    if (executionProfile.requiresExplicitAuthorization()) {
       throw new IllegalArgumentException(
-          "a model-bound AgentDraftService requires an explicit task authorizer");
+          "an externally authorized AgentDraftService requires an explicit task authorizer");
     }
     return AgentTaskAuthorizer.allowAll();
   }
 
+  private static ReadOnlyWorkerProfile defaultWorkerProfile(
+      AgentExecutionProfile executionProfile) {
+    Objects.requireNonNull(executionProfile, "executionProfile");
+    return executionProfile.workerBound()
+        ? ReadOnlyWorkerExecutionProfile.pack007FakeV1(
+            executionProfile.contextPolicyVersion())
+        : null;
+  }
+
   private static AgentRunOutcome sanitizeKernelOutcome(
-      AgentRunOutcome candidate, TaskEnvelope task) {
+      AgentRunOutcome candidate,
+      TaskEnvelope task,
+      ReadOnlyWorkerProfile workerProfile) {
     if (candidate == null) {
       return safeFailure("UNSAFE_AGENT_OUTCOME");
     }
@@ -470,7 +532,8 @@ public final class AgentDraftService {
           || (!success && candidate.proposal() != null)) {
         return safeFailure("UNSAFE_AGENT_OUTCOME");
       }
-      if (!safeHandoffObservations(task, candidate)) {
+      if (!safeHandoffObservations(
+          task, candidate, workerProfile)) {
         return safeFailure("UNSAFE_HANDOFF_OUTCOME");
       }
     } catch (RuntimeException invalidAdapterOutcome) {
@@ -564,7 +627,9 @@ public final class AgentDraftService {
   }
 
   private static boolean safeHandoffObservations(
-      TaskEnvelope task, AgentRunOutcome candidate) {
+      TaskEnvelope task,
+      AgentRunOutcome candidate,
+      ReadOnlyWorkerProfile workerProfile) {
     if (candidate.handoffs().size() > 1
         || (!AgentTraceProtocol.hasReadOnlyWorkerCapability(task)
             && !candidate.handoffs().isEmpty())) {
@@ -608,8 +673,22 @@ public final class AgentDraftService {
     }
     if (!candidate.handoffs().isEmpty()) {
       var observation = candidate.handoffs().getFirst();
-      if (candidate.costUsd().compareTo(observation.childCostUsd()) < 0
-          || candidate.tokenCount() < observation.childTokenCount()) {
+      boolean exactUsage =
+          workerProfile != null
+              && workerProfile.requiresExactParentUsageAggregation();
+      if (exactUsage
+          ? candidate
+                      .costUsd()
+                      .compareTo(observation.childCostUsd())
+                  != 0
+              || candidate.tokenCount()
+                  != observation.childTokenCount()
+          : candidate
+                      .costUsd()
+                      .compareTo(observation.childCostUsd())
+                  < 0
+              || candidate.tokenCount()
+                  < observation.childTokenCount()) {
         return false;
       }
       AgentTraceEvent completion =

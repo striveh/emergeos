@@ -13,6 +13,8 @@ import io.emergeos.contracts.WorkerResultEnvelope;
 import io.emergeos.core.application.AgentExecutionProfile;
 import io.emergeos.core.application.ReadOnlyWorkerExecutionProfile;
 import io.emergeos.core.application.ReadOnlyWorkerHandoffVerifier;
+import io.emergeos.core.application.ReadOnlyWorkerProfile;
+import io.emergeos.core.application.ReadOnlyWorkerProfileRegistry;
 import io.emergeos.core.domain.AgentRun;
 import io.emergeos.core.domain.AgentRunLifecycle;
 import io.emergeos.core.domain.ArtifactLineage;
@@ -52,7 +54,7 @@ public final class PostgresAgentRunStore
   private final JdbcClient jdbc;
   private final TransactionTemplate transactions;
   private final PostgresArtifactLineageStore artifacts;
-  private final ReadOnlyWorkerExecutionProfile workerProfile;
+  private final ReadOnlyWorkerProfileRegistry workerProfiles;
   private final JsonMapper json;
   private final Runnable afterArtifactInsert;
   private final Runnable afterWorkerResultInsert;
@@ -66,9 +68,10 @@ public final class PostgresAgentRunStore
         dataSource,
         transactionManager,
         artifacts,
-        ReadOnlyWorkerExecutionProfile.pack007FakeV1());
+        ReadOnlyWorkerProfileRegistry.pack007Only());
   }
 
+  /** Pack007 binary-compatible constructor. */
   public PostgresAgentRunStore(
       DataSource dataSource,
       PlatformTransactionManager transactionManager,
@@ -78,7 +81,19 @@ public final class PostgresAgentRunStore
         dataSource,
         transactionManager,
         artifacts,
-        workerProfile,
+        ReadOnlyWorkerProfileRegistry.of(workerProfile));
+  }
+
+  public PostgresAgentRunStore(
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager,
+      PostgresArtifactLineageStore artifacts,
+      ReadOnlyWorkerProfileRegistry workerProfiles) {
+    this(
+        dataSource,
+        transactionManager,
+        artifacts,
+        workerProfiles,
         () -> {},
         () -> {},
         () -> {});
@@ -93,12 +108,13 @@ public final class PostgresAgentRunStore
         dataSource,
         transactionManager,
         artifacts,
-        ReadOnlyWorkerExecutionProfile.pack007FakeV1(),
+        ReadOnlyWorkerProfileRegistry.pack007Only(),
         afterArtifactInsert,
         () -> {},
         () -> {});
   }
 
+  /** Pack007 binary-compatible fault-injection constructor. */
   PostgresAgentRunStore(
       DataSource dataSource,
       PlatformTransactionManager transactionManager,
@@ -110,7 +126,7 @@ public final class PostgresAgentRunStore
         dataSource,
         transactionManager,
         artifacts,
-        workerProfile,
+        ReadOnlyWorkerProfileRegistry.of(workerProfile),
         afterArtifactInsert,
         afterWorkerResultInsert,
         () -> {});
@@ -120,7 +136,43 @@ public final class PostgresAgentRunStore
       DataSource dataSource,
       PlatformTransactionManager transactionManager,
       PostgresArtifactLineageStore artifacts,
+      ReadOnlyWorkerProfileRegistry workerProfiles,
+      Runnable afterArtifactInsert,
+      Runnable afterWorkerResultInsert) {
+    this(
+        dataSource,
+        transactionManager,
+        artifacts,
+        workerProfiles,
+        afterArtifactInsert,
+        afterWorkerResultInsert,
+        () -> {});
+  }
+
+  /** Pack007 binary-compatible fault-injection constructor. */
+  PostgresAgentRunStore(
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager,
+      PostgresArtifactLineageStore artifacts,
       ReadOnlyWorkerExecutionProfile workerProfile,
+      Runnable afterArtifactInsert,
+      Runnable afterWorkerResultInsert,
+      Runnable afterTerminalUpdateBeforeVerifiedRead) {
+    this(
+        dataSource,
+        transactionManager,
+        artifacts,
+        ReadOnlyWorkerProfileRegistry.of(workerProfile),
+        afterArtifactInsert,
+        afterWorkerResultInsert,
+        afterTerminalUpdateBeforeVerifiedRead);
+  }
+
+  PostgresAgentRunStore(
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager,
+      PostgresArtifactLineageStore artifacts,
+      ReadOnlyWorkerProfileRegistry workerProfiles,
       Runnable afterArtifactInsert,
       Runnable afterWorkerResultInsert,
       Runnable afterTerminalUpdateBeforeVerifiedRead) {
@@ -130,7 +182,8 @@ public final class PostgresAgentRunStore
             Objects.requireNonNull(transactionManager, "transactionManager"));
     this.transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     this.artifacts = Objects.requireNonNull(artifacts, "artifacts");
-    this.workerProfile = Objects.requireNonNull(workerProfile, "workerProfile");
+    this.workerProfiles =
+        Objects.requireNonNull(workerProfiles, "workerProfiles");
     this.afterArtifactInsert = Objects.requireNonNull(afterArtifactInsert, "afterArtifactInsert");
     this.afterWorkerResultInsert =
         Objects.requireNonNull(afterWorkerResultInsert, "afterWorkerResultInsert");
@@ -210,7 +263,8 @@ public final class PostgresAgentRunStore
       throw new IllegalArgumentException(
           "startWorker requires a RUNNING child AgentRun");
     }
-    requireWorkerParentAuthority(parent.task());
+    ReadOnlyWorkerProfile workerProfile =
+        requireWorkerParentAuthority(parent.task());
     workerProfile.requireChildBinding(parent.task(), running.task());
     if (!parent.principalId().equals(running.principalId())) {
       throw new IllegalArgumentException(
@@ -307,7 +361,13 @@ public final class PostgresAgentRunStore
       throw new IllegalArgumentException(
           "completeWorker requires a terminal child AgentRun");
     }
-    requireWorkerParentAuthority(parent.task());
+    ReadOnlyWorkerProfile workerProfile =
+        workerProfiles.requireForTerminalChild(
+            parent.task(),
+            terminal.task(),
+            terminal.bundle().experiment(),
+            terminal.bundle().harnessVersion(),
+            terminal.bundle().componentVersions());
     ReadOnlyWorkerHandoffVerifier.verifyChild(
         parent.task(), terminal, workerResult, workerProfile);
     return Objects.requireNonNull(
@@ -323,7 +383,6 @@ public final class PostgresAgentRunStore
     Objects.requireNonNull(parent, "parent");
     Objects.requireNonNull(childRunId, "childRunId");
     try {
-      requireWorkerParentAuthority(parent.task());
       Optional<StoredRun> parentStored =
           loadLocalStoredRun(
               parent.principalId(), parent.runId(), false);
@@ -340,14 +399,36 @@ public final class PostgresAgentRunStore
       StoredRun child = childStored.orElseThrow();
       requireExactChildLineage(parent, child);
       if (!child.run().lifecycle().terminal()) {
+        if (parentStored.orElseThrow().run().lifecycle().terminal()) {
+          throw new AgentRunIntegrityException();
+        }
         return Optional.empty();
       }
       WorkerResultEnvelope workerResult =
           loadWorkerResultLocal(
                   parent.principalId(), parent.runId(), childRunId)
               .orElse(null);
-      ReadOnlyWorkerHandoffVerifier.verifyChild(
-          parent.task(), child.run(), workerResult, workerProfile);
+      StoredRun durableParent = parentStored.orElseThrow();
+      if (durableParent.run().lifecycle().terminal()) {
+        ReadOnlyWorkerProfile workerProfile =
+            requireSameTerminalProfile(
+                durableParent.run(), child.run());
+        ReadOnlyWorkerHandoffVerifier.verifyPair(
+            durableParent.run(),
+            child.run(),
+            workerResult,
+            workerProfile);
+      } else {
+        ReadOnlyWorkerProfile workerProfile =
+            workerProfiles.requireForTerminalChild(
+                parent.task(),
+                child.run().task(),
+                child.run().bundle().experiment(),
+                child.run().bundle().harnessVersion(),
+                child.run().bundle().componentVersions());
+        ReadOnlyWorkerHandoffVerifier.verifyChild(
+            parent.task(), child.run(), workerResult, workerProfile);
+      }
       return Optional.of(new WorkerCompletion(child.run(), workerResult));
     } catch (AgentRunIntegrityException knownIntegrityFailure) {
       throw knownIntegrityFailure;
@@ -413,6 +494,8 @@ public final class PostgresAgentRunStore
                   terminal.runId(),
                   child.run().runId())
               .orElse(null);
+      ReadOnlyWorkerProfile workerProfile =
+          requireSameTerminalProfile(terminal, child.run());
       ReadOnlyWorkerHandoffVerifier.verifyPair(
           terminal, child.run(), workerResult, workerProfile);
     }
@@ -449,6 +532,13 @@ public final class PostgresAgentRunStore
             .orElseThrow(AgentRunConflictException::new);
     requireExactChildLineage(parent, runningChild);
     requireExactRunningTransition(terminal, runningChild, true);
+    ReadOnlyWorkerProfile workerProfile =
+        workerProfiles.requireForTerminalChild(
+            parent.task(),
+            terminal.task(),
+            terminal.bundle().experiment(),
+            terminal.bundle().harnessVersion(),
+            terminal.bundle().componentVersions());
     ReadOnlyWorkerHandoffVerifier.verifyChild(
         parent.task(), terminal, workerResult, workerProfile);
 
@@ -470,8 +560,15 @@ public final class PostgresAgentRunStore
         loadWorkerResultLocal(
                 parent.principalId(), parent.runId(), terminal.runId())
             .orElse(null);
+    ReadOnlyWorkerProfile committedProfile =
+        workerProfiles.requireForTerminalChild(
+            parent.task(),
+            committed.run().task(),
+            committed.run().bundle().experiment(),
+            committed.run().bundle().harnessVersion(),
+            committed.run().bundle().componentVersions());
     ReadOnlyWorkerHandoffVerifier.verifyChild(
-        parent.task(), committed.run(), committedResult, workerProfile);
+        parent.task(), committed.run(), committedResult, committedProfile);
     return new WorkerCompletion(committed.run(), committedResult);
   }
 
@@ -865,7 +962,15 @@ public final class PostgresAgentRunStore
           loadWorkerResultLocal(
                   run.principalId(), stored.parentRunId(), run.runId())
               .orElse(null);
+      ReadOnlyWorkerProfile workerProfile =
+          workerProfiles.requireForTerminalChild(
+              parent.run().task(),
+              run.task(),
+              run.bundle().experiment(),
+              run.bundle().harnessVersion(),
+              run.bundle().componentVersions());
       if (parent.run().lifecycle().terminal()) {
+        requireSameTerminalProfile(parent.run(), run);
         ReadOnlyWorkerHandoffVerifier.verifyPair(
             parent.run(), run, workerResult, workerProfile);
       } else {
@@ -875,8 +980,8 @@ public final class PostgresAgentRunStore
       return run;
     }
 
-    requireWorkerParentAuthorityIfPresent(run.task());
     if (!run.lifecycle().terminal()) {
+      requireWorkerParentAuthorityIfPresent(run.task());
       return run;
     }
     verifyWorkerParentProfileIfPresent(run);
@@ -903,6 +1008,8 @@ public final class PostgresAgentRunStore
         loadWorkerResultLocal(
                 run.principalId(), run.runId(), child.run().runId())
             .orElse(null);
+    ReadOnlyWorkerProfile workerProfile =
+        requireSameTerminalProfile(run, child.run());
     ReadOnlyWorkerHandoffVerifier.verifyPair(
         run, child.run(), workerResult, workerProfile);
     return run;
@@ -938,8 +1045,7 @@ public final class PostgresAgentRunStore
         || !parent.principalId().equals(child.run().principalId())) {
       throw new AgentRunIntegrityException();
     }
-    workerProfile.requireChildBinding(
-        parent.task(), child.run().task());
+    requireProfileForStoredChild(parent.task(), child.run());
   }
 
   private void requireExactStoredChildLineage(
@@ -954,9 +1060,8 @@ public final class PostgresAgentRunStore
         || !parent.run().principalId().equals(child.run().principalId())) {
       throw new AgentRunIntegrityException();
     }
-    requireWorkerParentAuthority(parent.run().task());
-    workerProfile.requireChildBinding(
-        parent.run().task(), child.run().task());
+    requireProfileForStoredChild(
+        parent.run().task(), child.run());
   }
 
   private static void requireExactRunningTransition(
@@ -973,8 +1078,9 @@ public final class PostgresAgentRunStore
     }
   }
 
-  private void requireWorkerParentAuthority(TaskEnvelope parent) {
-    workerProfile.requireParentBinding(parent);
+  private ReadOnlyWorkerProfile requireWorkerParentAuthority(
+      TaskEnvelope parent) {
+    return workerProfiles.requireForRunningParent(parent);
   }
 
   private void requireWorkerParentAuthorityIfPresent(TaskEnvelope parent) {
@@ -992,21 +1098,44 @@ public final class PostgresAgentRunStore
         .contains(AgentExecutionProfile.READ_ONLY_WORKER_CAPABILITY)) {
       return;
     }
-    requireWorkerParentAuthority(parent.task());
-    if (!Objects.equals(
-            parent
-                .bundle()
-                .componentVersions()
-                .get("worker-registry"),
-            workerProfile.registryVersion())
-        || !Objects.equals(
-            parent
-                .bundle()
-                .componentVersions()
-                .get("worker-profile-fingerprint"),
-            workerProfile.fingerprint())) {
+    workerProfiles.requireForTerminalParent(
+        parent.task(),
+        parent.bundle().experiment(),
+        parent.bundle().harnessVersion(),
+        parent.bundle().componentVersions());
+  }
+
+  private ReadOnlyWorkerProfile requireProfileForStoredChild(
+      TaskEnvelope parent, AgentRun child) {
+    return child.lifecycle().terminal()
+        ? workerProfiles.requireForTerminalChild(
+            parent,
+            child.task(),
+            child.bundle().experiment(),
+            child.bundle().harnessVersion(),
+            child.bundle().componentVersions())
+        : workerProfiles.requireForChild(parent, child.task());
+  }
+
+  private ReadOnlyWorkerProfile requireSameTerminalProfile(
+      AgentRun parent, AgentRun child) {
+    ReadOnlyWorkerProfile parentProfile =
+        workerProfiles.requireForTerminalParent(
+            parent.task(),
+            parent.bundle().experiment(),
+            parent.bundle().harnessVersion(),
+            parent.bundle().componentVersions());
+    ReadOnlyWorkerProfile childProfile =
+        workerProfiles.requireForTerminalChild(
+            parent.task(),
+            child.task(),
+            child.bundle().experiment(),
+            child.bundle().harnessVersion(),
+            child.bundle().componentVersions());
+    if (parentProfile != childProfile) {
       throw new AgentRunIntegrityException();
     }
+    return parentProfile;
   }
 
   private static void validateArtifactBinding(

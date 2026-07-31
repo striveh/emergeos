@@ -1,15 +1,16 @@
 package io.emergeos.adapters.inmemory.agent;
 
 import io.emergeos.adapters.agentloop.AgentModel;
+import io.emergeos.adapters.agentloop.DeterministicReadOnlyWorkerConductorModel;
 import io.emergeos.adapters.agentloop.tool.CaptureReadTool;
-import io.emergeos.core.application.ReadOnlyWorkerExecutionProfile;
 import java.util.List;
 import java.util.Objects;
 
 public final class ScriptedFakeModel implements AgentModel {
 
   public static final String MODEL_ID = "scripted-fake-draft-v1";
-  public static final String CONDUCTOR_MODEL_ID = "fake-model-v1";
+  public static final String CONDUCTOR_MODEL_ID =
+      DeterministicReadOnlyWorkerConductorModel.MODEL_ID;
   public static final String WORKER_MODEL_ID = "fake-worker-model-v1";
 
   private final Mode mode;
@@ -84,18 +85,7 @@ public final class ScriptedFakeModel implements AgentModel {
   }
 
   private static Decision decideConductor(Turn turn) {
-    if (turn.workerResults().isEmpty()) {
-      return new WorkerCall(
-          ReadOnlyWorkerExecutionProfile.WORKER_NAME,
-          "产出一篇引用该 Capture 的短文 proposal",
-          turn.task().inputRefs());
-    }
-    if (turn.workerResults().size() != 1
-        || !turn.toolResults().isEmpty()) {
-      return new Failed("MALFORMED_WORKER_RESULT");
-    }
-    WorkerResult result = turn.workerResults().getFirst();
-    return new FinalDraft(result.content(), result.evidenceRefs());
+    return DeterministicReadOnlyWorkerConductorModel.decide(turn);
   }
 
   private enum Mode {

@@ -40,6 +40,7 @@ import io.emergeos.contracts.ContractValueDomains;
 import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.application.AgentExecutionProfile;
+import io.emergeos.core.application.ModelExecutionProfile;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -58,6 +59,8 @@ public final class OpenAiResponsesModel implements AgentModel {
 
   public static final String PROTOCOL_VERSION =
       "openai-responses-v1-openai-java-4.43.0";
+  public static final String PROMPT_SURFACE_VERSION =
+      "openai-responses-draft-surface-v1";
 
   private static final String PROVIDER = "openai.responses";
   private static final String CAPTURE_TOOL = "capture_read";
@@ -85,13 +88,51 @@ public final class OpenAiResponsesModel implements AgentModel {
       that capture reference.
       """;
 
-  private final AgentExecutionProfile profile;
+  /**
+   * Content address for the reviewed prompt, Tool and structured-output
+   * surface used by both root and Worker model routes.
+   */
+  public static String promptSurfaceFingerprint(
+      String modelRequested) {
+    if (modelRequested == null || modelRequested.isBlank()) {
+      throw new IllegalArgumentException(
+          "modelRequested must not be blank");
+    }
+    String material =
+        String.join(
+            "\n",
+            PROMPT_SURFACE_VERSION,
+            "protocol=" + PROTOCOL_VERSION,
+            "instructions=" + INSTRUCTIONS,
+            "firstToolName=" + CAPTURE_TOOL,
+            "internalToolName=" + INTERNAL_CAPTURE_TOOL,
+            "firstToolArguments=reference:string|required|closed",
+            "finalPayload=content:string,evidenceRefs:string[]|required|closed",
+            "store=false",
+            "parallelToolCalls=false",
+            "serviceTier=default",
+            "firstToolChoice=required:capture_read",
+            "secondToolChoice=none",
+            "include=reasoning.encrypted_content",
+            "promptCachePolicy="
+                + (requiresExplicitCacheOnly(modelRequested)
+                    ? "EXPLICIT_ONLY"
+                    : "PROVIDER_DEFAULT"));
+    return IntegrityHashes.utf8ContentHash(material);
+  }
+
+  private final ModelExecutionProfile profile;
   private final OpenAIClient client;
   private final Runnable providerInvocationObserver;
   private final ProviderAttributionObserver providerAttributionObserver;
 
   public OpenAiResponsesModel(
       AgentExecutionProfile profile, OpenAIClient client) {
+    this((ModelExecutionProfile) profile, client);
+  }
+
+  public OpenAiResponsesModel(
+      ModelExecutionProfile profile, OpenAIClient client) {
     this(profile, client, () -> {}, (ignoredModel, ignoredUsage) -> {});
   }
 
@@ -108,6 +149,16 @@ public final class OpenAiResponsesModel implements AgentModel {
       OpenAIClient client,
       Runnable providerInvocationObserver) {
     this(
+        (ModelExecutionProfile) profile,
+        client,
+        providerInvocationObserver);
+  }
+
+  public OpenAiResponsesModel(
+      ModelExecutionProfile profile,
+      OpenAIClient client,
+      Runnable providerInvocationObserver) {
+    this(
         profile,
         client,
         providerInvocationObserver,
@@ -120,6 +171,18 @@ public final class OpenAiResponsesModel implements AgentModel {
    */
   public OpenAiResponsesModel(
       AgentExecutionProfile profile,
+      OpenAIClient client,
+      Runnable providerInvocationObserver,
+      ProviderAttributionObserver providerAttributionObserver) {
+    this(
+        (ModelExecutionProfile) profile,
+        client,
+        providerInvocationObserver,
+        providerAttributionObserver);
+  }
+
+  public OpenAiResponsesModel(
+      ModelExecutionProfile profile,
       OpenAIClient client,
       Runnable providerInvocationObserver,
       ProviderAttributionObserver providerAttributionObserver) {

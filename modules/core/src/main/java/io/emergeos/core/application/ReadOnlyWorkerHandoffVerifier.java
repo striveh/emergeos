@@ -26,6 +26,22 @@ public final class ReadOnlyWorkerHandoffVerifier {
       AgentRun child,
       WorkerResultEnvelope workerResult,
       ReadOnlyWorkerExecutionProfile profile) {
+    verifyPlannedChild(
+        parentTask,
+        expectedChildRunId,
+        expectedChildTask,
+        child,
+        workerResult,
+        (ReadOnlyWorkerProfile) profile);
+  }
+
+  public static void verifyPlannedChild(
+      io.emergeos.contracts.TaskEnvelope parentTask,
+      String expectedChildRunId,
+      io.emergeos.contracts.TaskEnvelope expectedChildTask,
+      AgentRun child,
+      WorkerResultEnvelope workerResult,
+      ReadOnlyWorkerProfile profile) {
     Objects.requireNonNull(expectedChildRunId, "expectedChildRunId");
     Objects.requireNonNull(expectedChildTask, "expectedChildTask");
     if (!expectedChildRunId.equals(child.runId())
@@ -41,6 +57,18 @@ public final class ReadOnlyWorkerHandoffVerifier {
       AgentRun child,
       WorkerResultEnvelope workerResult,
       ReadOnlyWorkerExecutionProfile profile) {
+    verifyChild(
+        parentTask,
+        child,
+        workerResult,
+        (ReadOnlyWorkerProfile) profile);
+  }
+
+  public static void verifyChild(
+      io.emergeos.contracts.TaskEnvelope parentTask,
+      AgentRun child,
+      WorkerResultEnvelope workerResult,
+      ReadOnlyWorkerProfile profile) {
     Objects.requireNonNull(parentTask, "parentTask");
     Objects.requireNonNull(child, "child");
     Objects.requireNonNull(profile, "profile");
@@ -50,6 +78,8 @@ public final class ReadOnlyWorkerHandoffVerifier {
     }
     if (!child.principalId().equals(parentTask.principalRef())
         || !child.bundle().harnessVersion().equals(profile.harnessVersion())
+        || !Objects.equals(
+            child.bundle().experiment(), profile.experiment())
         || !child.bundle().componentVersions().equals(profile.componentVersions())
         || !child.result().artifactRefs().isEmpty()
         || !child.result().receiptRefs().isEmpty()
@@ -117,6 +147,18 @@ public final class ReadOnlyWorkerHandoffVerifier {
       AgentRun child,
       WorkerResultEnvelope workerResult,
       ReadOnlyWorkerExecutionProfile profile) {
+    verifyPair(
+        parent,
+        child,
+        workerResult,
+        (ReadOnlyWorkerProfile) profile);
+  }
+
+  public static void verifyPair(
+      AgentRun parent,
+      AgentRun child,
+      WorkerResultEnvelope workerResult,
+      ReadOnlyWorkerProfile profile) {
     Objects.requireNonNull(parent, "parent");
     verifyChild(parent.task(), child, workerResult, profile);
     if (!parent.lifecycle().terminal()
@@ -127,15 +169,16 @@ public final class ReadOnlyWorkerHandoffVerifier {
             .task()
             .capabilityRefs()
             .equals(List.of(AgentExecutionProfile.READ_ONLY_WORKER_CAPABILITY))
+        || !parent
+            .bundle()
+            .harnessVersion()
+            .equals(profile.parentExecutionProfile().harnessVersion())
+        || !parent
+            .bundle()
+            .componentVersions()
+            .equals(profile.expectedParentComponentVersions())
         || !Objects.equals(
-            parent.bundle().componentVersions().get("worker-registry"),
-            profile.registryVersion())
-        || !Objects.equals(
-            parent
-                .bundle()
-                .componentVersions()
-                .get("worker-profile-fingerprint"),
-            profile.fingerprint())) {
+            parent.bundle().experiment(), profile.experiment())) {
       throw new IllegalArgumentException(
           "parent Run is not bound to the exact Worker profile");
     }
@@ -173,8 +216,12 @@ public final class ReadOnlyWorkerHandoffVerifier {
         || !childRef.equals(boundCompletions.getFirst().reference())
         || !completionMatchesChild(
             boundCompletions.getFirst(), parent, child.result().status())
-        || parent.result().costUsd().compareTo(child.result().costUsd()) < 0
-        || parent.result().tokenCount() < child.result().tokenCount()) {
+        || !aggregateUsageMatches(
+            parent.result().costUsd(),
+            parent.result().tokenCount(),
+            child.result().costUsd(),
+            child.result().tokenCount(),
+            profile)) {
       throw new IllegalArgumentException(
           "parent Trace, child status or aggregate usage is not bound");
     }
@@ -219,6 +266,20 @@ public final class ReadOnlyWorkerHandoffVerifier {
       throw new IllegalArgumentException(
           "non-success parent cannot commit an Artifact");
     }
+  }
+
+  private static boolean aggregateUsageMatches(
+      java.math.BigDecimal parentCostUsd,
+      long parentTokenCount,
+      java.math.BigDecimal childCostUsd,
+      long childTokenCount,
+      ReadOnlyWorkerProfile profile) {
+    if (profile.requiresExactParentUsageAggregation()) {
+      return parentCostUsd.compareTo(childCostUsd) == 0
+          && parentTokenCount == childTokenCount;
+    }
+    return parentCostUsd.compareTo(childCostUsd) >= 0
+        && parentTokenCount >= childTokenCount;
   }
 
   private static boolean completionMatchesChild(

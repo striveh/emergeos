@@ -307,6 +307,48 @@ class ReadOnlyWorkerHandoffVerifierTest {
   }
 
   @Test
+  void modelBoundParentCostMustExactlyMatchItsOnlyChild() {
+    ModelBoundFixture fixture = modelBoundFixture();
+    AgentRun inflated =
+        withUsage(
+            fixture.parent(),
+            fixture
+                .child()
+                .result()
+                .costUsd()
+                .add(new BigDecimal("0.000001")),
+            fixture.child().result().tokenCount());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            ReadOnlyWorkerHandoffVerifier.verifyPair(
+                inflated,
+                fixture.child(),
+                fixture.workerResult(),
+                fixture.profile()));
+  }
+
+  @Test
+  void modelBoundParentTokensMustExactlyMatchItsOnlyChild() {
+    ModelBoundFixture fixture = modelBoundFixture();
+    AgentRun inflated =
+        withUsage(
+            fixture.parent(),
+            fixture.child().result().costUsd(),
+            fixture.child().result().tokenCount() + 1);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            ReadOnlyWorkerHandoffVerifier.verifyPair(
+                inflated,
+                fixture.child(),
+                fixture.workerResult(),
+                fixture.profile()));
+  }
+
+  @Test
   void childSpecificRejectionStatusMustMatchTheActualChild() {
     Fixture fixture = fixture();
     AgentRun parent =
@@ -604,6 +646,326 @@ class ReadOnlyWorkerHandoffVerifierTest {
             workerResult.contentHash(),
             parentProfile.componentVersions());
     return new Fixture(parent, child, workerResult, workerProfile);
+  }
+
+  private static ModelBoundFixture modelBoundFixture() {
+    ModelBoundReadOnlyWorkerExecutionProfile profile =
+        ModelBoundReadOnlyWorkerExecutionProfile.pack008OpenAiV1(
+            new PricingProfile(
+                "pack008-verifier-openai-v1",
+                "openai.responses",
+                "gpt-5.6",
+                5_000,
+                500,
+                30_000),
+            "openai-responses-v1-openai-java-4.43.0",
+            "f".repeat(64),
+            "environment://sha256:" + "e".repeat(64),
+            new io.emergeos.contracts.HarnessExperiment(
+                "openai-worker-h0", 1),
+            1_000,
+            200,
+            new BigDecimal("0.022000"));
+    AgentExecutionProfile parentProfile =
+        AgentExecutionProfile.readOnlyWorkerModelV1(profile);
+    TaskEnvelope parentTask =
+        parentProfile.newDraftTask(
+            PARENT_TASK_ID,
+            OWNER,
+            "把公开 Capture 整理成短文",
+            CAPTURE_REF,
+            DataClass.PUBLIC);
+    TaskEnvelope childTask =
+        profile.newChildTask(
+            parentTask,
+            new WorkerHandoffRequest(
+                profile.workerName(),
+                parentTask.intent(),
+                parentTask.inputRefs()),
+            new AgentWorkerRuntime.ExecutionWindow(
+                parentTask.deadlineMs(),
+                parentTask.budgetUsd(),
+                CancellationSignal.never()),
+            CHILD_TASK_ID);
+    WorkerResultEnvelope workerResult =
+        WorkerResultEnvelope.create(
+            CHILD_RUN_ID,
+            CHILD_TASK_ID,
+            childTask.outputSchema(),
+            CONTENT,
+            List.of(CAPTURE_REF));
+    String childTraceRef =
+        "/api/v1/agent-runs/" + CHILD_RUN_ID + "/trace";
+    AgentTraceEnvelope childTrace =
+        trace(
+            CHILD_RUN_ID,
+            CHILD_TASK_ID,
+            List.of(
+                new TraceSpec(
+                    TraceEventType.MODEL_STEP,
+                    null,
+                    "COMPLETED",
+                    "task://" + CHILD_TASK_ID),
+                new TraceSpec(
+                    TraceEventType.TOOL_REQUEST,
+                    "capture.read",
+                    "REQUESTED",
+                    CAPTURE_REF),
+                new TraceSpec(
+                    TraceEventType.TOOL_RESULT,
+                    "capture.read",
+                    "SUCCEEDED",
+                    CAPTURE_REF),
+                new TraceSpec(
+                    TraceEventType.MODEL_STEP,
+                    null,
+                    "COMPLETED",
+                    "task://" + CHILD_TASK_ID),
+                new TraceSpec(
+                    TraceEventType.STRUCTURED_FINAL,
+                    null,
+                    "PROPOSED",
+                    "proposal://sha256:"
+                        + workerResult.contentHash())));
+    BigDecimal childCost = new BigDecimal("0.001000");
+    long childTokens = 10;
+    ResultEnvelope childResult =
+        new ResultEnvelope(
+            "1.0",
+            CHILD_RUN_ID,
+            CHILD_TASK_ID,
+            RunStatus.SUCCEEDED,
+            List.of(),
+            List.of(CAPTURE_REF),
+            List.of(),
+            List.of(),
+            List.of(),
+            "gpt-5.6-2026-07-15",
+            profile.agentVersion(),
+            profile.verifierVersion(),
+            childCost,
+            childTokens,
+            1,
+            childTraceRef,
+            null);
+    HarnessRunBundle childBundle =
+        HarnessRunBundle.create(
+            childTask.schemaVersion(),
+            CHILD_RUN_ID,
+            CHILD_TASK_ID,
+            profile.experiment(),
+            childResult.resolvedModel(),
+            profile.harnessVersion(),
+            profile.componentVersions(),
+            childTask.environmentSnapshotRef(),
+            childTask.toolRegistryVersion(),
+            childTask,
+            childResult,
+            null,
+            childTraceRef,
+            childTrace.rootHash(),
+            List.of(),
+            List.of(),
+            List.of(
+                new ResourceBinding(
+                    ResourceRole.EVIDENCE,
+                    0,
+                    CAPTURE_REF,
+                    "1".repeat(64)),
+                new ResourceBinding(
+                    ResourceRole.WORKER_RESULT,
+                    0,
+                    workerResult.workerResultRef(),
+                    workerResult.integrityHash())),
+            null,
+            null,
+            RunStatus.SUCCEEDED,
+            childCost,
+            childTokens,
+            1);
+    AgentRun child =
+        new AgentRun(
+            CHILD_RUN_ID,
+            OWNER,
+            childTask,
+            AgentRunLifecycle.SUCCEEDED,
+            childResult,
+            childTrace,
+            childBundle,
+            STARTED,
+            STARTED.plusMillis(1));
+
+    String parentTraceRef =
+        "/api/v1/agent-runs/" + PARENT_RUN_ID + "/trace";
+    String childRef = "agent-run://" + CHILD_RUN_ID;
+    AgentTraceEnvelope parentTrace =
+        trace(
+            PARENT_RUN_ID,
+            PARENT_TASK_ID,
+            List.of(
+                new TraceSpec(
+                    TraceEventType.MODEL_STEP,
+                    null,
+                    "COMPLETED",
+                    "task://" + PARENT_TASK_ID),
+                new TraceSpec(
+                    TraceEventType.HANDOFF_REQUEST,
+                    null,
+                    "REQUESTED",
+                    childRef),
+                new TraceSpec(
+                    TraceEventType.HANDOFF_RESULT,
+                    null,
+                    "SUCCEEDED",
+                    childRef),
+                new TraceSpec(
+                    TraceEventType.MODEL_STEP,
+                    null,
+                    "COMPLETED",
+                    "task://" + PARENT_TASK_ID),
+                new TraceSpec(
+                    TraceEventType.STRUCTURED_FINAL,
+                    null,
+                    "PROPOSED",
+                    "proposal://sha256:"
+                        + workerResult.contentHash()),
+                new TraceSpec(
+                    TraceEventType.ARTIFACT_COMMITTED,
+                    null,
+                    "SUCCEEDED",
+                    ARTIFACT_REF)));
+    ResultEnvelope parentResult =
+        new ResultEnvelope(
+            "1.0",
+            PARENT_RUN_ID,
+            PARENT_TASK_ID,
+            RunStatus.SUCCEEDED,
+            List.of(ARTIFACT_REF),
+            List.of(CAPTURE_REF),
+            List.of(),
+            List.of(),
+            List.of(),
+            "fake-pack008-conductor-v1",
+            parentProfile.agentVersion(),
+            parentProfile.verifierVersion(),
+            childCost,
+            childTokens,
+            1,
+            parentTraceRef,
+            null);
+    HarnessRunBundle parentBundle =
+        HarnessRunBundle.create(
+            parentTask.schemaVersion(),
+            PARENT_RUN_ID,
+            PARENT_TASK_ID,
+            profile.experiment(),
+            parentResult.resolvedModel(),
+            parentProfile.harnessVersion(),
+            parentProfile.componentVersions(profile),
+            parentTask.environmentSnapshotRef(),
+            parentTask.toolRegistryVersion(),
+            parentTask,
+            parentResult,
+            null,
+            parentTraceRef,
+            parentTrace.rootHash(),
+            List.of(childRef),
+            List.of(),
+            List.of(
+                new ResourceBinding(
+                    ResourceRole.EVIDENCE,
+                    0,
+                    CAPTURE_REF,
+                    "1".repeat(64)),
+                new ResourceBinding(
+                    ResourceRole.ARTIFACT,
+                    0,
+                    ARTIFACT_REF,
+                    workerResult.contentHash()),
+                new ResourceBinding(
+                    ResourceRole.HANDOFF,
+                    0,
+                    childRef,
+                    childBundle.integrityHash())),
+            null,
+            null,
+            RunStatus.SUCCEEDED,
+            childCost,
+            childTokens,
+            1);
+    AgentRun parent =
+        new AgentRun(
+            PARENT_RUN_ID,
+            OWNER,
+            parentTask,
+            AgentRunLifecycle.SUCCEEDED,
+            parentResult,
+            parentTrace,
+            parentBundle,
+            STARTED,
+            STARTED.plusMillis(2));
+    return new ModelBoundFixture(
+        parent, child, workerResult, profile);
+  }
+
+  private static AgentRun withUsage(
+      AgentRun run, BigDecimal costUsd, long tokenCount) {
+    ResultEnvelope originalResult = run.result();
+    ResultEnvelope changedResult =
+        new ResultEnvelope(
+            originalResult.schemaVersion(),
+            originalResult.runId(),
+            originalResult.taskId(),
+            originalResult.status(),
+            originalResult.artifactRefs(),
+            originalResult.evidenceRefs(),
+            originalResult.claims(),
+            originalResult.uncertainty(),
+            originalResult.receiptRefs(),
+            originalResult.resolvedModel(),
+            originalResult.agentVersion(),
+            originalResult.verifierVersion(),
+            costUsd,
+            tokenCount,
+            originalResult.latencyMs(),
+            originalResult.traceRef(),
+            originalResult.failureReason());
+    HarnessRunBundle originalBundle = run.bundle();
+    HarnessRunBundle changedBundle =
+        HarnessRunBundle.create(
+            originalBundle.schemaVersion(),
+            originalBundle.runId(),
+            originalBundle.taskId(),
+            originalBundle.experiment(),
+            originalBundle.modelResolved(),
+            originalBundle.harnessVersion(),
+            originalBundle.componentVersions(),
+            originalBundle.environmentSnapshotRef(),
+            originalBundle.toolRegistryVersion(),
+            originalBundle.task(),
+            changedResult,
+            originalBundle.workingSelfRef(),
+            originalBundle.traceRef(),
+            originalBundle.traceRootHash(),
+            originalBundle.handoffRefs(),
+            originalBundle.checkpointRefs(),
+            originalBundle.resourceBindings(),
+            originalBundle.verificationRef(),
+            originalBundle.failureAttribution(),
+            originalBundle.outcome(),
+            costUsd,
+            tokenCount,
+            originalBundle.latencyMs());
+    return new AgentRun(
+        run.runId(),
+        run.principalId(),
+        run.task(),
+        run.lifecycle(),
+        changedResult,
+        run.trace(),
+        changedBundle,
+        run.startedAt(),
+        run.completedAt());
   }
 
   private static AgentRun childRun(
@@ -1299,6 +1661,12 @@ class ReadOnlyWorkerHandoffVerifierTest {
       AgentRun child,
       WorkerResultEnvelope workerResult,
       ReadOnlyWorkerExecutionProfile profile) {}
+
+  private record ModelBoundFixture(
+      AgentRun parent,
+      AgentRun child,
+      WorkerResultEnvelope workerResult,
+      ModelBoundReadOnlyWorkerExecutionProfile profile) {}
 
   private record RejectionSpec(
       String traceStatus,

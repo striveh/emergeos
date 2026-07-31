@@ -24,6 +24,7 @@ import io.emergeos.core.domain.Capture;
 import io.emergeos.core.domain.WorkerHandoffRequest;
 import io.emergeos.core.port.AgentKernel;
 import io.emergeos.core.port.AgentRunContext;
+import io.emergeos.core.port.AgentTaskAuthorizer;
 import io.emergeos.core.port.AgentWorkerRuntime;
 import io.emergeos.core.port.CaptureStore;
 import io.emergeos.core.port.IdGenerator;
@@ -53,9 +54,17 @@ public final class DurableReadOnlyWorkerService
   private final CaptureStore captures;
   private final IdGenerator ids;
   private final Clock clock;
-  private final ReadOnlyWorkerExecutionProfile profile;
+  private final ReadOnlyWorkerProfile profile;
   private final AgentDraftVerifier verifier;
+  private final AgentTaskAuthorizer taskAuthorizer;
 
+  /**
+   * Pack007 binary-compatible constructor.
+   *
+   * <p>Keep this exact descriptor while introducing the generalized Worker
+   * profile seam so already compiled adapters retain the frozen offline
+   * route.
+   */
   public DurableReadOnlyWorkerService(
       AgentKernel workerKernel,
       ReadOnlyWorkerRunStore runs,
@@ -63,6 +72,40 @@ public final class DurableReadOnlyWorkerService
       IdGenerator ids,
       Clock clock,
       ReadOnlyWorkerExecutionProfile profile) {
+    this(
+        workerKernel,
+        runs,
+        captures,
+        ids,
+        clock,
+        (ReadOnlyWorkerProfile) profile);
+  }
+
+  public DurableReadOnlyWorkerService(
+      AgentKernel workerKernel,
+      ReadOnlyWorkerRunStore runs,
+      CaptureStore captures,
+      IdGenerator ids,
+      Clock clock,
+      ReadOnlyWorkerProfile profile) {
+    this(
+        workerKernel,
+        runs,
+        captures,
+        ids,
+        clock,
+        profile,
+        legacyOfflineAuthorizer(profile));
+  }
+
+  public DurableReadOnlyWorkerService(
+      AgentKernel workerKernel,
+      ReadOnlyWorkerRunStore runs,
+      CaptureStore captures,
+      IdGenerator ids,
+      Clock clock,
+      ReadOnlyWorkerProfile profile,
+      AgentTaskAuthorizer taskAuthorizer) {
     this.workerKernel = Objects.requireNonNull(workerKernel, "workerKernel");
     this.runs = Objects.requireNonNull(runs, "runs");
     this.captures = Objects.requireNonNull(captures, "captures");
@@ -70,15 +113,27 @@ public final class DurableReadOnlyWorkerService
     this.clock = Objects.requireNonNull(clock, "clock");
     this.profile = Objects.requireNonNull(profile, "profile");
     this.verifier = ReferenceGroundingAgentDraftVerifier.INSTANCE;
+    this.taskAuthorizer =
+        Objects.requireNonNull(taskAuthorizer, "taskAuthorizer");
     if (workerKernel.workerRegistryVersion() != null
         || workerKernel.workerProfileFingerprint() != null) {
       throw new IllegalArgumentException(
           "a read-only Worker Kernel cannot dispatch another Worker");
     }
-    if (workerKernel.executionProfileId() != null
-        || workerKernel.executionProfileFingerprint() != null) {
+    String kernelProfileId = workerKernel.executionProfileId();
+    String kernelProfileFingerprint =
+        workerKernel.executionProfileFingerprint();
+    if (profile.modelBound()
+        ? !profile.id().equals(kernelProfileId)
+            || !profile.fingerprint().equals(kernelProfileFingerprint)
+        : kernelProfileId != null || kernelProfileFingerprint != null) {
       throw new IllegalArgumentException(
-          "Pack007 Worker currently accepts only the frozen offline model route");
+          "Worker profile and AgentKernel Model identity disagree");
+    }
+    if (profile.modelBound()
+        && taskAuthorizer == AgentTaskAuthorizer.allowAll()) {
+      throw new IllegalArgumentException(
+          "a model-bound Worker requires an explicit Task authorizer");
     }
     if (!profile.verifierVersion().equals(verifier.version())) {
       throw new IllegalArgumentException(
@@ -120,6 +175,7 @@ public final class DurableReadOnlyWorkerService
       String childRunId,
       ExecutionWindow window) {
     profile.requireChildBinding(parent.task(), childTask);
+    taskAuthorizer.authorize(childTask);
     Instant startedAt = clock.instant();
     AgentRun planned =
         AgentRun.running(
@@ -226,7 +282,7 @@ public final class DurableReadOnlyWorkerService
             childTask.schemaVersion(),
             childRunId,
             childTask.id(),
-            null,
+            profile.experiment(),
             kernelRun.resolvedModel(),
             profile.harnessVersion(),
             profile.componentVersions(),
@@ -309,6 +365,16 @@ public final class DurableReadOnlyWorkerService
         committed.run().result().costUsd(),
         committed.run().result().tokenCount(),
         committed.run().result().failureReason());
+  }
+
+  private static AgentTaskAuthorizer legacyOfflineAuthorizer(
+      ReadOnlyWorkerProfile profile) {
+    Objects.requireNonNull(profile, "profile");
+    if (profile.modelBound()) {
+      throw new IllegalArgumentException(
+          "a model-bound Worker requires an explicit Task authorizer");
+    }
+    return AgentTaskAuthorizer.allowAll();
   }
 
   static AgentRunOutcome sanitizeKernelOutcome(

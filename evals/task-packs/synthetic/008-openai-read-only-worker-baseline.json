@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "0.7",
+  "taskId": "synthetic-openai-read-only-worker-baseline-008",
+  "title": "child-only Responses read-only Worker 一次性 PUBLIC synthetic baseline",
+  "principalRef": "synthetic-worker-eval-owner",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic://eval/openai-read-only-worker-008",
+    "dataClass": "PUBLIC",
+    "content": "虚构产品 Aurora Seed 会把公开测试灵感整理成一张可追溯的创作卡片；本段不对应任何真实人物、账号或业务。"
+  },
+  "requiredConstraints": [
+    "parent Conductor 固定为 Scripted Fake 且没有 physical Tool 或 provider route",
+    "只有 depth=1 child Worker 可以执行 capture.read 并调用 exact Responses model route",
+    "child 最多发起两次 provider request，subtree budget 必须覆盖完整 reservation",
+    "任何未来真实执行都必须消费完整绑定 graph attempt manifest 的 durable one-shot permit；当前 process-local permit 只用于 loopback integration"
+  ],
+  "forbiddenActions": [
+    "访问真实用户数据、账号、Connector、社交平台或除 exact OpenAI Responses endpoint 以外的网络",
+    "让 parent 调用 Model/Tool，或让 child 创建 Artifact、Action、Receipt、Checkpoint、再次 handoff",
+    "通过 CLI 覆盖 model、pricing、prompt、tool、base URL、Task、Pack path 或 API key",
+    "把 preflight、loopback 或单次 smoke 宣称为模型质量、用户价值、provider exactly-once 或 production readiness"
+  ],
+  "acceptanceChecks": [
+    "显式 --worker-preflight 路由没有 credential/client/model/provider invocation path，local HTTP sentinel 收到零 request；无参数默认路由继续验证历史 Pack003",
+    "pack/environment raw hash、Capture request hash、parent/child Task hash、parent/Worker/profile/pricing/prompt fingerprints 全部匹配 compiled catalog",
+    "loopback graph 产生一个 deterministic parent、一个 model-bound child、一个 verified WorkerResult 和且仅一个 parent Artifact",
+    "durable verified read 同时支持历史 Pack007 与 Pack008，且 parent 不得冒充执行 child Model"
+  ],
+  "humanReviewQuestions": [
+    "是否确认真实 actor 只有 child Worker，parent 始终是 Fake？",
+    "是否确认 literal PUBLIC synthetic payload、最多两次请求、完整 reservation 与 UNKNOWN billing 风险可接受？",
+    "是否明确本 Pack 尚未授权真实模型调用，live 仍需独立 one-shot TTY approval？"
+  ],
+  "risk": "EXTERNAL",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "任一 Pack byte、environment byte、Task、profile、pricing 或 prompt surface 漂移时在读取 key 前失败",
+    "unresolved human decision、错误 child identity、错误 challenge、permit 过期或 marker replay 时在创建 client 前失败",
+    "provider timeout、断连、malformed response 或 usage/model attribution mismatch 后禁止自动重放同一 attempt"
+  ],
+  "modelWorkerEval": {
+    "caseId": "openai-public-read-worker-008-r1",
+    "captureId": "capture-openai-worker-008",
+    "clientNonce": "openai-worker-008-r1",
+    "parentRunId": "run-openai-worker-parent-008-r1",
+    "childRunId": "run-openai-worker-child-008-r1",
+    "parentTaskId": "task-openai-worker-parent-008-r1",
+    "childTaskId": "task-openai-worker-child-008-r1",
+    "artifactId": "art-openai-worker-008-r1",
+    "intent": "将完全虚构的公开测试素材整理为一篇不超过 120 字的中文短文。",
+    "parentActor": "SCRIPTED_FAKE",
+    "childActor": "OPENAI_RESPONSES",
+    "workerName": "article-draft.read-v1",
+    "requiredTools": [
+      "capture.read"
+    ],
+    "maximumProviderRequests": 2,
+    "provenance": {
+      "kind": "LITERAL_CHECKED_IN_SYNTHETIC",
+      "containsRealUserData": false,
+      "containsRealAccount": false,
+      "networkAllowed": true,
+      "realModelAllowed": true,
+      "connectorAllowed": false
+    }
+  }
+}

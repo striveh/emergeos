@@ -25,6 +25,24 @@ parent Trace/HANDOFF/Artifact = 0
 这个 crash gap 是可解释的 durable truth，不是 checkpoint。fresh JVM 可以只读验证
 child 与 incomplete parent，但系统不会自动 resume、retry 或制造 parent completion。
 
+Pack008 沿用同一 V6 truth shape，但把 model route 只绑定到 child。durable reader
+不能按“当前 Worker”解释历史数据：
+
+```text
+RUNNING parent/child
+  → complete Task graph 必须恰好匹配一个 registered profile
+
+terminal parent/child
+  → Bundle 必须命名 exact registry + profile fingerprint
+  → experiment / Harness / component map exact match
+  → parent 与 child 必须解析为同一个 profile instance
+```
+
+当前 Pack008 evidence 只证明 same-JVM fresh Store 可以读取 child-terminal /
+parent-`RUNNING` gap并由新 Store instance 完成 parent；它没有 Pack008 fresh-JVM、
+process-kill、lease、checkpoint 或自动 resume。test-only process-local graph permit
+也不是 Durable Runtime state，崩溃后不能用它判断 provider 是否已调用。
+
 ### read-only Worker 的 observation precedence
 
 Worker dispatch 返回后，Kernel 先验证 child identity 与 usage domain；不可信值直接

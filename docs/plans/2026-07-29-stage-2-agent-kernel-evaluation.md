@@ -7,9 +7,13 @@ live-provider smoke 尚未执行。S4 已完成
 multi-writer/process-kill 与 fresh-JVM independent replay 工程切片，并完成首个
 Tool arguments pre-dispatch fault及 read-only Tool post-dispatch deadline fault。
 Pack007 的 typed read-only Worker contract/runtime、V6 PostgreSQL truth、strict
-replay 与 packaged success/crash-gap evidence 已 Green，正在收口 full Gate、
-最终独立审查与文档回执；完整 fault suite、stochastic Harness、真实 Seed 与用户价值
-Gate 尚未完成
+replay 与 packaged success/crash-gap evidence 已 Green。Pack008 已完成
+child-only model profile、zero-egress Worker preflight、process-local exact attempt
+permit、loopback graph、PostgreSQL multi-profile/fresh-store baseline 与 full Maven
+verification command set；exact metering P1 已转成回归，两路 post-fix 独立复审
+均确认 `P0=0、P1=0`，Engineering Gate 已关闭，正在完成独立 commit。尚无 Pack008 live
+execute、fresh-JVM/process-kill 或 product API wiring。完整 fault suite、
+stochastic Harness、真实 Seed 与用户价值 Gate 尚未完成
 
 Owner：项目所有者 + main Codex agent
 
@@ -1208,3 +1212,85 @@ Pack007 progress：
   footprint、packaged API 重复断言等 non-blocking P2/hardening 保留在 Build Note；
 - [x] 2026-07-31：RFC-0004 Accepted、ADR-0008 与中文 Build Note 已按最终
   least-authority、Pack hashes、gate counts 与 nonclaims 更新。
+
+### S4 F4 · Pack008 child-only model Worker baseline · 2026-07-31
+
+- Change class：`R`。本切片改变 model/profile authority、Worker generation
+  compatibility、Eval CLI 与 verified read 解释规则，但不改变 public JSON schema
+  或 V6 database schema。
+- 系统结果：同一个 provider-neutral graph 可以让 non-model-bound Fake Conductor
+  委派 exact Task 1.1 model child；只有 child 绑定 OpenAI model/pricing/environment
+  与 `capture.read`，parent 不获得 provider 或 Tool authority。
+- Architecture decision：
+  [RFC-0005](../rfcs/0005-model-bound-read-only-worker-eval-baseline.md)
+  与
+  [ADR-0009](../architecture/decisions/0009-child-only-model-worker-eval-boundary.md)
+  冻结 `ModelExecutionProfile`、content-addressed Conductor surface、exact
+  multi-profile registry 和 Pack008 Eval-only boundary。
+- First runnable Acceptance Red：
+  `SyntheticEvalRunnerProcessIT` 对 `--worker-preflight` 期望 packaged
+  `PREFLIGHT_READY`，原 CLI 实际在 argument parsing 以 `ARGUMENTS_INVALID` 结束；
+  这证明 shipping surface 尚不存在，不是 compile failure。
+- 第二条 Acceptance Red：graph permit test 通过反射加载专用
+  `Pack008GraphExecutionPermit`，基线以 `ClassNotFoundException` 失败；minimum Green
+  增加 `PREPARED → ARMED → CONSUMED`、双 Task ordering、child-only CAS consume 与
+  fail-before-delegate observer。
+- Frozen graph：Pack raw SHA
+  `4803c227d88484dfe5796c286cb7b602242a54b452c39e5eb2be69f6a02bf1db`；
+  parent/child Task hashes 分别为
+  `35465c2631b9616195beb85d5280c7debc26f80603ad8cf89bb5a722e4517470` /
+  `ed8988df7c4c1aaabee266720ef43aa0124116751ab1ae6eef773772c70a2d04`；
+  attempt ID 为
+  `e3bfef65db2dbc1eeabf726e2162909ff52c92466ea14a4f9e65eb8270d17661`。
+- Zero-egress boundary：显式 `--worker-preflight` 只读 bounded、no-symlink、
+  hash-frozen Pack/environment；已知可达 construction path 没有创建
+  credential/client/model/provider invocation/Run/marker，owner home/tmp 保持空，
+  指定 local HTTP sentinel 收到 0 request；这不是 system-wide socket
+  instrumentation。无参数与 `--execute` 继续属于 Pack003。
+- Durable compatibility：V6 PostgreSQL 可同时保存 Pack007/Pack008；
+  terminal truth 以 exact registry/fingerprint/experiment/Harness/component map
+  选择 profile，`RUNNING` graph 必须 unique full-Task match，registration order
+  不参与解释。
+- Metering integrity：审查发现 non-model parent 仅校验 `usage >= child`，可接受
+  coherent inflation；runnable Core/PostgreSQL Reds 先证明旧实现错误接受，再只对
+  Pack008 child-only model route 强制 cost/token exact-equal。cost-only/token-only
+  分别覆盖 sanitizer、terminal verifier、transaction rollback 与 coherent SQL
+  tamper 后三种 fresh Store read surface；Pack007 historical subtree aggregate
+  保持 `>=`。
+- Nonclaims：Pack008 graph execution 只在 test-only loopback fixture；
+  process-local permit 不是 operator gate、durable marker/journal、cross-process
+  one-shot 或 billing evidence。当前没有 Pack008 live route、real key/request/result、
+  ordinary API wiring、fresh-JVM/process-kill、checkpoint/resume 或用户价值证据。
+  same-JVM fresh Store 不能写成 fresh JVM。
+- Forward constraint：V6 没有在 `RUNNING` start 时持久化 selected profile identity。
+  当前 Pack007/Pack008 完整 Task authority 不同，unique matching 已足够；引入任何
+  Task-compatible revision 前必须先以 V7（或等价 durable selector）关闭 rolling
+  upgrade relabeling 风险，不能用 registration order fallback。
+
+Pack008 progress：
+
+- [x] runnable CLI 与 graph-permit Acceptance Red；
+- [x] `ModelExecutionProfile` 与 child-only
+  `ModelBoundReadOnlyWorkerExecutionProfile` minimum Green；
+- [x] Pack008 strict catalog/preflight、双 Task/profile/pricing/prompt/Conductor
+  surface 与 attempt hash冻结；
+- [x] packaged `--worker-preflight` zero-effect、help/invalid combinations、
+  symlink/oversize/strict JSON/environment drift regressions；
+- [x] test-only graph permit ordering、expiry、wrong consumer、observer failure 与
+  concurrent one-winner；
+- [x] production graph classes + loopback OpenAI adapter integration；
+- [x] Pack007 frozen replay保持 raw SHA
+  `808661ba78fc1cd43aa0b54c6271fccf7002399b9d24690cfbb55b97ebbb831c`
+  与历史 profile identity；
+- [x] real PostgreSQL mixed-generation、reverse registry、fresh-store gap continuation、
+  pre-insert fail-closed、terminal tamper 与 10 业务表 + Flyway PK/`xmin` snapshot；
+- [x] 2026-07-31：exact metering 与 process-effect assertions 冻结后的 final
+  `clean verify` 通过 10 个 reactor modules、97 个 XML reports、570 tests，
+  0 failure/error/skipped，总耗时 `01:36 min`；module counts 为
+  39 / 145 / 41 / 20 / 37 / 83 / 34 / 88 / 83；contracts 通过
+  6 schemas / 54 fixtures / 8 Packs /
+  2 environments，doc links 通过 84 个 Markdown files，Diff check Green；
+- [x] 两路 post-fix 独立审查关闭到 `P0=0、P1=0`；其中一路 `P2=0`，另一路
+  两个不阻断 P2 已在 Build Note 记录处置；
+- [x] RFC-0005、ADR-0009 与中文 Build Note 已完成最终状态收口；
+- [ ] 独立 commit 与 exact receipt。

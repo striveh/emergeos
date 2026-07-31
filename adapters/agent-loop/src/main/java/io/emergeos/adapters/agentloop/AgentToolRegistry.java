@@ -14,8 +14,11 @@ import java.util.Objects;
 public final class AgentToolRegistry {
 
   public static final String DEFAULT_VERSION = "agent-tools-v2";
+  public static final String EMPTY_VERSION = "agent-tools-none-v1";
   private static final Map<String, Map<String, String>> VERSIONED_SCHEMAS =
       Map.of(
+          EMPTY_VERSION,
+          Map.of(),
           DEFAULT_VERSION,
           Map.of(
               CaptureReadTool.NAME,

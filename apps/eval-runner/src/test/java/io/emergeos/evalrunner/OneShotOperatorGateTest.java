@@ -108,11 +108,19 @@ class OneShotOperatorGateTest {
     assertEquals(
         SyntheticEvalCli.Mode.HELP,
         SyntheticEvalCli.parse(new String[] {"--help"}));
+    assertEquals(
+        "WORKER_PREFLIGHT",
+        SyntheticEvalCli.parse(new String[] {"--worker-preflight"}).name());
     assertThrows(
         SyntheticEvalPreflight.Rejected.class,
         () ->
             SyntheticEvalCli.parse(
                 new String[] {"--base-url", "http://127.0.0.1"}));
+    assertThrows(
+        SyntheticEvalPreflight.Rejected.class,
+        () ->
+            SyntheticEvalCli.parse(
+                new String[] {"--worker-preflight", "--execute"}));
   }
 
   private static OneShotOperatorGate.InteractiveConsole console(

@@ -264,3 +264,49 @@ product replay API。Pack007 只证明 PUBLIC synthetic、single、synchronous�
 depth=1、read-only Fake Worker 的 deterministic safety/correctness；它没有网络、
 真实模型、Connector、parallel Worker、checkpoint/resume、write-capable Worker、
 真实用户数据或用户价值证据。
+
+## Stage 2 Pack008 · child-only model-bound Worker baseline
+
+`task-packs/synthetic/008-openai-read-only-worker-baseline.json` 把 Pack007 的
+typed Worker graph 与 RFC-0002 的 isolated OpenAI protocol adapter 组合，但 shipping
+CLI 当前只开放 zero-egress preflight：
+
+```bash
+java -jar apps/eval-runner/target/emerge-eval-runner-0.1.0-SNAPSHOT.jar \
+  --worker-preflight
+```
+
+无参数默认路径仍验证历史 Pack003；`--execute` 也仍只属于 Pack003。Pack008 没有
+`--worker-execute`，不接受 pack/model/base URL/API key override。preflight 只读取
+hash-frozen Pack008 与 environment，重建 exact parent/child Task、parent/Worker
+profile、pricing、prompt surface、Conductor decision surface 与 attempt identity。
+
+当前 frozen identity：
+
+| 项目 | 值 |
+|---|---|
+| Pack raw SHA-256 | `4803c227d88484dfe5796c286cb7b602242a54b452c39e5eb2be69f6a02bf1db` |
+| environment raw SHA-256 | `440fe5ce81202d5083e33463849b19e310077c9906baab8d253c1f59fd7de968` |
+| Capture request hash | `dd51522e6a5c2bfe2dd425bb3c6ad4a7e05bccce420e126040f14af01ce1ab00` |
+| parent Task hash | `35465c2631b9616195beb85d5280c7debc26f80603ad8cf89bb5a722e4517470` |
+| child Task hash | `ed8988df7c4c1aaabee266720ef43aa0124116751ab1ae6eef773772c70a2d04` |
+| parent profile fingerprint | `b624df93b848c46b28be679dabdf463d8bca9fb9cdbc703a79c9965bb49f685c` |
+| Worker profile fingerprint | `82a9081712a91b20ccfa39779d8e77637373a154d8d9eb2e1246f423f3b9ca82` |
+| pricing fingerprint | `97484a33d9374dfe67b6f6e22260c4ff82750b285d0be2aaed36c2fdcf6a1b50` |
+| prompt surface fingerprint | `1a7a8b31dd2e8e5d4e598b086692dfb97558a6861464b8f122a5047c6a64a9f4` |
+| Conductor surface fingerprint | `7920292ff1f3605c152719e7c771f9420a18b0110329c837e55c0cc90c026fa6` |
+| graph attempt ID | `e3bfef65db2dbc1eeabf726e2162909ff52c92466ea14a4f9e65eb8270d17661` |
+
+parent 是 non-model-bound Fake Conductor，且 `requiredTools=[]`；只有 exact Task 1.1
+child 绑定 `gpt-5.4-mini-2026-03-17`、`capture.read`、2 次 maximum provider
+requests 与 `$0.417000` worst-case reservation。test-only graph 使用 process-local
+one-shot permit；OpenAI adapter integration 只连 loopback `HttpServer`。
+
+PostgreSQL multi-profile tests证明同一 V6 database 可 verified read Pack007/Pack008，
+reverse registration order 不影响解释，Pack008 child-terminal/parent-`RUNNING` gap
+可由 fresh Store instance 读取并继续完成。这里没有 Pack008 fresh-JVM/process-kill；
+普通 API 仍只装配 Pack007 Fake Worker；没有 real key read、real external-provider request、
+real model result、token/cost receipt、durable graph marker/journal 或 billing
+evidence。完整边界见
+[RFC-0005](../docs/rfcs/0005-model-bound-read-only-worker-eval-baseline.md) 与
+[Pack008 Build Note](../docs/operations/build-notes/2026-07-31-s2-s4-model-bound-read-only-worker-baseline.md)。

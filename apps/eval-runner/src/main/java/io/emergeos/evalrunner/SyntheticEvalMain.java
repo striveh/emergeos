@@ -16,6 +16,11 @@ public final class SyntheticEvalMain {
         return;
       }
       Path repoRoot = Path.of("").toAbsolutePath();
+      if (mode == SyntheticEvalCli.Mode.WORKER_PREFLIGHT) {
+        System.out.println(
+            new Pack008WorkerEvalPreflight(repoRoot).run().receipt());
+        return;
+      }
       String preflightReceipt =
           new SyntheticEvalRunner(repoRoot).preflightReceipt();
       System.out.println(preflightReceipt);
@@ -38,6 +43,9 @@ public final class SyntheticEvalMain {
         }
       }
     } catch (SyntheticEvalPreflight.Rejected rejected) {
+      System.err.println("EVAL_REJECTED reason=" + rejected.code());
+      System.exit(2);
+    } catch (Pack008WorkerEvalPreflight.Rejected rejected) {
       System.err.println("EVAL_REJECTED reason=" + rejected.code());
       System.exit(2);
     } catch (SyntheticEvalExecutor.Rejected rejected) {

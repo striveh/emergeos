@@ -9,7 +9,8 @@ modules/contracts
 
 modules/core
   domain       领域实体、值对象、状态机、不变量
-  application  用例编排、Agent/Worker 结果的确定性验收、pair verification 与提交
+  application  用例编排、Agent/Worker 结果验收、ModelExecutionProfile、
+               ReadOnlyWorkerProfileRegistry、pair verification 与提交
   port         provider-neutral AgentKernel、AgentWorkerRuntime 与 durable Store 端口
 
 adapters/agent-loop
@@ -28,19 +29,23 @@ adapters/postgres
   Capture、Artifact lineage、local Action 与 AgentRun 的 JdbcClient 适配器
   以及前向 Flyway migrations；V5 冻结 model execution binding，V6 增加
   parent/child Run lineage、immutable agent_worker_results 与 deferred graph guards；
-  verified read 同时核验 JSON、typed columns、hash chain 与跨 Run relation
+  verified read 同时核验 JSON、typed columns、hash chain 与跨 Run relation；
+  exact profile registry 可同时验证 Pack007/Pack008，拒绝 registration-order fallback
 
 adapters/openai
   OpenAI Java SDK 4.43.0 的 Responses protocol adapter；实现 strict tool、
   manual item replay、strict structured final、per-call reservation、usage/cost
-  归因与 typed failure。只接受外部装配好的 client，不读取环境变量或凭据；
+  归因与 typed failure。只接受外部装配好的 client 与 provider-neutral
+  ModelExecutionProfile，不读取环境变量或凭据；
   当前已由 isolated Eval Runner 装配，但未接普通 API，也没有 live-provider receipt
 
 apps/eval-runner
   独立 packaged synthetic Eval 入口；依赖 contracts、core、agent-loop 与 openai
-  默认只做 zero-egress preflight；live 路径需要 real TTY、exact Task-bound
+  无参数默认只做 Pack003 zero-egress preflight；显式 --worker-preflight 只做
+  Pack008 双 Task/profile/price/environment zero-egress preflight；
+  Pack003 live 路径需要 real TTY、exact Task-bound
   one-shot permit、POSIX attempt marker/journal 与本地 hard-link create-only terminal
-  run record
+  run record；Pack008 当前没有 execute route，graph permit 只用于 test/loopback
   不依赖 API、PostgreSQL、Spring、Temporal、产品 Store 或真实用户数据
 
 apps/offline-harness-runner
@@ -98,6 +103,10 @@ flowchart RL
   product composition 先校验 exact Worker registry/profile identity；
   `AgentLoopKernel` 最多接受一个 synchronous child，且 Worker Kernel 本身不能再挂
   Worker runtime。
+- Pack008 只把 `ModelExecutionProfile` 绑定给 exact child；parent profile
+  `modelBound=false`、`requiredTools=[]`。Conductor decision surface、Worker profile、
+  pricing、environment 与双 Task hash 都进入 frozen identity；process-local graph
+  permit 不能替代 durable operator gate/journal。
 - 当前 `agent-tools-v2` manifest 精确绑定
   `capture.read → urn:emergeos:tool:capture-read-arguments:v1`；缺失、额外 Tool 或
   schema drift 都在打开 Model session 前 fail fast。Task 的 server-owned allowlist
@@ -105,7 +114,10 @@ flowchart RL
 - `openai` 不依赖 API、Spring、数据库、Temporal 或其他 Agent Runtime；SDK 类型不得
   越过 adapter boundary。
 - `eval-runner` 不依赖 API、PostgreSQL、in-memory 产品 Adapter、Spring、Temporal
-  或上层 Agent Runtime；它不能成为普通产品 route。
+  或上层 Agent Runtime；它不能成为普通产品 route。Pack008
+  `--worker-preflight` 没有 credential/client/model/Run/marker/socket dependency，
+  也没有对应 shipping execute route；指定 loopback sentinel 的 process test 收到
+  0 request，这不等于 system-wide socket instrumentation。
 - `offline-harness-runner` 使用 default-deny dependency allowlist，只允许
   contracts、core、Jackson 与 test-only JUnit；它不依赖任何 Adapter、API、模型 SDK、
   HTTP client 或数据库，并扫描允许 production closure 的已编译 JDK network/process

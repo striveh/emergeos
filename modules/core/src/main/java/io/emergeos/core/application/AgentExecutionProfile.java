@@ -46,7 +46,8 @@ public record AgentExecutionProfile(
     String toolRegistryVersion,
     String environmentSnapshotRef,
     List<String> capabilityRefs,
-    DataClass requiredDataClass) {
+    DataClass requiredDataClass)
+    implements ModelExecutionProfile {
 
   public static final String SYNTHETIC_MODEL_EGRESS_CAPABILITY =
       "capability://model-egress/synthetic-openai-v1";
@@ -101,16 +102,33 @@ public record AgentExecutionProfile(
         ContractText.copyStrings(capabilityRefs, "capabilityRefs");
 
     if ("1.0".equals(taskSchemaVersion)) {
+      boolean budgetedWorkerConductor =
+          capabilityRefs.equals(List.of(READ_ONLY_WORKER_CAPABILITY))
+              && budgetUsd.signum() > 0;
       if (pricing != null
           || modelAdapterVersion != null
-          || budgetUsd.signum() != 0
           || maxInputTokensPerStep != 0
           || maxOutputTokensPerStep != 0
-          || requiredDataClass != null
           || capabilityRefs.stream()
-              .anyMatch(value -> value.startsWith("capability://model-egress/"))) {
+              .anyMatch(
+                  value ->
+                      value.startsWith("capability://model-egress/"))) {
         throw new IllegalArgumentException(
             "TaskEnvelope 1.0 profile cannot carry a billable model route");
+      }
+      if (budgetedWorkerConductor) {
+        if (risk != RiskLevel.EXTERNAL
+            || requiredDataClass != DataClass.PUBLIC
+            || experiment == null
+            || environmentSnapshotRef == null
+            || !environmentSnapshotRef.matches(
+                "environment://sha256:[a-f0-9]{64}")) {
+          throw new IllegalArgumentException(
+              "a budgeted Worker conductor requires EXTERNAL PUBLIC synthetic bindings");
+        }
+      } else if (budgetUsd.signum() != 0 || requiredDataClass != null) {
+        throw new IllegalArgumentException(
+            "TaskEnvelope 1.0 budget is reserved for an exact Worker subtree");
       }
     } else {
       Objects.requireNonNull(pricing, "pricing");
@@ -191,6 +209,15 @@ public record AgentExecutionProfile(
   }
 
   public static AgentExecutionProfile readOnlyWorkerFakeV1() {
+    return readOnlyWorkerFakeV1("ref-only-v1");
+  }
+
+  public static AgentExecutionProfile readOnlyWorkerFakeV1(
+      String contextPolicyVersion) {
+    ContractText.require(
+        contextPolicyVersion,
+        "contextPolicyVersion",
+        ContractText.MAX_NAME_LENGTH);
     return new AgentExecutionProfile(
         "api-fake-worker-agent-draft-v1",
         "1.0",
@@ -209,11 +236,50 @@ public record AgentExecutionProfile(
         null,
         "agent-draft-policy-v1",
         "stage2-s2",
-        "ref-only-v1",
+        contextPolicyVersion,
         "agent-tools-v2",
         null,
         List.of(READ_ONLY_WORKER_CAPABILITY),
         null);
+  }
+
+  /**
+   * Frozen Pack008 Conductor profile.
+   *
+   * <p>The parent Model remains offline and has no direct Tool or provider
+   * route. Its non-zero budget is subtree authority for the exact
+   * model-bound child Worker.
+   */
+  public static AgentExecutionProfile readOnlyWorkerModelV1(
+      ModelBoundReadOnlyWorkerExecutionProfile worker) {
+    Objects.requireNonNull(worker, "worker");
+    if (!worker.modelBound()) {
+      throw new IllegalArgumentException(
+          "Pack008 requires a model-bound Worker profile");
+    }
+    return new AgentExecutionProfile(
+        "synthetic-model-worker-agent-draft-v1",
+        "1.0",
+        RiskLevel.EXTERNAL,
+        2,
+        1,
+        Math.addExact(worker.deadlineMs(), 5_000),
+        worker.budgetUsd(),
+        0,
+        0,
+        null,
+        null,
+        "agent-draft-service-v1",
+        worker.verifierVersion(),
+        worker.harnessVersion(),
+        worker.experiment(),
+        worker.expectedPolicyVersion(),
+        worker.expectedStateVersion(),
+        worker.expectedContextPolicyVersion(),
+        worker.parentToolRegistryVersion(),
+        worker.environmentSnapshotRef(),
+        List.of(READ_ONLY_WORKER_CAPABILITY),
+        DataClass.PUBLIC);
   }
 
   public boolean modelBound() {
@@ -222,6 +288,10 @@ public record AgentExecutionProfile(
 
   public boolean workerBound() {
     return capabilityRefs.equals(List.of(READ_ONLY_WORKER_CAPABILITY));
+  }
+
+  public boolean requiresExplicitAuthorization() {
+    return modelBound() || (workerBound() && budgetUsd.signum() > 0);
   }
 
   public String modelProvider() {
@@ -263,6 +333,15 @@ public record AgentExecutionProfile(
   }
 
   public Map<String, String> componentVersions() {
+    return componentVersions(
+        workerBound()
+            ? ReadOnlyWorkerExecutionProfile.pack007FakeV1(
+                contextPolicyVersion)
+            : null);
+  }
+
+  public Map<String, String> componentVersions(
+      ReadOnlyWorkerProfile workerProfile) {
     Map<String, String> versions = new LinkedHashMap<>();
     versions.put("agent", agentVersion);
     versions.put("verifier", verifierVersion);
@@ -274,12 +353,24 @@ public record AgentExecutionProfile(
       versions.put("pricing-profile-fingerprint", pricing.fingerprint());
     }
     if (workerBound()) {
-      ReadOnlyWorkerExecutionProfile worker =
-          ReadOnlyWorkerExecutionProfile.pack007FakeV1(contextPolicyVersion);
-      versions.put("worker-registry", worker.registryVersion());
-      versions.put("worker-profile-fingerprint", worker.fingerprint());
+      ReadOnlyWorkerProfile worker =
+          Objects.requireNonNull(workerProfile, "workerProfile");
+      worker.requireParentProfileBinding(this);
+      versions.putAll(worker.parentComponentVersions());
+    } else if (workerProfile != null) {
+      throw new IllegalArgumentException(
+          "a non-Worker execution profile cannot bind a Worker profile");
     }
     return Map.copyOf(versions);
+  }
+
+  @Override
+  public Map<String, String> modelComponentVersions() {
+    if (!modelBound()) {
+      throw new IllegalStateException(
+          "offline execution profile has no Model component identity");
+    }
+    return componentVersions();
   }
 
   /**

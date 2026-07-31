@@ -94,8 +94,13 @@ flowchart TB
   synchronous、depth=1 的 read-only Worker vertical：Fake Conductor 发出
   `WorkerCall`，child 只读同一个 owner-scoped Capture，durable
   `WorkerResultEnvelope` 经 parent verified consume 后才提交 parent-only Artifact；
+- Pack008 把 OpenAI model execution profile 只绑定到 exact child，parent 仍是
+  non-model-bound Fake Conductor。shipping CLI 只新增
+  `--worker-preflight`；graph permit 与 OpenAI graph execution 仅存在于 test/loopback，
+  没有 Pack008 live execute route、durable attempt journal 或 product API wiring；
 - PostgreSQL 已持有 Capture、Artifact lineage、local ActionAttempt/Receipt 与
-  AgentRun/Trace/WorkerResult、parent/child Handoff truth；
+  AgentRun/Trace/WorkerResult、parent/child Handoff truth；exact profile registry
+  可同时解释 Pack007/Pack008，且不使用 registration order；
 - Stage 1 S3 Action 仅通过 loopback HTTP 调用独立、文件持久化的 Fake Provider；
 - OpenAI real-model protocol adapter 与受控 Eval Runner 实现已形成，但只有当前最终验证
   全部通过后才能宣称 runner engineering complete；live-provider smoke 尚未执行，
@@ -122,6 +127,22 @@ read 前 fail closed。child terminal commit 后、parent terminal commit 前若
 终止，数据库保留 terminal child + WorkerResult 与仍为 `RUNNING` 的 parent；当前不会
 自动 resume。Pack007 不使用 Temporal，也没有 workflow graph、parallel scheduling、
 distributed Worker service、write-capable Worker 或 live model。
+
+Pack008 当前不是第二条产品路径，而是一条 Verification/Eval baseline：
+
+```text
+hash-frozen PUBLIC synthetic Pack008
+→ zero-egress preflight
+→ exact Fake parent + model-bound child profiles
+→ process-local graph permit（test only）
+→ loopback OpenAI adapter integration（test only）
+→ V6 PostgreSQL multi-profile/fresh-store verification
+```
+
+same-JVM fresh Store 不是 fresh JVM/process-kill；process-local permit 也不能提供
+crash recovery、billing truth 或 provider-side one-shot。任何 Pack008 live execution
+都必须先增加 graph-level operator gate、durable marker/journal/terminal record 与
+selected-boundary restart evidence，再取得 owner 对一次 bounded smoke 的独立授权。
 
 `apps/eval-runner` 属于 Verification/Eval 边界，不属于普通 Product API 或 Durable
 Action Plane。它使用单次内存 Store 执行冻结案例；本地 JSON record 只保存该 synthetic

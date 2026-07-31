@@ -29,3 +29,9 @@ RFC 被接受并落地后，由 ADR 记录最终采用的决定；RFC 历史不�
   V6 PostgreSQL truth 与 context-policy drift fail-closed，不代表通用 multi-agent；
   实现决策见
   [ADR-0008](../architecture/decisions/0008-typed-read-only-worker-handoff.md)。
+- [RFC-0005：child-only model-bound read-only Worker Eval baseline](0005-model-bound-read-only-worker-eval-baseline.md)
+  — `Accepted`；Pack008 把 provider-neutral model profile 绑定到 exact child，
+  parent 继续使用无 Tool authority 的 Fake Conductor；shipping surface 只增加
+  zero-egress `--worker-preflight`，没有 Pack008 live execute route、durable graph
+  attempt 或 product API wiring；实现决策见
+  [ADR-0009](../architecture/decisions/0009-child-only-model-worker-eval-boundary.md)。

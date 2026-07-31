@@ -17,7 +17,10 @@ import io.emergeos.contracts.HarnessExperiment;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.application.AgentExecutionProfile;
+import io.emergeos.core.application.ModelBoundReadOnlyWorkerExecutionProfile;
 import io.emergeos.core.application.PricingProfile;
+import io.emergeos.core.domain.WorkerHandoffRequest;
+import io.emergeos.core.port.AgentWorkerRuntime;
 import io.emergeos.core.port.CancellationSignal;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -93,6 +96,76 @@ class OpenAiResponsesModelProtocolTest {
             ObjectMappers.jsonMapper().readTree(requests.get(0)));
         assertSecondRequest(
             ObjectMappers.jsonMapper().readTree(requests.get(1)));
+      } finally {
+        client.close();
+      }
+    }
+  }
+
+  @Test
+  void acceptsTheExactPack008ModelBoundWorkerChildTask()
+      throws Exception {
+    List<String> requests = new ArrayList<>();
+    try (LoopbackResponsesServer server =
+        new LoopbackResponsesServer(requests, firstResponse())) {
+      OpenAIClient client =
+          OpenAIOkHttpClient.builder()
+              .apiKey("sentinel-loopback-key")
+              .baseUrl(server.baseUrl())
+              .maxRetries(0)
+              .timeout(Duration.ofSeconds(2))
+              .build();
+      try {
+        ModelBoundReadOnlyWorkerExecutionProfile worker =
+            ModelBoundReadOnlyWorkerExecutionProfile.pack008OpenAiV1(
+                profile().pricing(),
+                OpenAiResponsesModel.PROTOCOL_VERSION,
+                "f".repeat(64),
+                "environment://sha256:" + "b".repeat(64),
+                new HarnessExperiment("openai-worker-h0", 1),
+                1_000,
+                200,
+                new BigDecimal("0.022000"));
+        AgentExecutionProfile parentProfile =
+            AgentExecutionProfile.readOnlyWorkerModelV1(worker);
+        TaskEnvelope parent =
+            parentProfile.newDraftTask(
+                "pack008-parent-task",
+                "synthetic-owner",
+                "Create a synthetic public draft",
+                "capture://synthetic-003",
+                DataClass.PUBLIC);
+        TaskEnvelope child =
+            worker.newChildTask(
+                parent,
+                new WorkerHandoffRequest(
+                    worker.workerName(),
+                    parent.intent(),
+                    parent.inputRefs()),
+                new AgentWorkerRuntime.ExecutionWindow(
+                    parent.deadlineMs(),
+                    parent.budgetUsd(),
+                    CancellationSignal.never()),
+                "pack008-child-task");
+
+        AgentModel.Session session =
+            new OpenAiResponsesModel(worker, client).open(child);
+        AgentModel.ModelStep first =
+            session.next(
+                new AgentModel.Turn(child, List.of()),
+                context(worker.budgetUsd()));
+
+        assertInstanceOf(AgentModel.ToolCall.class, first.decision());
+        assertEquals(1, requests.size());
+        JsonNode request =
+            ObjectMappers.jsonMapper().readTree(requests.getFirst());
+        assertEquals("gpt-5.6", request.path("model").asText());
+        assertEquals(
+            "Task intent:\n"
+                + parent.intent()
+                + "\nDeclared capture reference:\n"
+                + "capture://synthetic-003",
+            request.at("/input/0/content").asText());
       } finally {
         client.close();
       }

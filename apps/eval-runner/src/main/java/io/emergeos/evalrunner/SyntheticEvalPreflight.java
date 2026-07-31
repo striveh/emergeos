@@ -9,6 +9,7 @@ import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.application.AgentExecutionProfile;
+import io.emergeos.core.application.ModelExecutionProfile;
 import io.emergeos.core.application.PricingProfile;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -65,11 +66,34 @@ final class SyntheticEvalPreflight {
   }
 
   static void verifyEnvironmentDocument(byte[] bytes) {
+    AgentExecutionProfile profile = SyntheticEvalCatalog.profile();
+    verifyEnvironmentDocument(
+        bytes,
+        profile,
+        profile.harnessVersion(),
+        profile.toolRegistryVersion(),
+        List.of("capture.read"),
+        SyntheticEvalCatalog.MAXIMUM_PROVIDER_REQUESTS);
+  }
+
+  static void verifyEnvironmentDocument(
+      byte[] bytes,
+      ModelExecutionProfile profile,
+      String harnessVersion,
+      String toolRegistryVersion,
+      List<String> tools,
+      int maximumProviderRequests) {
     verifyEnvironment(
         parse(
             bytes,
             EnvironmentManifest.class,
-            "ENVIRONMENT_INVALID"));
+            "ENVIRONMENT_INVALID"),
+        Objects.requireNonNull(profile, "profile"),
+        Objects.requireNonNull(harnessVersion, "harnessVersion"),
+        Objects.requireNonNull(
+            toolRegistryVersion, "toolRegistryVersion"),
+        List.copyOf(Objects.requireNonNull(tools, "tools")),
+        maximumProviderRequests);
   }
 
   private byte[] readBoundedAsset(
@@ -160,25 +184,29 @@ final class SyntheticEvalPreflight {
   }
 
   private static void verifyEnvironment(
-      EnvironmentManifest environment) {
-    AgentExecutionProfile profile = SyntheticEvalCatalog.profile();
-    PricingProfile pricing = SyntheticEvalCatalog.pricing();
+      EnvironmentManifest environment,
+      ModelExecutionProfile profile,
+      String harnessVersion,
+      String toolRegistryVersion,
+      List<String> tools,
+      int maximumProviderRequests) {
+    PricingProfile pricing = profile.pricing();
     if (!"0.1".equals(environment.schemaVersion())
         || !"2026-07-30".equals(environment.reviewedAt())
         || environment.javaRelease() != 21
         || !"4.43.0".equals(environment.openaiJavaVersion())
         || !OpenAiResponsesModel.PROTOCOL_VERSION.equals(
             environment.protocolVersion())
-        || !profile.harnessVersion().equals(environment.harnessVersion())
-        || !profile.toolRegistryVersion().equals(
+        || !harnessVersion.equals(environment.harnessVersion())
+        || !toolRegistryVersion.equals(
             environment.toolRegistryVersion())
-        || !List.of("capture.read").equals(environment.tools())
+        || !tools.equals(environment.tools())
         || !"responses".equals(environment.providerApi())
         || environment.model() == null
         || !pricing.modelRequested().equals(environment.model().requested())
         || !"gpt-5.4-mini".equals(environment.model().pricingFamily())
         || environment.model().maxInputTokens()
-            != SyntheticEvalCatalog.MAXIMUM_INPUT_TOKENS_PER_REQUEST
+            != profile.maxInputTokensPerStep()
         || environment.model().maxOutputTokens() != 128_000
         || environment.requestPolicy() == null
         || environment.requestPolicy().store()
@@ -191,7 +219,7 @@ final class SyntheticEvalPreflight {
         || environment.requestPolicy().ambientProxyAllowed()
         || !"OFF".equals(environment.requestPolicy().sdkLogLevel())
         || environment.requestPolicy().maximumProviderRequests()
-            != SyntheticEvalCatalog.MAXIMUM_PROVIDER_REQUESTS
+            != maximumProviderRequests
         || environment.requestPolicy().maximumInputTokensPerRequest()
             != profile.maxInputTokensPerStep()
         || environment.requestPolicy().maximumOutputTokensPerRequest()
