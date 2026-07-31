@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "pack007-child-run",
+  "taskId": "pack007-child-task",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://pack007-child-task",
+      "previousRootHash": "1e689944b93c8523a09a2fc92b76edfd58adfe5864d2a9b68c72e4043ab9b79f",
+      "eventHash": "4b0efc38f14942eab1c06e998c544d0e6530e323c2846cf88b18ee620a141241"
+    },
+    {
+      "sequence": 2,
+      "type": "TOOL_REQUEST",
+      "toolName": "capture.read",
+      "status": "REQUESTED",
+      "reference": "capture://pack007-capture",
+      "previousRootHash": "d8db96d7345e081b4b4d2d5668250acac5be6b06cdfdd1f90b8eccccdaa49847",
+      "eventHash": "bd1b58c2e8f2ed5c1cf46044b8754cc7d968a0bc0224f85ac7d0c1bef5b34155"
+    },
+    {
+      "sequence": 3,
+      "type": "TOOL_RESULT",
+      "toolName": "capture.read",
+      "status": "SUCCEEDED",
+      "reference": "capture://pack007-capture",
+      "previousRootHash": "4cb1bc462337403c2d22a93dc14febdf174c96933830847a4a8f23c784317aee",
+      "eventHash": "66d034f2d28fc61fd8cee1ac9d60007a3a3d7637ddf3c43541cb9583cdd568a4"
+    },
+    {
+      "sequence": 4,
+      "type": "STRUCTURED_FINAL",
+      "toolName": null,
+      "status": "PROPOSED",
+      "reference": "proposal://sha256:not-a-hash",
+      "previousRootHash": "67abd756b7c001180c3cf17e63fcb16e2a180ba7196176e529f3457934ce697f",
+      "eventHash": "a46494a906c8f34fcbfaad127de321d9a2b0dc33f66f8bf7720ecbfe9f74d835"
+    }
+  ],
+  "eventCount": 4,
+  "rootHash": "39308b442e8b6a8ea4abc95d44a058b5e947984d96a73f3e8cbab59073ec7a53"
+}

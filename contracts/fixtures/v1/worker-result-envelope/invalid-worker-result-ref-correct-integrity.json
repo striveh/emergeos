@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "workerResultRef": "worker-result://pack007-other-run",
+  "childRunId": "pack007-child-run",
+  "childTaskId": "pack007-child-task",
+  "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+  "content": "Prompt 不是咒语，而是在构造运行时状态。",
+  "contentHash": "7197957b1acefa6b690e0d063e0e247e9b8d52e0be01659e28fb7ce77e1361ea",
+  "evidenceRefs": [
+    "capture://pack007-capture"
+  ],
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "integrityHash": "29603a52aea144828589b2cb0d72cc3a3e9bc0928eb4162493805202b9976307"
+}

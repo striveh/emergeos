@@ -77,7 +77,8 @@ class PostgresActionAttemptStoreTest {
   @BeforeEach
   void clearDatabase() {
     jdbc.sql(
-            "TRUNCATE TABLE agent_trace_events, agent_run_resource_bindings, agent_runs, "
+            "TRUNCATE TABLE agent_trace_events, agent_run_resource_bindings, "
+                + "agent_worker_results, agent_runs, "
                 + "action_receipts, action_attempt_transitions, action_attempts, "
                 + "artifact_versions, artifacts, captures")
         .update();

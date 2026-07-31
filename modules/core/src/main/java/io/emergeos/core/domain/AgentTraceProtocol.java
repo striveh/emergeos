@@ -20,6 +20,9 @@ import java.util.Objects;
  */
 public final class AgentTraceProtocol {
 
+  public static final String READ_ONLY_WORKER_CAPABILITY =
+      ObservedExecutionLimits.READ_ONLY_WORKER_CAPABILITY;
+
   private AgentTraceProtocol() {}
 
   public static void verifyKernelOutcome(TaskEnvelope task, AgentRunOutcome outcome) {
@@ -115,6 +118,11 @@ public final class AgentTraceProtocol {
     boolean structuredFinal = false;
     boolean toolArgumentsRejected = false;
     boolean postDispatchDeadlineRejected = false;
+    boolean handoffRejected = false;
+    String preRequestHandoffRejectionStatus = null;
+    String postRequestHandoffRejectionStatus = null;
+    int handoffRequests = 0;
+    int successfulHandoffs = 0;
     List<String> obtainedEvidence = new ArrayList<>();
     String taskRef = "task://" + task.id();
 
@@ -150,6 +158,19 @@ public final class AgentTraceProtocol {
             pendingReference = event.reference();
             pendingOverLimit = executedToolCalls >= task.maxToolCalls();
             phase = Phase.EXPECT_TOOL_COMPLETION;
+          } else if (event.type() == TraceEventType.HANDOFF_REQUEST) {
+            if (!hasReadOnlyWorkerCapability(task) || handoffRequests >= 1) {
+              throw new IllegalArgumentException(
+                  "Trace requests a Worker outside Task authority");
+            }
+            handoffRequests++;
+            pendingReference = event.reference();
+            phase = Phase.EXPECT_HANDOFF_COMPLETION;
+          } else if (event.type() == TraceEventType.HANDOFF_REJECTED
+              && event.reference() == null) {
+            handoffRejected = true;
+            preRequestHandoffRejectionStatus = event.status();
+            phase = Phase.TERMINAL;
           } else if (event.type() == TraceEventType.TOOL_REJECTED
               && "untrusted".equals(event.toolName())
               && "BLOCKED".equals(event.status())
@@ -194,26 +215,64 @@ public final class AgentTraceProtocol {
                 "A tool request requires one matching result or rejection");
           }
         }
+        case EXPECT_HANDOFF_COMPLETION -> {
+          if (!Objects.equals(pendingReference, event.reference())) {
+            throw new IllegalArgumentException(
+                "Handoff completion must match its pending request");
+          }
+          if (event.type() == TraceEventType.HANDOFF_RESULT) {
+            successfulHandoffs++;
+            phase = Phase.EXPECT_MODEL;
+          } else if (event.type() == TraceEventType.HANDOFF_REJECTED) {
+            handoffRejected = true;
+            postRequestHandoffRejectionStatus = event.status();
+            phase = Phase.TERMINAL;
+          } else {
+            throw new IllegalArgumentException(
+                "A Handoff request requires one matching result or rejection");
+          }
+        }
         case TERMINAL ->
             throw new IllegalArgumentException("Trace continues after a terminal event");
       }
     }
 
-    if (phase == Phase.EXPECT_TOOL_COMPLETION) {
-      throw new IllegalArgumentException("Trace ends with an unmatched TOOL_REQUEST");
+    if (phase == Phase.EXPECT_TOOL_COMPLETION
+        || phase == Phase.EXPECT_HANDOFF_COMPLETION) {
+      throw new IllegalArgumentException("Trace ends with an unmatched request");
     }
     if (status == RunStatus.SUCCEEDED) {
       if (!structuredFinal || phase != Phase.TERMINAL) {
         throw new IllegalArgumentException(
             "A successful Trace must terminate with STRUCTURED_FINAL");
       }
-    } else if (structuredFinal && !allowRejectedStructuredFinal) {
-      throw new IllegalArgumentException(
-          "A non-success Trace cannot contain STRUCTURED_FINAL");
+    } else {
+      if (structuredFinal && !allowRejectedStructuredFinal) {
+        throw new IllegalArgumentException(
+            "A non-success Trace cannot contain STRUCTURED_FINAL");
+      }
+      if (phase != Phase.TERMINAL
+          && !permitsNonEventBoundaryTermination(
+              task,
+              events,
+              phase,
+              status,
+              failureReason,
+              modelSteps,
+              latencyMs)) {
+        throw new IllegalArgumentException(
+            "A non-success Trace requires an explicit terminal event");
+      }
     }
     if (!obtainedEvidence.equals(declaredEvidenceRefs)) {
-      throw new IllegalArgumentException(
-          "Declared Evidence refs must equal distinct successful TOOL_RESULT refs");
+      boolean handoffEvidence =
+          successfulHandoffs == 1
+              && declaredEvidenceRefs.stream().allMatch(task.inputRefs()::contains)
+              && declaredEvidenceRefs.containsAll(obtainedEvidence);
+      if (!handoffEvidence) {
+        throw new IllegalArgumentException(
+            "Declared Evidence refs must originate in Tool or verified Handoff results");
+      }
     }
     boolean declaresToolArgumentsFailure =
         "TOOL_ARGUMENTS_INVALID".equals(failureReason)
@@ -232,6 +291,44 @@ public final class AgentTraceProtocol {
                 task, status, latencyMs, failureReason))) {
       throw new IllegalArgumentException(
           "Post-dispatch Tool deadline and Trace rejection must be bound");
+    }
+    boolean handoffSpecificFailure =
+        failureReason != null && failureReason.startsWith("HANDOFF_");
+    boolean declaresRejectedHandoff =
+        handoffSpecificFailure
+            || (handoffRejected
+                && ("UNSAFE_HANDOFF_OUTCOME".equals(failureReason)
+                    || "CANCELLED".equals(failureReason)));
+    if ((declaresRejectedHandoff && !handoffRejected)
+        || (handoffRejected
+            && (!declaresRejectedHandoff
+                || status == RunStatus.SUCCEEDED))) {
+      throw new IllegalArgumentException(
+          "Handoff failure and Trace rejection must be bound");
+    }
+    if (preRequestHandoffRejectionStatus != null
+        && !matchesPreRequestHandoffRejection(
+            status,
+            failureReason,
+            preRequestHandoffRejectionStatus)) {
+      throw new IllegalArgumentException(
+          "Pre-request Handoff rejection status and failure must match");
+    }
+    if (postRequestHandoffRejectionStatus != null
+        && !matchesPostRequestHandoffRejection(
+            task,
+            status,
+            failureReason,
+            postRequestHandoffRejectionStatus,
+            latencyMs)) {
+      throw new IllegalArgumentException(
+          "Post-request Handoff rejection status and failure must match");
+    }
+    if (status == RunStatus.SUCCEEDED
+        && hasReadOnlyWorkerCapability(task)
+        && successfulHandoffs != 1) {
+      throw new IllegalArgumentException(
+          "A Worker-enabled successful parent requires one accepted Handoff");
     }
   }
 
@@ -281,10 +378,65 @@ public final class AgentTraceProtocol {
           throw new IllegalArgumentException("TOOL_REJECTED metadata is unsafe");
         }
       }
+      case HANDOFF_REQUEST -> {
+        if (event.toolName() != null
+            || !"REQUESTED".equals(event.status())
+            || !hasReadOnlyWorkerCapability(task)
+            || event.reference() == null
+            || !event.reference().matches(
+                "agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")) {
+          throw new IllegalArgumentException("HANDOFF_REQUEST metadata is unsafe");
+        }
+      }
+      case HANDOFF_RESULT -> {
+        if (event.toolName() != null
+            || !"SUCCEEDED".equals(event.status())
+            || !hasReadOnlyWorkerCapability(task)
+            || event.reference() == null
+            || !event.reference().matches(
+                "agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")) {
+          throw new IllegalArgumentException("HANDOFF_RESULT metadata is unsafe");
+        }
+      }
+      case HANDOFF_REJECTED -> {
+        boolean allowedStatus =
+            List.of(
+                    "BLOCKED",
+                    "FAILED",
+                    "CANCELLED_UNOBSERVED",
+                    "DEADLINE_EXHAUSTED",
+                    "DEADLINE_EXCEEDED_UNOBSERVED",
+                    "DEADLINE_EXCEEDED_AFTER_CHILD",
+                    "LIMIT_EXHAUSTED",
+                    "CHILD_FAILED",
+                    "CHILD_BLOCKED",
+                    "CHILD_NEEDS_INPUT",
+                    "CHILD_CANCELLED",
+                    "MALFORMED_RESULT")
+                .contains(event.status());
+        boolean safeReference =
+            event.reference() == null
+                || event.reference().matches(
+                    "agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}");
+        if (event.toolName() != null
+            || !allowedStatus
+            || !safeReference
+            || (event.reference() != null
+                && !hasReadOnlyWorkerCapability(task))) {
+          throw new IllegalArgumentException("HANDOFF_REJECTED metadata is unsafe");
+        }
+      }
       case STRUCTURED_FINAL -> {
+        boolean proposalBound =
+            "PROPOSE_ARTICLE_DRAFT".equals(task.kind())
+                || hasReadOnlyWorkerCapability(task);
         if (event.toolName() != null
             || !"PROPOSED".equals(event.status())
-            || !taskRef.equals(event.reference())) {
+            || (proposalBound
+                ? event.reference() == null
+                    || !event.reference().matches(
+                        "proposal://sha256:[a-f0-9]{64}")
+                : !taskRef.equals(event.reference()))) {
           throw new IllegalArgumentException("STRUCTURED_FINAL metadata is unsafe");
         }
       }
@@ -294,11 +446,126 @@ public final class AgentTraceProtocol {
     }
   }
 
+  private static boolean matchesPreRequestHandoffRejection(
+      RunStatus status,
+      String failureReason,
+      String traceStatus) {
+    if (failureReason == null) {
+      return false;
+    }
+    return switch (failureReason) {
+      case "HANDOFF_NOT_ALLOWED",
+          "HANDOFF_LIMIT_EXHAUSTED",
+          "HANDOFF_CONTEXT_POLICY_DRIFT",
+          "HANDOFF_AUTHORITY_ESCALATION" ->
+          status == RunStatus.BLOCKED && "BLOCKED".equals(traceStatus);
+      case "HANDOFF_PREPARATION_FAILED" ->
+          status == RunStatus.FAILED && "FAILED".equals(traceStatus);
+      case "UNSAFE_HANDOFF_OUTCOME" ->
+          status == RunStatus.FAILED
+              && "MALFORMED_RESULT".equals(traceStatus);
+      default -> false;
+    };
+  }
+
+  private static boolean matchesPostRequestHandoffRejection(
+      TaskEnvelope task,
+      RunStatus status,
+      String failureReason,
+      String traceStatus,
+      long latencyMs) {
+    if (failureReason == null) {
+      return false;
+    }
+    return switch (traceStatus) {
+      case "CANCELLED_UNOBSERVED" ->
+          status == RunStatus.CANCELLED
+              && "CANCELLED".equals(failureReason);
+      case "DEADLINE_EXHAUSTED" ->
+          status == RunStatus.FAILED
+              && "HANDOFF_DEADLINE_EXHAUSTED".equals(failureReason);
+      case "DEADLINE_EXCEEDED_UNOBSERVED",
+          "DEADLINE_EXCEEDED_AFTER_CHILD" ->
+          status == RunStatus.FAILED
+              && ObservedExecutionLimits.POST_HANDOFF_DEADLINE_FAILURE.equals(
+                  failureReason)
+              && ObservedExecutionLimits.permitsFailureAttribution(
+                  task, status, latencyMs, failureReason);
+      case "FAILED" ->
+          status == RunStatus.FAILED
+              && "HANDOFF_DISPATCH_FAILED".equals(failureReason);
+      case "MALFORMED_RESULT" ->
+          status == RunStatus.FAILED
+              && "UNSAFE_HANDOFF_OUTCOME".equals(failureReason);
+      case "LIMIT_EXHAUSTED" ->
+          status == RunStatus.BLOCKED
+              && "HANDOFF_BUDGET_EXHAUSTED".equals(failureReason);
+      case "CHILD_FAILED" ->
+          status == RunStatus.FAILED
+              && "HANDOFF_CHILD_FAILED".equals(failureReason);
+      case "CHILD_BLOCKED" ->
+          status == RunStatus.BLOCKED
+              && "HANDOFF_CHILD_BLOCKED".equals(failureReason);
+      case "CHILD_NEEDS_INPUT" ->
+          status == RunStatus.NEEDS_INPUT
+              && "HANDOFF_CHILD_NEEDS_INPUT".equals(failureReason);
+      case "CHILD_CANCELLED" ->
+          status == RunStatus.CANCELLED
+              && "HANDOFF_CHILD_CANCELLED".equals(failureReason);
+      default -> false;
+    };
+  }
+
+  public static boolean requiresTrustedChildObservation(
+      String handoffRejectionStatus) {
+    return "DEADLINE_EXCEEDED_AFTER_CHILD".equals(handoffRejectionStatus)
+        || "LIMIT_EXHAUSTED".equals(handoffRejectionStatus)
+        || (handoffRejectionStatus != null
+            && handoffRejectionStatus.startsWith("CHILD_"));
+  }
+
+  private static boolean permitsNonEventBoundaryTermination(
+      TaskEnvelope task,
+      List<EventView> events,
+      Phase phase,
+      RunStatus status,
+      String failureReason,
+      int modelSteps,
+      long latencyMs) {
+    if (events.isEmpty()) {
+      // Pre-execution checks and Model-session creation can fail before a Trace event exists.
+      return true;
+    }
+    boolean cooperativeBoundary =
+        (status == RunStatus.CANCELLED && "CANCELLED".equals(failureReason))
+            || (status == RunStatus.FAILED
+                && "DEADLINE_EXHAUSTED".equals(failureReason)
+                && latencyMs >= task.deadlineMs());
+    return switch (phase) {
+      case EXPECT_MODEL ->
+          cooperativeBoundary
+              || (status == RunStatus.FAILED
+                  && "MODEL_STEP_LIMIT_EXHAUSTED".equals(failureReason)
+                  && modelSteps == task.maxModelSteps());
+      case AFTER_MODEL ->
+          cooperativeBoundary
+              || (status == RunStatus.FAILED
+                  && "UNSUPPORTED_MODEL_DECISION".equals(failureReason));
+      default -> false;
+    };
+  }
+
   private enum Phase {
     EXPECT_MODEL,
     AFTER_MODEL,
     EXPECT_TOOL_COMPLETION,
+    EXPECT_HANDOFF_COMPLETION,
     TERMINAL
+  }
+
+  public static boolean hasReadOnlyWorkerCapability(TaskEnvelope task) {
+    return task.capabilityRefs().equals(
+        List.of(READ_ONLY_WORKER_CAPABILITY));
   }
 
   private record EventView(

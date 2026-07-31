@@ -25,6 +25,20 @@ public record ResourceBinding(
         && !ref.matches("capture://[A-Za-z0-9][A-Za-z0-9._~-]{0,199}")) {
       throw new IllegalArgumentException("Evidence binding must name one Capture");
     }
+    if (role == ResourceRole.HANDOFF
+        && (ordinal != 0
+            || !ref.matches(
+                "agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}"))) {
+      throw new IllegalArgumentException(
+          "Handoff binding must name exactly one child AgentRun");
+    }
+    if (role == ResourceRole.WORKER_RESULT
+        && (ordinal != 0
+            || !ref.matches(
+                "worker-result://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}"))) {
+      throw new IllegalArgumentException(
+          "Worker Result binding must name exactly one child result");
+    }
   }
 
 }

@@ -35,7 +35,7 @@ public record PricingProfile(
       throw new IllegalArgumentException(
           "pricing provider must be a stable lowercase slug");
     }
-    if (!modelRequested.matches("[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}")) {
+    if (!ContractText.isSafeModelIdentifier(modelRequested)) {
       throw new IllegalArgumentException(
           "pricing modelRequested is outside the safe model domain");
     }

@@ -5,7 +5,7 @@
 | 状态 | 例子 | 真相位置 |
 |---|---|---|
 | 领域真相 | Evidence、Self Model、Artifact、Approval、Receipt | PostgreSQL / Object Storage |
-| 产品执行证据 | Task、terminal Result、safe Trace、resource binding、HarnessRunBundle | PostgreSQL |
+| 产品执行证据 | Task、terminal Result、safe Trace、WorkerResult、typed cross-run binding、HarnessRunBundle | PostgreSQL |
 | 运行状态 | 当前步骤、重试、等待、Child Workflow | Durable Runtime |
 | 模型上下文 | Working Self、工具结果、摘要 | 可重建临时投影 |
 
@@ -13,6 +13,37 @@
 Stage 2 S2 中持久化的 `RUNNING` AgentRun 只证明一次运行已经开始但尚无 terminal
 事实；它不是 durable checkpoint，也不承诺从中间步骤 resume。安全恢复策略必须在
 后续 Runtime 切片中以新契约实现。
+
+Pack007 允许 child terminal transaction 先于 parent terminal transaction 提交：
+
+```text
+child = terminal + verified WorkerResult
+parent = RUNNING
+parent Trace/HANDOFF/Artifact = 0
+```
+
+这个 crash gap 是可解释的 durable truth，不是 checkpoint。fresh JVM 可以只读验证
+child 与 incomplete parent，但系统不会自动 resume、retry 或制造 parent completion。
+
+### read-only Worker 的 observation precedence
+
+Worker dispatch 返回后，Kernel 先验证 child identity 与 usage domain；不可信值直接
+`FAILED / UNSAFE_HANDOFF_OUTCOME`。可信 observation 按下列顺序决定 parent truth：
+
+```text
+aggregate subtree budget
+→ strict post-child deadline
+→ verified child terminal status
+→ accept successful WorkerResult
+→ post-success cooperative cancellation
+→ exact-deadline exhaustion before next Model step
+```
+
+因此 over-budget observation 不能被 deadline 或 cancellation 掩盖；budget 内的
+strict late completion 胜过 cancellation/child failure；deadline 内的 verified child
+non-success 胜过 cancellation。成功 child 被接受后若观察到 cancellation，parent
+成为 `CANCELLED`，但已提交 child observation 不被改写。runtime 抛错且没有可信 child
+observation 时才采用 strict deadline → cancellation → dispatch failure。
 
 ### Agent Loop 的 cooperative deadline truth
 
@@ -49,6 +80,10 @@ PostgreSQL 持久化 actual latency，不做 clamp。该 truth 只覆盖当前 r
 5. 外部动作必须有幂等键；同一键只能对应一个外部结果。
 6. 没有成功 Receipt，不能显示“已完成”。
 7. ReflectionCandidate 未确认前不能进入下一次 Working Self。
+8. Pack007 read-only Worker 只能读取 parent 已授权的同一个 owner-scoped Capture，
+   不能写 Artifact、Action、Receipt、Checkpoint 或再次 Handoff。
+9. parent 只能消费 terminal、same-owner、exact Task/profile/hash-bound child；
+   parent 仍是唯一 Artifact writer。
 
 ## 状态机
 
@@ -106,10 +141,28 @@ Temporal 只承载粗粒度、需要可靠性的流程：
 它不记录每个 token，也不替代 Evidence Ledger、Self Model、Artifact Store 或 Receipt Ledger。
 S3 已在不引入 Temporal 的前提下证明数据库 ActionAttempt + provider reconciliation 的最小
 真相边界；后续 Runtime 只能编排这条边界，不能绕开其唯一约束、预算或 Receipt 原子性。
+Pack007 同样没有引入 Temporal；`AgentWorkerRuntime` 只是一个 synchronous、
+provider-neutral port，V6 PostgreSQL 持有 child/result/relation 真相。未来 Durable
+Runtime 可以编排等待、resume 与 retry，但不能绕开 V6 same-owner、single-use、
+terminal-child 与 parent atomic commit 约束。
 
 ## 交接契约
 
-Agent、工具与人类之间的 Handoff 至少携带：
+Pack007 已实现的最小 typed 子集是：
+
+```text
+parent Task + parent Run
+→ delegationChain depth=1
+→ inherited policy/state/context/tool registry/environment
+→ server-owned Worker profile fingerprint
+→ child Task + child Run
+→ WorkerResultEnvelope
+→ child WORKER_RESULT binding
+→ parent HANDOFF binding
+→ parent-only Artifact
+```
+
+更一般的 Agent、工具与人类 Handoff 至少携带：
 
 ```text
 principalRef

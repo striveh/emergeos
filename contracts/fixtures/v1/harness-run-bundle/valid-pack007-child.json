@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "pack007-child-run",
+  "taskId": "pack007-child-task",
+  "experiment": null,
+  "modelResolved": "fake-worker-model-v1",
+  "harnessVersion": "framework-free-agent-kernel-v1",
+  "componentVersions": {
+    "agent": "agent-draft-worker-v1",
+    "verifier": "agent-draft-verifier-v1",
+    "trace-integrity": "emergeos-length-prefixed-sha256-v1",
+    "worker-registry": "agent-workers-v1",
+    "worker-profile-fingerprint": "e5f705bcc49d3e0302ab0a159f18ad597df01199fc7c0594e375b40011d519ac"
+  },
+  "environmentSnapshotRef": null,
+  "toolRegistryVersion": "agent-tools-v2",
+  "task": {
+    "schemaVersion": "1.0",
+    "id": "pack007-child-task",
+    "parentId": "pack007-parent-task",
+    "principalRef": "pack007-owner",
+    "delegationChain": [
+      "pack007-parent-task"
+    ],
+    "kind": "PROPOSE_ARTICLE_DRAFT",
+    "intent": "产出一篇引用该 Capture 的短文 proposal",
+    "inputRefs": [
+      "capture://pack007-capture"
+    ],
+    "evidenceRefs": [],
+    "modalities": [
+      "text"
+    ],
+    "dataClass": "PUBLIC",
+    "risk": "READ_ONLY",
+    "latencyClass": "INTERACTIVE",
+    "requiredTools": [
+      "capture.read"
+    ],
+    "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+    "acceptanceChecks": [
+      "proposal cites the delegated Capture"
+    ],
+    "allowParallel": false,
+    "maxModelSteps": 2,
+    "maxToolCalls": 1,
+    "deadlineMs": 5000,
+    "budgetUsd": 0,
+    "modelProvider": null,
+    "modelRequested": null,
+    "pricingProfile": null,
+    "idempotencyKey": null,
+    "policyVersion": "agent-draft-policy-v1",
+    "stateVersion": "stage2-s2",
+    "contextPolicyVersion": "ref-only-v1",
+    "toolRegistryVersion": "agent-tools-v2",
+    "environmentSnapshotRef": null,
+    "capabilityRefs": [],
+    "unresolvedDecisions": [],
+    "returnControlWhen": "typed Worker Result or non-success"
+  },
+  "result": {
+    "schemaVersion": "1.0",
+    "runId": "pack007-child-run",
+    "taskId": "pack007-child-task",
+    "status": "SUCCEEDED",
+    "artifactRefs": [],
+    "evidenceRefs": [
+      "capture://pack007-capture"
+    ],
+    "claims": [],
+    "uncertainty": [],
+    "receiptRefs": [],
+    "resolvedModel": "fake-worker-model-v1",
+    "agentVersion": "agent-draft-worker-v1",
+    "verifierVersion": "agent-draft-verifier-v1",
+    "costUsd": 0,
+    "tokenCount": 0,
+    "latencyMs": 0,
+    "traceRef": "/api/v1/agent-runs/pack007-child-run/trace",
+    "failureReason": null
+  },
+  "workingSelfRef": null,
+  "traceRef": "/api/v1/agent-runs/pack007-child-run/trace",
+  "traceRootHash": "ea07ac77589c9f71fcae95a5e0e52e16bbdca00343c48ecd70fea7257a5af9f5",
+  "handoffRefs": [],
+  "checkpointRefs": [],
+  "resourceBindings": [
+    {
+      "role": "EVIDENCE",
+      "ordinal": 0,
+      "ref": "capture://pack007-capture",
+      "contentHash": "ea86cdf8585ecd4755efc65c6f50d59ddea0802c198ec4e791934581bf010758"
+    },
+    {
+      "role": "WORKER_RESULT",
+      "ordinal": 0,
+      "ref": "worker-result://pack007-child-run",
+      "contentHash": "d69ecb08300f1f1cd378d826243add922c0deb75a15d9393a63d5d00d2a2f5a8"
+    }
+  ],
+  "verificationRef": null,
+  "failureAttribution": null,
+  "outcome": "SUCCEEDED",
+  "costUsd": 0,
+  "tokenCount": 0,
+  "latencyMs": 0,
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "integrityHash": "c12b2771c506bf823139af860396ddc8736bb81a1f0bbd9b09a4138d83cd3e0a"
+}

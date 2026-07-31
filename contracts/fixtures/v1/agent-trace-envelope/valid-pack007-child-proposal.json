@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "pack007-child-run",
+  "taskId": "pack007-child-task",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://pack007-child-task",
+      "previousRootHash": "1e689944b93c8523a09a2fc92b76edfd58adfe5864d2a9b68c72e4043ab9b79f",
+      "eventHash": "4b0efc38f14942eab1c06e998c544d0e6530e323c2846cf88b18ee620a141241"
+    },
+    {
+      "sequence": 2,
+      "type": "TOOL_REQUEST",
+      "toolName": "capture.read",
+      "status": "REQUESTED",
+      "reference": "capture://pack007-capture",
+      "previousRootHash": "d8db96d7345e081b4b4d2d5668250acac5be6b06cdfdd1f90b8eccccdaa49847",
+      "eventHash": "bd1b58c2e8f2ed5c1cf46044b8754cc7d968a0bc0224f85ac7d0c1bef5b34155"
+    },
+    {
+      "sequence": 3,
+      "type": "TOOL_RESULT",
+      "toolName": "capture.read",
+      "status": "SUCCEEDED",
+      "reference": "capture://pack007-capture",
+      "previousRootHash": "4cb1bc462337403c2d22a93dc14febdf174c96933830847a4a8f23c784317aee",
+      "eventHash": "66d034f2d28fc61fd8cee1ac9d60007a3a3d7637ddf3c43541cb9583cdd568a4"
+    },
+    {
+      "sequence": 4,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://pack007-child-task",
+      "previousRootHash": "67abd756b7c001180c3cf17e63fcb16e2a180ba7196176e529f3457934ce697f",
+      "eventHash": "39358c3c0406721eceeae07d0c11c63a0f3999fc0e39f39b5cd8d3b1135a352a"
+    },
+    {
+      "sequence": 5,
+      "type": "STRUCTURED_FINAL",
+      "toolName": null,
+      "status": "PROPOSED",
+      "reference": "proposal://sha256:e5b6493d7741cf43b65fb45c29d0351f3d038e470df31f964e6f1fa9cc8f767b",
+      "previousRootHash": "47c55b972c829318fba0636257b1f936c17fa49c1cfa96f6dd19c9c6b86f8e95",
+      "eventHash": "c65212f6fd79a2ac7b3a7d71de860aac8f74da255ddd136c8273eb99150f3245"
+    }
+  ],
+  "eventCount": 5,
+  "rootHash": "ea07ac77589c9f71fcae95a5e0e52e16bbdca00343c48ecd70fea7257a5af9f5"
+}

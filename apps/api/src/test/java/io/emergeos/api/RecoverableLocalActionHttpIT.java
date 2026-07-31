@@ -42,6 +42,7 @@ class RecoverableLocalActionHttpIT {
   private static final String OWNER = "action-owner";
   private static final String CONNECTOR = "simulated.local-draft";
   private static final String AUDIENCE = "adapter:simulated-provider";
+  private static final String CURRENT_SCHEMA_VERSION = "6";
 
   @Container
   private static final PostgreSQLContainer POSTGRES =
@@ -399,7 +400,7 @@ class RecoverableLocalActionHttpIT {
         JsonPath.read(
             readiness.body(), "$.components.stage1Durability.status"));
     assertEquals(
-        "5",
+        CURRENT_SCHEMA_VERSION,
         JsonPath.read(
             readiness.body(),
             "$.components.stage1Durability.details.migration.current"));

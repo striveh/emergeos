@@ -15,6 +15,7 @@ import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.contracts.TraceEventType;
 import io.emergeos.core.domain.AgentDraftProposal;
+import io.emergeos.core.domain.AgentHandoffObservation;
 import io.emergeos.core.domain.AgentRunOutcome;
 import io.emergeos.core.domain.ArtifactLineage;
 import io.emergeos.core.domain.AgentRun;
@@ -25,6 +26,7 @@ import io.emergeos.core.domain.Capture;
 import io.emergeos.core.domain.CaptureRequestHashes;
 import io.emergeos.core.domain.CaptureSourceType;
 import io.emergeos.core.port.AgentKernel;
+import io.emergeos.core.port.AgentRunContext;
 import io.emergeos.core.port.AgentRunStore;
 import io.emergeos.core.port.AgentTaskAuthorizer;
 import io.emergeos.core.port.CaptureStore;
@@ -86,6 +88,391 @@ class AgentDraftServiceTest {
     assertEquals(RunStatus.FAILED, outcome.result().status());
     assertEquals(List.of(), outcome.result().artifactRefs());
     assertEquals(0, artifactStore.createCalls);
+  }
+
+  @Test
+  void postAcceptWorkerOutputMismatchStillPersistsAFailedParentWithoutArtifact() {
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+    AgentExecutionProfile profile =
+        AgentExecutionProfile.readOnlyWorkerFakeV1();
+    String captureRef = "capture://" + CAPTURE_ID;
+    String childRef = "agent-run://forged-worker-child";
+    String parentContent = "parent content that differs from the Worker";
+    String workerContentHash =
+        IntegrityHashes.utf8ContentHash("verified Worker content");
+    AgentKernel kernel =
+        workerBoundKernel(
+            profile,
+            (task, cancellation) ->
+                new AgentRunOutcome(
+                    RunStatus.SUCCEEDED,
+                    new AgentDraftProposal(parentContent, List.of(captureRef)),
+                    List.of(captureRef),
+                    List.of(
+                        new AgentTraceEvent(
+                            1,
+                            AgentTraceEventType.MODEL_STEP,
+                            null,
+                            "COMPLETED",
+                            "task://" + task.task().id()),
+                        new AgentTraceEvent(
+                            2,
+                            AgentTraceEventType.HANDOFF_REQUEST,
+                            null,
+                            "REQUESTED",
+                            childRef),
+                        new AgentTraceEvent(
+                            3,
+                            AgentTraceEventType.HANDOFF_RESULT,
+                            null,
+                            "SUCCEEDED",
+                            childRef),
+                        new AgentTraceEvent(
+                            4,
+                            AgentTraceEventType.MODEL_STEP,
+                            null,
+                            "COMPLETED",
+                            "task://" + task.task().id()),
+                        new AgentTraceEvent(
+                            5,
+                            AgentTraceEventType.STRUCTURED_FINAL,
+                            null,
+                            "PROPOSED",
+                            "proposal://sha256:"
+                                + IntegrityHashes.utf8ContentHash(parentContent))),
+                    "forged-worker-parent-v1",
+                    BigDecimal.ZERO,
+                    0,
+                    0,
+                    null,
+                    List.of(
+                        new AgentHandoffObservation(
+                            childRef,
+                            "a".repeat(64),
+                            "worker-result://forged-worker-child",
+                            "b".repeat(64),
+                            "proposal://sha256:" + workerContentHash,
+                            workerContentHash,
+                            List.of(captureRef),
+                            RunStatus.SUCCEEDED,
+                            BigDecimal.ZERO,
+                            0))));
+    AgentDraftService service =
+        service(runs, kernel, capture(), profile);
+
+    AgentDraftOutcome outcome =
+        service.draft(
+            new AgentDraftCommand(
+                PRINCIPAL,
+                CAPTURE_ID,
+                "Reject a forged post-Handoff proposal"));
+
+    assertEquals(RunStatus.FAILED, outcome.result().status());
+    assertEquals(
+        "UNSAFE_WORKER_OUTPUT_BINDING",
+        outcome.result().failureReason());
+    assertEquals(List.of(), outcome.result().artifactRefs());
+    assertEquals(List.of(childRef), outcome.run().bundle().handoffRefs());
+    assertEquals(AgentRunLifecycle.FAILED, runs.stored.lifecycle());
+    assertEquals(0, artifacts.createCalls);
+  }
+
+  @Test
+  void forgedWorkerObservationStatusEvidenceOrUsageCannotBecomeDurableTruth() {
+    String captureRef = "capture://" + CAPTURE_ID;
+    String childRef = "agent-run://forged-observation-child";
+    AgentExecutionProfile profile =
+        AgentExecutionProfile.readOnlyWorkerFakeV1();
+    List<AgentKernel> kernels =
+        List.of(
+            workerBoundKernel(
+                profile,
+                (task, cancellation) ->
+                    rejectedWorkerOutcome(
+                        task.task(),
+                        childRef,
+                        RunStatus.BLOCKED,
+                        "HANDOFF_CHILD_BLOCKED",
+                        "CHILD_BLOCKED",
+                        RunStatus.FAILED,
+                        0,
+                        0)),
+            workerBoundKernel(
+                profile,
+                (task, cancellation) ->
+                    rejectedWorkerOutcome(
+                        task.task(),
+                        childRef,
+                        RunStatus.BLOCKED,
+                        "HANDOFF_CHILD_BLOCKED",
+                        "CHILD_BLOCKED",
+                        RunStatus.BLOCKED,
+                        0,
+                        1)),
+            workerBoundKernel(
+                profile,
+                (task, cancellation) -> {
+                  String content = "candidate with mismatched Worker Evidence";
+                  String hash = IntegrityHashes.utf8ContentHash(content);
+                  return new AgentRunOutcome(
+                      RunStatus.SUCCEEDED,
+                      new AgentDraftProposal(content, List.of(captureRef)),
+                      List.of(captureRef),
+                      List.of(
+                          new AgentTraceEvent(
+                              1,
+                              AgentTraceEventType.MODEL_STEP,
+                              null,
+                              "COMPLETED",
+                              "task://" + task.task().id()),
+                          new AgentTraceEvent(
+                              2,
+                              AgentTraceEventType.HANDOFF_REQUEST,
+                              null,
+                              "REQUESTED",
+                              childRef),
+                          new AgentTraceEvent(
+                              3,
+                              AgentTraceEventType.HANDOFF_RESULT,
+                              null,
+                              "SUCCEEDED",
+                              childRef),
+                          new AgentTraceEvent(
+                              4,
+                              AgentTraceEventType.MODEL_STEP,
+                              null,
+                              "COMPLETED",
+                              "task://" + task.task().id()),
+                          new AgentTraceEvent(
+                              5,
+                              AgentTraceEventType.STRUCTURED_FINAL,
+                              null,
+                              "PROPOSED",
+                              "proposal://sha256:" + hash)),
+                      "forged-observation-parent-v1",
+                      BigDecimal.ZERO,
+                      0,
+                      0,
+                      null,
+                      List.of(
+                          new AgentHandoffObservation(
+                              childRef,
+                              "c".repeat(64),
+                              "worker-result://forged-observation-child",
+                              "d".repeat(64),
+                              "proposal://sha256:" + hash,
+                              hash,
+                              List.of(),
+                              RunStatus.SUCCEEDED,
+                              BigDecimal.ZERO,
+                              0)));
+                }));
+
+    for (AgentKernel kernel : kernels) {
+      RecordingArtifactStore artifacts = new RecordingArtifactStore();
+      RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+      AgentDraftOutcome outcome =
+          service(runs, kernel, capture(), profile)
+              .draft(
+                  new AgentDraftCommand(
+                      PRINCIPAL,
+                      CAPTURE_ID,
+                      "Reject forged Worker observation truth"));
+
+      assertEquals(RunStatus.FAILED, outcome.result().status());
+      assertEquals(
+          "UNSAFE_HANDOFF_OUTCOME",
+          outcome.result().failureReason());
+      assertEquals(List.of(), outcome.run().bundle().handoffRefs());
+      assertEquals(0, artifacts.createCalls);
+    }
+  }
+
+  @Test
+  void forgedPostRequestRejectionMappingCannotBecomeDurableTruth() {
+    AgentExecutionProfile profile =
+        AgentExecutionProfile.readOnlyWorkerFakeV1();
+    String childRef = "agent-run://forged-rejection-child";
+    AgentKernel kernel =
+        workerBoundKernel(
+            profile,
+            (context, cancellation) ->
+                new AgentRunOutcome(
+                    RunStatus.FAILED,
+                    null,
+                    List.of(),
+                    List.of(
+                        new AgentTraceEvent(
+                            1,
+                            AgentTraceEventType.MODEL_STEP,
+                            null,
+                            "COMPLETED",
+                            "task://" + context.task().id()),
+                        new AgentTraceEvent(
+                            2,
+                            AgentTraceEventType.HANDOFF_REQUEST,
+                            null,
+                            "REQUESTED",
+                            childRef),
+                        new AgentTraceEvent(
+                            3,
+                            AgentTraceEventType.HANDOFF_REJECTED,
+                            null,
+                            "MALFORMED_RESULT",
+                            childRef)),
+                    "forged-rejection-parent-v1",
+                    BigDecimal.ZERO,
+                    0,
+                    0,
+                    "HANDOFF_DISPATCH_FAILED",
+                    List.of()));
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+
+    AgentDraftOutcome outcome =
+        service(runs, kernel, capture(), profile)
+            .draft(
+                new AgentDraftCommand(
+                    PRINCIPAL,
+                    CAPTURE_ID,
+                    "Reject forged Handoff terminal truth"));
+
+    assertEquals(RunStatus.FAILED, outcome.result().status());
+    assertEquals(
+        "UNSAFE_AGENT_TRACE", outcome.result().failureReason());
+    assertEquals(List.of(), outcome.run().bundle().handoffRefs());
+    assertEquals(List.of(), outcome.run().trace().events());
+    assertEquals(0, artifacts.createCalls);
+  }
+
+  @Test
+  void acceptedWorkerCannotHideAParentModelFailureWithoutATerminalEvent() {
+    AgentExecutionProfile profile =
+        AgentExecutionProfile.readOnlyWorkerFakeV1();
+    String captureRef = "capture://" + CAPTURE_ID;
+    String childRef = "agent-run://forged-nonterminal-parent-child";
+    String workerContentHash =
+        IntegrityHashes.utf8ContentHash("verified Worker content");
+    AgentKernel kernel =
+        workerBoundKernel(
+            profile,
+            (context, cancellation) ->
+                new AgentRunOutcome(
+                    RunStatus.FAILED,
+                    null,
+                    List.of(captureRef),
+                    List.of(
+                        new AgentTraceEvent(
+                            1,
+                            AgentTraceEventType.MODEL_STEP,
+                            null,
+                            "COMPLETED",
+                            "task://" + context.task().id()),
+                        new AgentTraceEvent(
+                            2,
+                            AgentTraceEventType.HANDOFF_REQUEST,
+                            null,
+                            "REQUESTED",
+                            childRef),
+                        new AgentTraceEvent(
+                            3,
+                            AgentTraceEventType.HANDOFF_RESULT,
+                            null,
+                            "SUCCEEDED",
+                            childRef)),
+                    "forged-nonterminal-parent-v1",
+                    BigDecimal.ZERO,
+                    0,
+                    0,
+                    "MODEL_STEP_FAILED",
+                    List.of(
+                        new AgentHandoffObservation(
+                            childRef,
+                            "a".repeat(64),
+                            "worker-result://forged-nonterminal-parent-child",
+                            "b".repeat(64),
+                            "proposal://sha256:" + workerContentHash,
+                            workerContentHash,
+                            List.of(captureRef),
+                            RunStatus.SUCCEEDED,
+                            BigDecimal.ZERO,
+                            0))));
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+
+    AgentDraftOutcome outcome =
+        service(runs, kernel, capture(), profile)
+            .draft(
+                new AgentDraftCommand(
+                    PRINCIPAL,
+                    CAPTURE_ID,
+                    "Reject a nonterminal parent failure"));
+
+    assertEquals(RunStatus.FAILED, outcome.result().status());
+    assertEquals("UNSAFE_AGENT_TRACE", outcome.result().failureReason());
+    assertEquals(List.of(), outcome.run().bundle().handoffRefs());
+    assertEquals(AgentRunLifecycle.FAILED, runs.stored.lifecycle());
+    assertEquals(0, artifacts.createCalls);
+  }
+
+  @Test
+  void unobservedCancellationCannotClaimABoundChild() {
+    String childRef = "agent-run://unobserved-cancel-child";
+    AgentExecutionProfile profile =
+        AgentExecutionProfile.readOnlyWorkerFakeV1();
+    AgentKernel kernel =
+        workerBoundKernel(
+            profile,
+            (context, cancellation) ->
+                handoffCancellationOutcome(
+                    context.task(),
+                    childRef,
+                    "CANCELLED_UNOBSERVED"));
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+
+    AgentDraftOutcome outcome =
+        service(runs, kernel, capture(), profile)
+            .draft(
+                new AgentDraftCommand(
+                    PRINCIPAL,
+                    CAPTURE_ID,
+                    "Persist an unobserved Handoff cancellation"));
+
+    assertEquals(RunStatus.CANCELLED, outcome.result().status());
+    assertEquals("CANCELLED", outcome.result().failureReason());
+    assertEquals(List.of(), outcome.run().bundle().handoffRefs());
+    assertEquals(0, artifacts.createCalls);
+  }
+
+  @Test
+  void afterChildCancellationWithoutTheChildObservationFailsClosed() {
+    String childRef = "agent-run://missing-cancel-child-observation";
+    AgentExecutionProfile profile =
+        AgentExecutionProfile.readOnlyWorkerFakeV1();
+    AgentKernel kernel =
+        workerBoundKernel(
+            profile,
+            (context, cancellation) ->
+                acceptedHandoffCancellationWithoutObservation(
+                    context.task(), childRef));
+    RecordingArtifactStore artifacts = new RecordingArtifactStore();
+    RecordingAgentRunStore runs = new RecordingAgentRunStore(artifacts);
+
+    AgentDraftOutcome outcome =
+        service(runs, kernel, capture(), profile)
+            .draft(
+                new AgentDraftCommand(
+                    PRINCIPAL,
+                    CAPTURE_ID,
+                    "Reject a forged post-child cancellation"));
+
+    assertEquals(RunStatus.FAILED, outcome.result().status());
+    assertEquals(
+        "UNSAFE_HANDOFF_OUTCOME", outcome.result().failureReason());
+    assertEquals(List.of(), outcome.run().bundle().handoffRefs());
+    assertEquals(0, artifacts.createCalls);
   }
 
   @Test
@@ -225,7 +612,7 @@ class AgentDraftServiceTest {
                             AgentTraceEventType.MODEL_STEP,
                             null,
                             sentinel,
-                            "task://" + task.id())),
+                            "task://" + task.task().id())),
                     "hostile-fake",
                     BigDecimal.ZERO,
                     0,
@@ -261,7 +648,7 @@ class AgentDraftServiceTest {
                             AgentTraceEventType.MODEL_STEP,
                             null,
                             "FAILED",
-                            "task://" + task.id())),
+                            "task://" + task.task().id())),
                     "schema-fault-fake",
                     BigDecimal.ZERO,
                     110,
@@ -297,7 +684,7 @@ class AgentDraftServiceTest {
                             AgentTraceEventType.MODEL_STEP,
                             null,
                             "COMPLETED",
-                            "task://" + task.id()),
+                            "task://" + task.task().id()),
                         new AgentTraceEvent(
                             2,
                             AgentTraceEventType.TOOL_REJECTED,
@@ -340,7 +727,7 @@ class AgentDraftServiceTest {
                         AgentTraceEventType.MODEL_STEP,
                         null,
                         "COMPLETED",
-                        "task://" + task.id()),
+                        "task://" + task.task().id()),
                     new AgentTraceEvent(
                         2,
                         AgentTraceEventType.TOOL_RESULT,
@@ -352,7 +739,7 @@ class AgentDraftServiceTest {
                         AgentTraceEventType.STRUCTURED_FINAL,
                         null,
                         "PROPOSED",
-                        "task://" + task.id())),
+                        "task://" + task.task().id())),
                 "orphan-result-fake",
                 BigDecimal.ZERO,
                 0,
@@ -376,7 +763,7 @@ class AgentDraftServiceTest {
                         AgentTraceEventType.MODEL_STEP,
                         null,
                         "COMPLETED",
-                        "task://" + task.id()),
+                        "task://" + task.task().id()),
                     new AgentTraceEvent(
                         2,
                         AgentTraceEventType.TOOL_REQUEST,
@@ -394,7 +781,7 @@ class AgentDraftServiceTest {
                         AgentTraceEventType.MODEL_STEP,
                         null,
                         "COMPLETED",
-                        "task://" + task.id()),
+                        "task://" + task.task().id()),
                     new AgentTraceEvent(
                         5,
                         AgentTraceEventType.TOOL_REQUEST,
@@ -412,7 +799,7 @@ class AgentDraftServiceTest {
                         AgentTraceEventType.STRUCTURED_FINAL,
                         null,
                         "PROPOSED",
-                        "task://" + task.id())),
+                        "task://" + task.task().id())),
                 "over-limit-fake",
                 BigDecimal.ZERO,
                 0,
@@ -435,13 +822,13 @@ class AgentDraftServiceTest {
                         AgentTraceEventType.MODEL_STEP,
                         null,
                         "FAILED",
-                        "task://" + task.id()),
+                        "task://" + task.task().id()),
                     new AgentTraceEvent(
                         2,
                         AgentTraceEventType.STRUCTURED_FINAL,
                         null,
                         "PROPOSED",
-                        "task://" + task.id())),
+                        "task://" + task.task().id())),
                 "success-after-failure-fake",
                 BigDecimal.ZERO,
                 0,
@@ -526,7 +913,7 @@ class AgentDraftServiceTest {
                             AgentTraceEventType.MODEL_STEP,
                             null,
                             "COMPLETED",
-                            "task://" + task.id()),
+                            "task://" + task.task().id()),
                         new AgentTraceEvent(
                             2,
                             AgentTraceEventType.TOOL_REQUEST,
@@ -544,7 +931,7 @@ class AgentDraftServiceTest {
                             AgentTraceEventType.MODEL_STEP,
                             null,
                             "FAILED",
-                            "task://" + task.id())),
+                            "task://" + task.task().id())),
                     "failing-fake",
                     BigDecimal.ZERO,
                     0,
@@ -577,7 +964,7 @@ class AgentDraftServiceTest {
             profileBoundKernel(
                 profile,
                 (task, cancellation) -> {
-                  observedTask.set(task);
+                  observedTask.set(task.task());
                   return new AgentRunOutcome(
                       RunStatus.FAILED,
                       null,
@@ -588,7 +975,7 @@ class AgentDraftServiceTest {
                               AgentTraceEventType.MODEL_STEP,
                               null,
                               "FAILED",
-                              "task://" + task.id())),
+                              "task://" + task.task().id())),
                       "gpt-5.6-sol-2026-07-15",
                       new BigDecimal("0.001000"),
                       100,
@@ -1168,9 +1555,9 @@ class AgentDraftServiceTest {
     return new AgentKernel() {
       @Override
       public AgentRunOutcome run(
-          TaskEnvelope task,
+          AgentRunContext context,
           io.emergeos.core.port.CancellationSignal cancellation) {
-        return delegate.run(task, cancellation);
+        return delegate.run(context, cancellation);
       }
 
       @Override
@@ -1183,6 +1570,149 @@ class AgentDraftServiceTest {
         return profile.fingerprint();
       }
     };
+  }
+
+  private static AgentKernel workerBoundKernel(
+      AgentExecutionProfile profile, AgentKernel delegate) {
+    ReadOnlyWorkerExecutionProfile worker =
+        ReadOnlyWorkerExecutionProfile.pack007FakeV1(
+            profile.contextPolicyVersion());
+    return new AgentKernel() {
+      @Override
+      public AgentRunOutcome run(
+          AgentRunContext context,
+          io.emergeos.core.port.CancellationSignal cancellation) {
+        return delegate.run(context, cancellation);
+      }
+
+      @Override
+      public String workerRegistryVersion() {
+        return worker.registryVersion();
+      }
+
+      @Override
+      public String workerProfileFingerprint() {
+        return worker.fingerprint();
+      }
+    };
+  }
+
+  private static AgentRunOutcome rejectedWorkerOutcome(
+      TaskEnvelope task,
+      String childRef,
+      RunStatus parentStatus,
+      String parentFailure,
+      String traceStatus,
+      RunStatus observedChildStatus,
+      long parentTokenCount,
+      long childTokenCount) {
+    return new AgentRunOutcome(
+        parentStatus,
+        null,
+        List.of(),
+        List.of(
+            new AgentTraceEvent(
+                1,
+                AgentTraceEventType.MODEL_STEP,
+                null,
+                "COMPLETED",
+                "task://" + task.id()),
+            new AgentTraceEvent(
+                2,
+                AgentTraceEventType.HANDOFF_REQUEST,
+                null,
+                "REQUESTED",
+                childRef),
+            new AgentTraceEvent(
+                3,
+                AgentTraceEventType.HANDOFF_REJECTED,
+                null,
+                traceStatus,
+                childRef)),
+        "forged-observation-parent-v1",
+        BigDecimal.ZERO,
+        parentTokenCount,
+        0,
+        parentFailure,
+        List.of(
+            new AgentHandoffObservation(
+                childRef,
+                "e".repeat(64),
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                observedChildStatus,
+                BigDecimal.ZERO,
+                childTokenCount)));
+  }
+
+  private static AgentRunOutcome handoffCancellationOutcome(
+      TaskEnvelope task, String childRef, String traceStatus) {
+    return new AgentRunOutcome(
+        RunStatus.CANCELLED,
+        null,
+        List.of(),
+        List.of(
+            new AgentTraceEvent(
+                1,
+                AgentTraceEventType.MODEL_STEP,
+                null,
+                "COMPLETED",
+                "task://" + task.id()),
+            new AgentTraceEvent(
+                2,
+                AgentTraceEventType.HANDOFF_REQUEST,
+                null,
+                "REQUESTED",
+                childRef),
+            new AgentTraceEvent(
+                3,
+                AgentTraceEventType.HANDOFF_REJECTED,
+                null,
+                traceStatus,
+                childRef)),
+        "synthetic-worker-cancellation-v1",
+        BigDecimal.ZERO,
+        0,
+        0,
+        "CANCELLED",
+        List.of());
+  }
+
+  private static AgentRunOutcome
+      acceptedHandoffCancellationWithoutObservation(
+          TaskEnvelope task, String childRef) {
+    return new AgentRunOutcome(
+        RunStatus.CANCELLED,
+        null,
+        List.of(),
+        List.of(
+            new AgentTraceEvent(
+                1,
+                AgentTraceEventType.MODEL_STEP,
+                null,
+                "COMPLETED",
+                "task://" + task.id()),
+            new AgentTraceEvent(
+                2,
+                AgentTraceEventType.HANDOFF_REQUEST,
+                null,
+                "REQUESTED",
+                childRef),
+            new AgentTraceEvent(
+                3,
+                AgentTraceEventType.HANDOFF_RESULT,
+                null,
+                "SUCCEEDED",
+                childRef)),
+        "synthetic-worker-cancellation-v1",
+        BigDecimal.ZERO,
+        0,
+        0,
+        "CANCELLED",
+        List.of());
   }
 
   private static void assertBoundaryFailure(AgentKernel kernel, String expectedReason) {

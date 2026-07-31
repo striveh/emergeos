@@ -5,8 +5,11 @@
 live-provider smoke 尚未执行。S4 已完成
 首个 deterministic Verifier comparison、canonical durable report、packaged
 multi-writer/process-kill 与 fresh-JVM independent replay 工程切片，并完成首个
-Tool arguments pre-dispatch fault；完整 fault suite、
-bounded read-only Worker handoff、stochastic Harness、真实 Seed 与用户价值 Gate 尚未完成
+Tool arguments pre-dispatch fault及 read-only Tool post-dispatch deadline fault。
+Pack007 的 typed read-only Worker contract/runtime、V6 PostgreSQL truth、strict
+replay 与 packaged success/crash-gap evidence 已 Green，正在收口 full Gate、
+最终独立审查与文档回执；完整 fault suite、stochastic Harness、真实 Seed 与用户价值
+Gate 尚未完成
 
 Owner：项目所有者 + main Codex agent
 
@@ -401,7 +404,7 @@ then locate it from the Trace.
 - Inject tool schema error, timeout/rate limit, Context Drift and Prompt
   Injection.
 - Add one typed, read-only Worker handoff only after the single-Agent baseline:
-  no shared mutable Artifact, one Conductor writer, maximum two Workers.
+  no shared mutable Artifact, one Conductor writer；Pack007 最多一个 child Worker。
 - Compare verified outcome, edit time, cost and latency across repeated runs.
 - Evaluate AgentScope, Pi or another candidate only as a replaceable adapter;
   retain it only if the fixed Harness evidence justifies the added surface.
@@ -1080,7 +1083,7 @@ S4/F2 已进一步验证 read-only Tool 在 dispatch 后严格越过 deadline �
 dispatch/read、Model attribution、usage 和 latency 被保留，但 late result 不进入
 Evidence/Artifact；exact boundary 与 cancellation precedence 也已冻结。
 
-下一条自动执行的最小可证伪假设是 Pack 007：
+本次已执行并收口的最小可证伪假设是 Pack 007：
 **typed read-only Worker handoff + child context-policy drift fail-closed**。它直接推进
 One Self, Many Workers，而不是把 dormant `parentId/delegationChain`、`handoffRefs`
 和 `HANDOFF` binding 继续只留在 schema 中。
@@ -1089,6 +1092,8 @@ Pack 007 先以 RFC-0004 冻结：
 
 - 一个 server-owned Conductor 只委派一个
   `PROPOSE_ARTICLE_DRAFT` read-only Worker，depth=1、禁止 parallel；
+- parent Task 的 `requiredTools` 固定为空，只有 child Task 获得
+  `requiredTools=[capture.read]`；Tool authority 是 registry 与 Task allowlist 的交集；
 - Worker 与 parent 同 principal，并 exact inherit policy/state/context/tool
   registry/environment；capability、risk、budget、deadline 与 limits 只能缩小；
 - Worker 可通过 `capture.read` 产生 typed proposal/Evidence，但不能提交
@@ -1116,3 +1121,90 @@ checkpoint/resume、lease/fencing、live provider、write-capable Worker、Self 
 live-provider smoke 仍由 owner 另行批准。没有 live receipt 时不得声称已有 real-model
 fixed baseline；即使执行 smoke，也不能由一次结果证明模型质量、账单准确性或产品价值。
 学习与市场工作仍暂停且未完成。
+
+### S4 F3 · Pack 007 start delta · 2026-07-31
+
+- Change class：`R`。本切片同时改变 Agent runtime、public contract、Trace protocol、
+  PostgreSQL migration 与 parent/child authority boundary，继续使用本 living ExecPlan，
+  不复制 Task Brief。
+- 用户/系统结果：一个 server-owned Conductor 能委派一次
+  `article-draft.read-v1` Worker；Worker 只读同一个 Capture 并形成 durable proposal，
+  parent 验证后成为唯一 Artifact writer。fresh JVM 能验证完整
+  parent → child → WorkerResult → proposal → Artifact hash chain。
+- 主要风险：若 child proposal 只在 process memory，或 Handoff 只绑定 child Bundle，
+  系统不能证明 parent 最终消费了什么；若把 Worker 冒充 Tool，则 child
+  Task/Run/profile/status/usage 与 no-write boundary 都会消失。
+- 本次原理：typed delegation 不是 prompt pattern，而是 capability、child Task、
+  independent Run、durable output、safe Trace、hash relation 与 transaction boundary
+  的组合。
+- Architecture decision：先由
+  [RFC-0004](../rfcs/0004-typed-read-only-worker-handoff.md) 冻结 single、
+  synchronous、depth=1、read-only Worker；新增 `WorkerResultEnvelope`，不把 proposal
+  偷运进 Claim/Trace，也不引入 Pi、AgentScope、Temporal 或 parallel graph。
+- 三路 read-only audit 已完成：contract 审计定位 dormant schema/Trace/no-write
+  缺口；runtime 审计确认需要 two-phase provider-neutral seam 与 durable output；
+  persistence 审计确认 V6 应复用 normalized binding 并用 composite FK/unique/deferred
+  constraint 证明 same-owner、terminal、exact child hash、single-use 和 parent atomic
+  visibility。主线程仍是唯一 writer。
+- First runnable Acceptance Red：现有 Model 暂把 `worker.delegate` 当 Tool，
+  目标断言仍要求 two Runs、one child read、one parent Artifact 与 durable Handoff；
+  当前预期实际为 `BLOCKED / TOOL_NOT_ALLOWED`，child Run/Model/read、
+  HANDOFF/WorkerResult/Artifact 均为 0。Red 必须是测试失败而非 compile failure。
+- Context drift fault：只改变 registered child profile 的
+  `contextPolicyVersion`，预期
+  `BLOCKED / HANDOFF_CONTEXT_POLICY_DRIFT`；child Run/Model/Tool/read 均为 0。
+- Durable evidence target：V6 fresh/populated upgrade、terminal child 后 parent
+  commit 前 process-kill、两个 fresh JVM verified read、cross-owner/missing/running/
+  wrong-hash/self/cycle/reuse/tamper、parent transaction rollback 与双 parent
+  concurrency one-winner。
+- Nonclaims：不声明通用多 Agent、parallel Worker、checkpoint/resume、lease/fencing、
+  live provider、write-capable Worker、Self Model 学习、真实用户或商业价值。
+
+Pack007 progress：
+
+- [x] 2026-07-31：三路只读 contract/runtime/persistence 审计收敛；
+- [x] 2026-07-31：RFC-0004 建立为 `Draft`；
+- [x] 2026-07-31：runnable Acceptance Red。命令
+  `./mvnw --batch-mode --no-transfer-progress -pl adapters/inmemory -am
+  -Dtest=OfflineReadOnlyWorkerHandoffTest
+  -Dsurefire.failIfNoSpecifiedTests=false test` 到达 production class path
+  （底层为 test recording stores）后按预期失败：
+  parent 实际为 `BLOCKED` 而非 `SUCCEEDED`，Run start/complete 各 1 而非 2，
+  child read、HANDOFF、WorkerResult、Artifact 均为 0；不是 compile 或环境失败；
+- [x] 2026-07-31：contract/runtime/Core minimum Green；typed `WorkerCall`、
+  two-phase `AgentWorkerRuntime`、durable WorkerResult、parent-only Artifact 与
+  adversarial deadline/budget/cancellation/child-status precedence 已验证；
+- [x] 2026-07-31：Pack007 strict loader 与两个 fresh runner replay exact-equal；
+  Java 同时冻结 exact path、`8,443` bytes、raw SHA、exact keys/types/versions/
+  receipts，Node validator 与 Pack007 graph receipts 交叉绑定；
+- [x] 2026-07-31：V6 fresh/populated/legacy fail-fast、same-owner/terminal/hash/
+  single-use/immutable/tamper、late rollback、concurrent consumer 与 moved-Handoff
+  OLD+NEW owner guard 已验证；
+- [x] 2026-07-31：packaged success graph 与 child-commit/parent-`RUNNING`
+  real process-kill gap；creator 终止后两个 fresh JVM exact verified read，
+  且 10 张业务表 + Flyway history 的 PK/`xmin` snapshot 不变；
+- [x] 2026-07-31：least-authority/security hardening 关闭 parent direct Tool
+  authority、post-request Handoff rejection forgeability、Java/Node/PostgreSQL
+  self-parent parity，以及 child inheritance/`resolvedModel` sanitizer；
+- [x] 2026-07-31：PostgreSQL earliest durable boundary P1 关闭。带 Worker
+  capability、却仍有 direct Tool authority 的非法 root parent 在 INSERT 前被拒绝，
+  `agent_runs=0`；root verified read（含 `RUNNING`）复验 exact parent profile，
+  direct SQL 篡改以 integrity failure fail-closed；
+- [x] 2026-07-31：Trace nonterminal P2 关闭。accepted Handoff 后伪造
+  `MODEL_STEP_FAILED / AGENT_KERNEL_FAILED` 且缺 terminal event 的 outcome 由
+  Acceptance Red 证明；Green 只允许真实 cancellation、
+  `latencyMs >= deadlineMs` 的 deadline boundary 与
+  `modelSteps == maxModelSteps` 的 step exhaustion implicit 结束，产品 sanitizer
+  返回 `FAILED / UNSAFE_AGENT_TRACE` 且不创建 Artifact；
+- [x] 2026-07-31：Pack007 重新冻结为 `8,443` bytes、raw SHA
+  `808661ba78fc1cd43aa0b54c6271fccf7002399b9d24690cfbb55b97ebbb831c`；
+  contracts Gate 通过 6 schemas、54 fixtures、23 graph relation negatives；
+- [x] 2026-07-31：final `clean verify` 的 10 个 reactor modules 全部
+  `SUCCESS`，92 个 XML reports 共 523 tests、0 failure/error/skipped，
+  Maven 总耗时 `02:02 min`；
+  contracts、81 个 Markdown links 与 `git diff --check` Green；
+- [x] 独立 final review：least-authority、Trace/API 与 replay/contracts/docs
+  reviewer 均完成 post-fix 复核，最终阻断结论为 `P0=0、P1=0`；物理 Tool
+  footprint、packaged API 重复断言等 non-blocking P2/hardening 保留在 Build Note；
+- [x] 2026-07-31：RFC-0004 Accepted、ADR-0008 与中文 Build Note 已按最终
+  least-authority、Pack hashes、gate counts 与 nonclaims 更新。

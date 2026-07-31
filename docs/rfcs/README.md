@@ -23,3 +23,9 @@ RFC 被接受并落地后，由 ADR 记录最终采用的决定；RFC 历史不�
   — `Accepted`，由 Stage 2 S4/F2 Pack 006 冻结 cooperative late-result、
   exact-boundary、cancellation precedence 与 observed-latency contract；实现决策见
   [ADR-0007](../architecture/decisions/0007-observed-latency-and-post-dispatch-tool-deadline.md)。
+- [RFC-0004：typed read-only Worker handoff 与 durable Worker Result](0004-typed-read-only-worker-handoff.md)
+  — `Accepted`；Pack007 只冻结 single/synchronous/depth=1/read-only Worker、
+  provider-neutral two-phase runtime、durable WorkerResult、parent→child hash chain、
+  V6 PostgreSQL truth 与 context-policy drift fail-closed，不代表通用 multi-agent；
+  实现决策见
+  [ADR-0008](../architecture/decisions/0008-typed-read-only-worker-handoff.md)。

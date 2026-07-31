@@ -75,7 +75,7 @@ class AgentRunModelBindingMigrationTest {
     current.migrate();
     StoredSnapshot after = snapshot(jdbc, fixture.terminal().runId());
 
-    assertEquals(MigrationVersion.fromVersion("5"), current.info().current().getVersion());
+    assertEquals(MigrationVersion.fromVersion("6"), current.info().current().getVersion());
     assertEquals(before.taskJson(), after.taskJson());
     assertEquals(before.bundleJson(), after.bundleJson());
     assertEquals(before.bundleHash(), after.bundleHash());

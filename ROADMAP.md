@@ -75,12 +75,12 @@ Gate：
 
 状态：**S1、S2 工程完成；S3 real model protocol adapter、isolated synthetic
 Eval Runner、本地 attempt durability 与 terminal record create-only repair
-工程切片已通过。Live-provider smoke 尚未执行；
-S4 已完成首个 deterministic Verifier comparison、12 个 shared candidates /
-24 次 VerifierEvaluation、independent replay，以及 canonical durable report 的
-packaged multi-writer/process-kill/fresh-JVM 工程切片；首个 Tool arguments
-pre-dispatch fault 也已完成。完整 fault suite、typed
-read-only Worker handoff、stochastic Harness 与真实 Seed Gate 尚未完成。**
+工程切片已通过。Live-provider smoke 尚未执行。S4 已完成 deterministic
+Verifier comparison、canonical durable report，以及 Pack 005 Tool arguments、
+Pack 006 post-dispatch deadline 和 Pack 007 typed read-only Worker 三个有限故障/
+runtime 工程切片。Pack 007 只覆盖 single/synchronous/`depth=1`、one Worker、
+read-only Fake 路径；完整 fault suite、stochastic Harness、通用 multi-agent 与
+真实 Seed Gate 尚未完成。**
 这条技术主线来自项目所有者 2026-07-30 的 Roadmap
 顺序例外；它不代表 Stage 1 的学习、市场或真实 Connector Gate 已完成。
 
@@ -117,20 +117,27 @@ S4 Tool arguments fault 回执：
 S4 post-dispatch deadline 回执：
 [Post-dispatch Deadline Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-post-dispatch-deadline.md)。
 
+S4 typed read-only Worker 回执：
+[Typed Read-only Worker Handoff Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-typed-read-only-worker-handoff.md)。
+
 产品/工程：
 
 - Provider-neutral `AgentKernel` SPI，先 Fake 后 real adapter；
 - Task/Result Envelope、工具循环、预算、取消、结构化输出和 Trace；
 - PostgreSQL durable AgentRun、Safe Trace hash chain、typed resource binding、
   verified read 与 deterministic Offline golden runner；
+- typed `WorkerCall`、`AgentWorkerRuntime`、durable `WorkerResultEnvelope`、
+  V6 parent/child relation，以及 parent-only Artifact commit；
 - 普通 API 之外的 isolated synthetic Eval Runner：默认 zero-egress preflight，
   real TTY + exact Task-bound one-shot permit，POSIX attempt marker/journal 与本地
   hard-link create-only terminal run record；
 - production read-only journal verifier 与 8-point fat-JAR process-kill/restart matrix；
 - 固定模型与 Task Pack 的 H0/H1 Harness 对照；
 - 已完成 schema-invalid Tool arguments 的 pre-dispatch fault，以及 trusted
-  read-only Tool 的 post-dispatch cooperative deadline fault；Tool 执行失败、限流、
-  Context Drift、Prompt Injection 与 write-side timeout/reconciliation 故障集仍开放。
+  read-only Tool 的 post-dispatch cooperative deadline fault；Pack 007 另固定
+  registered Worker `contextPolicyVersion` 单变量 drift 在 child dispatch 前
+  fail-closed。Tool 执行失败、限流、Working Self/context compaction drift、
+  Prompt Injection 与 write-side timeout/reconciliation 故障集仍开放。
 
 当前已经完成 synthetic Fake success 的 deterministic baseline、OpenAI Responses
 protocol 的 loopback evidence、bounded runner engineering Gate，以及 8 个选定
@@ -150,8 +157,13 @@ Tool execute 前被拒绝：fault 的 Tool execute、Tool-backed read、Artifact
 不是 live model 或系统级“什么都没发生”。Pack 006 进一步证明 read-only Tool
 已 dispatch 后越过 deadline 时，actual read/latency 保留，但 late result 不进入
 Evidence/Artifact；exact boundary 与 cancellation precedence 也被固定。它仍不是 hard
-timeout、write-side exactly-once 或 live model evidence。真实任务、人工盲评、其余
-fault injection 与用户价值证据仍未执行。
+timeout、write-side exactly-once 或 live model evidence。Pack 007 再加入一个
+server-owned、serial、synchronous、`depth=1` read-only Fake Worker：child
+Task/Run/Trace/Bundle、durable WorkerResult、parent `HANDOFF` 和 V6 graph constraints
+已验证，context-policy drift 在 child Run/Model/Tool/delegated read 前 fail-closed；
+真实 process-kill 后可观察 child terminal + WorkerResult 已 durable、parent 仍
+`RUNNING` 的 crash gap。它不会自动 resume，也不是 parallel/general multi-agent。
+真实任务、人工盲评、其余 fault injection 与用户价值证据仍未执行。
 `billingStatus=UNKNOWN` 表示 provider 费用未知，不能解释成免费；reservation 是调用前的
 authorization ceiling，provider 已返回的 observed usage 即使超过 reservation 也必须如实保留。
 

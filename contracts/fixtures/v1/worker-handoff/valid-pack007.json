@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0",
+  "graphId": "pack007-offline-read-only-worker-handoff-v1",
+  "components": {
+    "parentTask": {
+      "path": "contracts/fixtures/v1/task-envelope/valid-pack007-parent.json",
+      "rawSha256": "9676c7d7fbb7a348cc08dcf5eca7af6f6e476e0546a5bb4be770f7e39ff12839"
+    },
+    "childTask": {
+      "path": "contracts/fixtures/v1/task-envelope/valid-pack007-child.json",
+      "rawSha256": "5084976bb879f43c210408e344d74c4d55029c5dec128eb1eec59adceee157bc"
+    },
+    "parentTrace": {
+      "path": "contracts/fixtures/v1/agent-trace-envelope/valid-pack007-parent-handoff.json",
+      "rawSha256": "887301e7ec6435d7e7c03a7a7211f92e368e99fb8824a4a319689c2fc7052d5c"
+    },
+    "childTrace": {
+      "path": "contracts/fixtures/v1/agent-trace-envelope/valid-pack007-child-proposal.json",
+      "rawSha256": "d94acac213d5eea24bd8eb6b7f9f31471f766d076cc903eb4f2adb540043a869"
+    },
+    "parentBundle": {
+      "path": "contracts/fixtures/v1/harness-run-bundle/valid-pack007-parent.json",
+      "rawSha256": "797d5e09ac0ac04899bcf2f22501a9c16687dc31c9867cd94ee4e99a800cc90a"
+    },
+    "childBundle": {
+      "path": "contracts/fixtures/v1/harness-run-bundle/valid-pack007-child.json",
+      "rawSha256": "20caf5536895cb14b40aa737f508c934a867ede0b3f055dfdbb0247304708d22"
+    },
+    "workerResult": {
+      "path": "contracts/fixtures/v1/worker-result-envelope/valid.json",
+      "rawSha256": "b31b849c7a5a4a3fdb162474331c873feb46783d4a67b83822d39bc162f4f37a"
+    }
+  },
+  "receipts": {
+    "parentTaskHash": "d1dfaa518503963bb71c4401aa51e23000fb2f81b35892b29fb09e01229852e8",
+    "childTaskHash": "f18aeb3d9c5b58929f22c55ead9e71f5aa6f74c5708fddfc413f3ffee94cfbd3",
+    "parentTraceRoot": "eba203ca7e61046363308f297ab94e509d82badf70c601ce1136de2071b3faef",
+    "childTraceRoot": "ea07ac77589c9f71fcae95a5e0e52e16bbdca00343c48ecd70fea7257a5af9f5",
+    "parentBundleHash": "fa3d7840adfc0333dbd071db4229af0664654b50f17b2f1c8d6f6e03eb24efbe",
+    "childBundleHash": "c12b2771c506bf823139af860396ddc8736bb81a1f0bbd9b09a4138d83cd3e0a",
+    "workerResultIntegrityHash": "d69ecb08300f1f1cd378d826243add922c0deb75a15d9393a63d5d00d2a2f5a8",
+    "workerContentHash": "e5b6493d7741cf43b65fb45c29d0351f3d038e470df31f964e6f1fa9cc8f767b"
+  }
+}

@@ -21,8 +21,10 @@ import io.emergeos.core.application.AgentDraftService;
 import io.emergeos.core.application.AgentExecutionProfile;
 import io.emergeos.core.application.ArtifactLineageService;
 import io.emergeos.core.application.CaptureService;
+import io.emergeos.core.application.DurableReadOnlyWorkerService;
 import io.emergeos.core.application.LocalActionAuthority;
 import io.emergeos.core.application.ManifestationService;
+import io.emergeos.core.application.ReadOnlyWorkerExecutionProfile;
 import io.emergeos.core.application.RecoverableActionService;
 import io.emergeos.core.port.AgentKernel;
 import io.emergeos.core.port.IdGenerator;
@@ -34,6 +36,7 @@ import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -80,45 +83,91 @@ class ApiConfiguration {
   }
 
   @Bean
-  AgentExecutionProfile agentExecutionProfile() {
-    return AgentExecutionProfile.legacyFakeV1();
+  AgentExecutionProfile agentDraftExecutionProfile() {
+    return AgentExecutionProfile.readOnlyWorkerFakeV1();
   }
 
   @Bean
-  AgentKernel agentKernel(
+  ReadOnlyWorkerExecutionProfile readOnlyWorkerExecutionProfile(
+      AgentExecutionProfile agentDraftExecutionProfile) {
+    return ReadOnlyWorkerExecutionProfile.pack007FakeV1(
+        agentDraftExecutionProfile.contextPolicyVersion());
+  }
+
+  @Bean(name = "workerAgentKernel")
+  AgentKernel workerAgentKernel(
       PostgresCaptureStore captureStore,
-      AgentExecutionProfile agentExecutionProfile) {
+      AgentExecutionProfile agentDraftExecutionProfile,
+      ReadOnlyWorkerExecutionProfile readOnlyWorkerExecutionProfile) {
     return new AgentLoopKernel(
-        ScriptedFakeModel.forCaptureDraft(),
-        new AgentToolRegistry(List.of(new CaptureReadTool(captureStore))),
-        agentExecutionProfile.maxModelSteps(),
-        agentExecutionProfile.maxToolCalls());
+        ScriptedFakeModel.forReadOnlyWorkerProposal(),
+        new AgentToolRegistry(
+            agentDraftExecutionProfile.toolRegistryVersion(),
+            List.of(new CaptureReadTool(captureStore))),
+        readOnlyWorkerExecutionProfile.maxModelSteps(),
+        readOnlyWorkerExecutionProfile.maxToolCalls());
   }
 
   @Bean
-  AgentDraftService agentDraftService(
-      AgentKernel agentKernel,
+  DurableReadOnlyWorkerService readOnlyWorkerRuntime(
+      @Qualifier("workerAgentKernel") AgentKernel workerAgentKernel,
       PostgresAgentRunStore agentRunStore,
       PostgresCaptureStore captureStore,
       IdGenerator idGenerator,
       Clock clock,
-      AgentExecutionProfile agentExecutionProfile) {
-    return new AgentDraftService(
-        agentKernel,
+      ReadOnlyWorkerExecutionProfile readOnlyWorkerExecutionProfile) {
+    return new DurableReadOnlyWorkerService(
+        workerAgentKernel,
         agentRunStore,
         captureStore,
         idGenerator,
         clock,
-        agentExecutionProfile);
+        readOnlyWorkerExecutionProfile);
+  }
+
+  @Bean(name = "parentAgentKernel")
+  AgentKernel parentAgentKernel(
+      PostgresCaptureStore captureStore,
+      AgentExecutionProfile agentDraftExecutionProfile,
+      DurableReadOnlyWorkerService readOnlyWorkerRuntime) {
+    return new AgentLoopKernel(
+        ScriptedFakeModel.forReadOnlyWorkerDraft(),
+        new AgentToolRegistry(
+            agentDraftExecutionProfile.toolRegistryVersion(),
+            List.of(new CaptureReadTool(captureStore))),
+        readOnlyWorkerRuntime,
+        agentDraftExecutionProfile.maxModelSteps(),
+        agentDraftExecutionProfile.maxToolCalls());
+  }
+
+  @Bean
+  AgentDraftService agentDraftService(
+      @Qualifier("parentAgentKernel") AgentKernel parentAgentKernel,
+      PostgresAgentRunStore agentRunStore,
+      PostgresCaptureStore captureStore,
+      IdGenerator idGenerator,
+      Clock clock,
+      AgentExecutionProfile agentDraftExecutionProfile) {
+    return new AgentDraftService(
+        parentAgentKernel,
+        agentRunStore,
+        captureStore,
+        idGenerator,
+        clock,
+        agentDraftExecutionProfile);
   }
 
   @Bean
   PostgresAgentRunStore agentRunStore(
       DataSource dataSource,
       PlatformTransactionManager transactionManager,
-      PostgresArtifactLineageStore artifactLineageStore) {
+      PostgresArtifactLineageStore artifactLineageStore,
+      ReadOnlyWorkerExecutionProfile readOnlyWorkerExecutionProfile) {
     return new PostgresAgentRunStore(
-        dataSource, transactionManager, artifactLineageStore);
+        dataSource,
+        transactionManager,
+        artifactLineageStore,
+        readOnlyWorkerExecutionProfile);
   }
 
   @Bean

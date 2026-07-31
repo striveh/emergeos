@@ -60,8 +60,55 @@ public record AgentTraceEntry(
           throw new IllegalArgumentException("TOOL_REJECTED metadata is outside the safe allowlist");
         }
       }
+      case HANDOFF_REQUEST -> {
+        if (!"REQUESTED".equals(status)
+            || toolName != null
+            || reference == null
+            || !reference.matches(
+                "agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")) {
+          throw new IllegalArgumentException(
+              "HANDOFF_REQUEST metadata is outside the safe allowlist");
+        }
+      }
+      case HANDOFF_RESULT -> {
+        if (!"SUCCEEDED".equals(status)
+            || toolName != null
+            || reference == null
+            || !reference.matches(
+                "agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")) {
+          throw new IllegalArgumentException(
+              "HANDOFF_RESULT metadata is outside the safe allowlist");
+        }
+      }
+      case HANDOFF_REJECTED -> {
+        boolean allowedStatus =
+            "BLOCKED".equals(status)
+                || "FAILED".equals(status)
+                || "CANCELLED_UNOBSERVED".equals(status)
+                || "DEADLINE_EXHAUSTED".equals(status)
+                || "DEADLINE_EXCEEDED_UNOBSERVED".equals(status)
+                || "DEADLINE_EXCEEDED_AFTER_CHILD".equals(status)
+                || "LIMIT_EXHAUSTED".equals(status)
+                || "CHILD_FAILED".equals(status)
+                || "CHILD_BLOCKED".equals(status)
+                || "CHILD_NEEDS_INPUT".equals(status)
+                || "CHILD_CANCELLED".equals(status)
+                || "MALFORMED_RESULT".equals(status);
+        boolean safeReference =
+            reference == null
+                || reference.matches(
+                    "agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}");
+        if (!allowedStatus || toolName != null || !safeReference) {
+          throw new IllegalArgumentException(
+              "HANDOFF_REJECTED metadata is outside the safe allowlist");
+        }
+      }
       case STRUCTURED_FINAL -> {
-        if (!"PROPOSED".equals(status) || reference == null) {
+        if (!"PROPOSED".equals(status)
+            || reference == null
+            || !(reference.matches(
+                    "task://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")
+                || reference.matches("proposal://sha256:[a-f0-9]{64}"))) {
           throw new IllegalArgumentException(
               "STRUCTURED_FINAL metadata is outside the safe allowlist");
         }

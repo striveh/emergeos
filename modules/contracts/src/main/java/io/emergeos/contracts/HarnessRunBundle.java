@@ -246,9 +246,8 @@ public record HarnessRunBundle(
         || costUsd.compareTo(result.costUsd()) != 0
         || tokenCount != result.tokenCount()
         || latencyMs != result.latencyMs()
-        || (costUsd.compareTo(task.budgetUsd()) > 0
-            && !permitsObservedBudgetOverage(
-                schemaVersion, outcome, failureAttribution))
+        || !ObservedExecutionLimits.permitsBudget(
+            task, outcome, costUsd, failureAttribution)
         || !ObservedExecutionLimits.permitsLatency(task, outcome, latencyMs)
         || !ObservedExecutionLimits.permitsFailureAttribution(
             task, outcome, latencyMs, failureAttribution)) {
@@ -275,6 +274,10 @@ public record HarnessRunBundle(
         bindings,
         ResourceRole.VERIFICATION,
         verificationRef == null ? List.of() : List.of(verificationRef));
+    List<ResourceBinding> workerResultBindings =
+        bindings.stream()
+            .filter(binding -> binding.role() == ResourceRole.WORKER_RESULT)
+            .toList();
     if (outcome != RunStatus.SUCCEEDED && !result.artifactRefs().isEmpty()) {
       throw new IllegalArgumentException("A non-success Run cannot bind an Artifact");
     }
@@ -284,13 +287,34 @@ public record HarnessRunBundle(
       throw new IllegalArgumentException(
           "A successful CREATE_ARTICLE_DRAFT Run requires exactly one Artifact");
     }
-  }
-
-  private static boolean permitsObservedBudgetOverage(
-      String schemaVersion, RunStatus outcome, String failureAttribution) {
-    return "1.1".equals(schemaVersion)
-        && outcome != RunStatus.SUCCEEDED
-        && "MODEL_BUDGET_EXHAUSTED".equals(failureAttribution);
+    boolean readOnlyWorker = "PROPOSE_ARTICLE_DRAFT".equals(task.kind());
+    if (readOnlyWorker) {
+      if (!result.artifactRefs().isEmpty()
+          || !result.receiptRefs().isEmpty()
+          || !handoffRefs.isEmpty()
+          || !checkpointRefs.isEmpty()
+          || verificationRef != null) {
+        throw new IllegalArgumentException(
+            "A read-only Worker cannot bind write-side or nested execution truth");
+      }
+      if (outcome == RunStatus.SUCCEEDED) {
+        if (workerResultBindings.size() != 1
+            || workerResultBindings.getFirst().ordinal() != 0
+            || !workerResultBindings
+                .getFirst()
+                .ref()
+                .equals("worker-result://" + runId)) {
+          throw new IllegalArgumentException(
+              "A successful read-only Worker requires its exact durable Worker Result");
+        }
+      } else if (!workerResultBindings.isEmpty()) {
+        throw new IllegalArgumentException(
+            "A non-success read-only Worker cannot bind a Worker Result");
+      }
+    } else if (!workerResultBindings.isEmpty()) {
+      throw new IllegalArgumentException(
+          "Only a read-only Worker Run can bind a Worker Result");
+    }
   }
 
   private static void verifyGlobalBindingOrder(List<ResourceBinding> bindings) {

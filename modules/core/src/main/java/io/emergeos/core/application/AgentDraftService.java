@@ -2,6 +2,7 @@ package io.emergeos.core.application;
 
 import io.emergeos.contracts.AgentTraceEntry;
 import io.emergeos.contracts.AgentTraceEnvelope;
+import io.emergeos.contracts.ContractText;
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.HarnessRunBundle;
 import io.emergeos.contracts.IntegrityHashes;
@@ -23,6 +24,7 @@ import io.emergeos.core.domain.ArtifactLineageEntry;
 import io.emergeos.core.domain.Capture;
 import io.emergeos.core.domain.ContentHashes;
 import io.emergeos.core.port.AgentKernel;
+import io.emergeos.core.port.AgentRunContext;
 import io.emergeos.core.port.AgentRunStore;
 import io.emergeos.core.port.AgentTaskAuthorizer;
 import io.emergeos.core.port.CancellationSignal;
@@ -133,10 +135,30 @@ public final class AgentDraftService {
       throw new IllegalArgumentException(
           "execution profile and AgentKernel identity disagree");
     }
+    if (executionProfile.workerBound()) {
+      ReadOnlyWorkerExecutionProfile worker =
+          ReadOnlyWorkerExecutionProfile.pack007FakeV1(
+              executionProfile.contextPolicyVersion());
+      if (!worker.registryVersion().equals(kernel.workerRegistryVersion())
+          || !worker.fingerprint().equals(kernel.workerProfileFingerprint())) {
+        throw new IllegalArgumentException(
+            "execution profile and Worker runtime identity disagree");
+      }
+    } else if (kernel.workerRegistryVersion() != null
+        || kernel.workerProfileFingerprint() != null) {
+      throw new IllegalArgumentException(
+          "an undeclared Worker runtime cannot be attached to this route");
+    }
   }
 
   public AgentDraftOutcome draft(AgentDraftCommand command) {
+    return draft(command, CancellationSignal.never());
+  }
+
+  public AgentDraftOutcome draft(
+      AgentDraftCommand command, CancellationSignal cancellation) {
     Objects.requireNonNull(command, "command");
+    Objects.requireNonNull(cancellation, "cancellation");
     String runId = ids.next("run");
     String captureRef = "capture://" + command.captureId();
     Capture ownedCapture =
@@ -145,11 +167,20 @@ public final class AgentDraftService {
     executionProfile.requireTaskBinding(task);
     taskAuthorizer.authorize(task);
     Instant startedAt = clock.instant();
-    runs.start(AgentRun.running(runId, command.principalId(), task, startedAt));
+    AgentRun planned =
+        AgentRun.running(runId, command.principalId(), task, startedAt);
+    AgentRun canonical = runs.start(planned);
+    if (!planned.equals(canonical)) {
+      throw new IllegalStateException(
+          "AgentRunStore returned different RUNNING truth");
+    }
+    AgentRunContext runContext = AgentRunContext.fromRunning(canonical);
 
     AgentRunOutcome kernelRun;
     try {
-      kernelRun = sanitizeKernelOutcome(kernel.run(task, CancellationSignal.never()), task);
+      kernelRun =
+          sanitizeKernelOutcome(
+              kernel.run(runContext, cancellation), task);
     } catch (RuntimeException unexpectedKernelFailure) {
       kernelRun = safeFailure("AGENT_KERNEL_FAILED");
     }
@@ -162,6 +193,8 @@ public final class AgentDraftService {
     }
 
     if (kernelRun.status() != RunStatus.SUCCEEDED) {
+      List<ResourceBinding> terminalBindings =
+          appendHandoffBindings(evidenceBindings, kernelRun);
       return complete(
           command,
           runId,
@@ -171,7 +204,7 @@ public final class AgentDraftService {
           kernelRun.status(),
           kernelRun.failureReason(),
           null,
-          evidenceBindings);
+          terminalBindings);
     }
     AgentDraftReferenceGrounding.Verification verification;
     try {
@@ -205,6 +238,16 @@ public final class AgentDraftService {
           evidenceBindings);
     }
     AgentDraftProposal proposal = kernelRun.proposal();
+    if (!validAcceptedHandoffProposal(task, kernelRun, proposal)) {
+      return rejected(
+          command,
+          runId,
+          task,
+          startedAt,
+          kernelRun,
+          "UNSAFE_WORKER_OUTPUT_BINDING",
+          evidenceBindings);
+    }
 
     String artifactId = ids.next("art");
     Instant completedAt = clock.instant();
@@ -232,7 +275,9 @@ public final class AgentDraftService {
         RunStatus.SUCCEEDED,
         null,
         artifact,
-        appendArtifactBinding(evidenceBindings, artifactRef, artifact));
+        appendHandoffBindings(
+            appendArtifactBinding(evidenceBindings, artifactRef, artifact),
+            kernelRun));
   }
 
   private AgentDraftOutcome rejected(
@@ -252,7 +297,7 @@ public final class AgentDraftService {
         RunStatus.FAILED,
         reason,
         null,
-        evidenceBindings);
+        appendHandoffBindings(evidenceBindings, kernelRun));
   }
 
   private AgentDraftOutcome complete(
@@ -320,7 +365,9 @@ public final class AgentDraftService {
             null,
             traceRef,
             trace.rootHash(),
-            List.of(),
+            kernelRun.handoffs().stream()
+                .map(io.emergeos.core.domain.AgentHandoffObservation::childRunRef)
+                .toList(),
             List.of(),
             bindings,
             null,
@@ -406,10 +453,11 @@ public final class AgentDraftService {
               candidate.status(),
               candidate.latencyMs(),
               candidate.failureReason())
-          || (candidate.costUsd().compareTo(task.budgetUsd()) > 0
-              && !("1.1".equals(task.schemaVersion())
-                  && !success
-                  && "MODEL_BUDGET_EXHAUSTED".equals(candidate.failureReason())))) {
+          || !ObservedExecutionLimits.permitsBudget(
+              task,
+              candidate.status(),
+              candidate.costUsd(),
+              candidate.failureReason())) {
         return safeFailure("UNSAFE_AGENT_OUTCOME");
       }
       io.emergeos.contracts.ContractValueDomains.requireUsd(
@@ -421,6 +469,9 @@ public final class AgentDraftService {
           || (success && candidate.proposal() == null)
           || (!success && candidate.proposal() != null)) {
         return safeFailure("UNSAFE_AGENT_OUTCOME");
+      }
+      if (!safeHandoffObservations(task, candidate)) {
+        return safeFailure("UNSAFE_HANDOFF_OUTCOME");
       }
     } catch (RuntimeException invalidAdapterOutcome) {
       return safeFailure("UNSAFE_AGENT_OUTCOME");
@@ -434,7 +485,7 @@ public final class AgentDraftService {
   }
 
   private static boolean safeModel(String model) {
-    return model == null || model.matches("[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}");
+    return model == null || ContractText.isSafeModelIdentifier(model);
   }
 
   private static AgentRunOutcome safeFailure(String reason) {
@@ -476,6 +527,159 @@ public final class AgentDraftService {
             artifactRef,
             artifact.current().contentHash()));
     return List.copyOf(bindings);
+  }
+
+  private static List<ResourceBinding> appendHandoffBindings(
+      List<ResourceBinding> bindings,
+      AgentRunOutcome kernelRun) {
+    List<ResourceBinding> result = new ArrayList<>(bindings);
+    for (int index = 0; index < kernelRun.handoffs().size(); index++) {
+      var handoff = kernelRun.handoffs().get(index);
+      result.add(
+          new ResourceBinding(
+              ResourceRole.HANDOFF,
+              index,
+              handoff.childRunRef(),
+              handoff.childBundleHash()));
+    }
+    return List.copyOf(result);
+  }
+
+  private static boolean validAcceptedHandoffProposal(
+      TaskEnvelope task,
+      AgentRunOutcome kernelRun,
+      AgentDraftProposal proposal) {
+    if (!AgentTraceProtocol.hasReadOnlyWorkerCapability(task)) {
+      return kernelRun.handoffs().isEmpty();
+    }
+    if (kernelRun.handoffs().size() != 1) {
+      return false;
+    }
+    var handoff = kernelRun.handoffs().getFirst();
+    return handoff.childStatus() == RunStatus.SUCCEEDED
+        && handoff.proposalContentHash().equals(
+            ContentHashes.sha256(proposal.content()))
+        && handoff.evidenceRefs().equals(proposal.evidenceRefs())
+        && handoff.evidenceRefs().equals(kernelRun.obtainedEvidenceRefs());
+  }
+
+  private static boolean safeHandoffObservations(
+      TaskEnvelope task, AgentRunOutcome candidate) {
+    if (candidate.handoffs().size() > 1
+        || (!AgentTraceProtocol.hasReadOnlyWorkerCapability(task)
+            && !candidate.handoffs().isEmpty())) {
+      return false;
+    }
+    List<String> observedRefs =
+        candidate.handoffs().stream()
+            .map(io.emergeos.core.domain.AgentHandoffObservation::childRunRef)
+            .toList();
+    List<String> mandatoryObservedRefs =
+        candidate.trace().stream()
+            .filter(
+                event ->
+                    event.type() == io.emergeos.core.domain.AgentTraceEventType.HANDOFF_RESULT
+                        || (event.type()
+                                == io.emergeos.core.domain.AgentTraceEventType.HANDOFF_REJECTED
+                            && event.reference() != null
+                            && AgentTraceProtocol.requiresTrustedChildObservation(
+                                event.status())))
+            .map(AgentTraceEvent::reference)
+            .distinct()
+            .toList();
+    if (!observedRefs.containsAll(mandatoryObservedRefs)) {
+      return false;
+    }
+    List<String> correlatedRefs =
+        candidate.trace().stream()
+            .filter(
+                event ->
+                    (event.type()
+                            == io.emergeos.core.domain.AgentTraceEventType.HANDOFF_RESULT
+                        || event.type()
+                            == io.emergeos.core.domain.AgentTraceEventType.HANDOFF_REJECTED)
+                        && event.reference() != null
+                        && observedRefs.contains(event.reference()))
+            .map(AgentTraceEvent::reference)
+            .distinct()
+            .toList();
+    if (!correlatedRefs.equals(observedRefs)) {
+      return false;
+    }
+    if (!candidate.handoffs().isEmpty()) {
+      var observation = candidate.handoffs().getFirst();
+      if (candidate.costUsd().compareTo(observation.childCostUsd()) < 0
+          || candidate.tokenCount() < observation.childTokenCount()) {
+        return false;
+      }
+      AgentTraceEvent completion =
+          candidate.trace().stream()
+              .filter(
+                  event ->
+                      observation.childRunRef().equals(event.reference())
+                          && (event.type()
+                                  == io.emergeos.core.domain.AgentTraceEventType.HANDOFF_RESULT
+                              || event.type()
+                                  == io.emergeos.core.domain.AgentTraceEventType.HANDOFF_REJECTED))
+              .findFirst()
+              .orElse(null);
+      if (completion == null) {
+        return false;
+      }
+      if (completion.type()
+          == io.emergeos.core.domain.AgentTraceEventType.HANDOFF_RESULT) {
+        if (observation.childStatus() != RunStatus.SUCCEEDED
+            || !candidate
+                .obtainedEvidenceRefs()
+                .equals(observation.evidenceRefs())) {
+          return false;
+        }
+      } else if (!matchesRejectedChildTruth(
+          task, candidate, observation, completion.status())) {
+        return false;
+      }
+    }
+    if (candidate.status() == RunStatus.SUCCEEDED) {
+      return !AgentTraceProtocol.hasReadOnlyWorkerCapability(task)
+          || (candidate.handoffs().size() == 1
+              && candidate.handoffs().getFirst().childStatus()
+                  == RunStatus.SUCCEEDED);
+    }
+    return true;
+  }
+
+  private static boolean matchesRejectedChildTruth(
+      TaskEnvelope task,
+      AgentRunOutcome candidate,
+      io.emergeos.core.domain.AgentHandoffObservation observation,
+      String traceStatus) {
+    return switch (traceStatus) {
+      case "CHILD_FAILED" ->
+          observation.childStatus() == RunStatus.FAILED
+              && candidate.status() == RunStatus.FAILED
+              && "HANDOFF_CHILD_FAILED".equals(candidate.failureReason());
+      case "CHILD_BLOCKED" ->
+          observation.childStatus() == RunStatus.BLOCKED
+              && candidate.status() == RunStatus.BLOCKED
+              && "HANDOFF_CHILD_BLOCKED".equals(candidate.failureReason());
+      case "CHILD_NEEDS_INPUT" ->
+          observation.childStatus() == RunStatus.NEEDS_INPUT
+              && candidate.status() == RunStatus.NEEDS_INPUT
+              && "HANDOFF_CHILD_NEEDS_INPUT".equals(candidate.failureReason());
+      case "CHILD_CANCELLED" ->
+          observation.childStatus() == RunStatus.CANCELLED
+              && candidate.status() == RunStatus.CANCELLED
+              && "HANDOFF_CHILD_CANCELLED".equals(candidate.failureReason());
+      case "DEADLINE_EXCEEDED_AFTER_CHILD" ->
+          candidate.status() == RunStatus.FAILED
+              && ObservedExecutionLimits.POST_HANDOFF_DEADLINE_FAILURE.equals(
+                  candidate.failureReason());
+      case "LIMIT_EXHAUSTED" ->
+          candidate.status() == RunStatus.BLOCKED
+              && "HANDOFF_BUDGET_EXHAUSTED".equals(candidate.failureReason())
+              && candidate.costUsd().compareTo(task.budgetUsd()) > 0;
+      default -> false;
+    };
   }
 
 }

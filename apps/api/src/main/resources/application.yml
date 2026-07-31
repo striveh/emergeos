@@ -34,8 +34,11 @@ info:
     artifact-lineage-persistence: postgresql
     action-attempt-persistence: postgresql
     action-provider: simulated-loopback-only
-    agent-kernel: framework-free-scripted-fake
-    agent-trace: response-only
+    agent-kernel: framework-free-scripted-fake-conductor-with-read-only-worker
+    agent-run-persistence: postgresql
+    agent-trace-persistence: postgresql
+    worker-handoff: typed-read-only-depth-1
+    worker-result-persistence: postgresql
     manifestation-side-effects: local-memory-only
 
 emerge:

@@ -16,6 +16,8 @@ public final class IntegrityHashes {
   private static final String TRACE_ROOT_DOMAIN = "emergeos.agent-trace.v1";
   private static final String TASK_DOMAIN = "emergeos.task-envelope.v1";
   private static final String BUNDLE_DOMAIN = "emergeos.harness-run-bundle.v1";
+  private static final String WORKER_RESULT_DOMAIN =
+      "emergeos.worker-result-envelope.v1";
 
   private IntegrityHashes() {}
 
@@ -67,6 +69,29 @@ public final class IntegrityHashes {
       throw new NullPointerException("task");
     }
     return domainHash(TASK_DOMAIN, CanonicalEncoding.encode(task));
+  }
+
+  public static String workerResultHash(WorkerResultEnvelope result) {
+    if (result == null) {
+      throw new NullPointerException("result");
+    }
+    return domainHash(
+        WORKER_RESULT_DOMAIN,
+        CanonicalEncoding.encode(
+            CanonicalEncoding.recordValues(result, Set.of("integrityHash"))));
+  }
+
+  static String workerResultHash(Map<String, Object> preimage) {
+    return domainHash(
+        WORKER_RESULT_DOMAIN, CanonicalEncoding.encode(preimage));
+  }
+
+  /** Standard SHA-256 over the exact UTF-8 bytes of immutable user-visible content. */
+  public static String utf8ContentHash(String content) {
+    if (content == null) {
+      throw new NullPointerException("content");
+    }
+    return sha256(content.getBytes(StandardCharsets.UTF_8));
   }
 
   static String bundleHash(Map<String, Object> bundlePreimage) {

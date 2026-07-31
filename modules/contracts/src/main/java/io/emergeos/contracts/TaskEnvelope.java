@@ -76,6 +76,13 @@ public record TaskEnvelope(
         idempotencyKey,
         environmentSnapshotRef);
     delegationChain = ContractText.copyStrings(delegationChain, "delegationChain");
+    if ((parentId != null && parentId.equals(id))
+        || (parentId == null
+            ? !delegationChain.isEmpty()
+            : !delegationChain.equals(List.of(parentId)))) {
+      throw new IllegalArgumentException(
+          "Task delegation must be root or exact non-self depth-one parent lineage");
+    }
     inputRefs = ContractText.copyStrings(inputRefs, "inputRefs");
     evidenceRefs = ContractText.copyStrings(evidenceRefs, "evidenceRefs");
     modalities =
@@ -129,7 +136,7 @@ public record TaskEnvelope(
     if (!modelProvider.matches("[a-z][a-z0-9._-]{0,127}")) {
       throw new IllegalArgumentException("modelProvider must be a stable lowercase slug");
     }
-    if (!modelRequested.matches("[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}")) {
+    if (!ContractText.isSafeModelIdentifier(modelRequested)) {
       throw new IllegalArgumentException("modelRequested is outside the safe model domain");
     }
     if (!pricingProfile.matches("[a-z][a-z0-9._-]{0,199}")) {

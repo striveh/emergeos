@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "pack007-context-drift-run",
+  "taskId": "pack007-parent-task",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://pack007-parent-task",
+      "previousRootHash": "1e689944b93c8523a09a2fc92b76edfd58adfe5864d2a9b68c72e4043ab9b79f",
+      "eventHash": "316f7ae76ab1aff8fd01169147ac5b3c3b69cb80a8833fd9b59165561c243a87"
+    },
+    {
+      "sequence": 2,
+      "type": "HANDOFF_REJECTED",
+      "toolName": null,
+      "status": "BLOCKED",
+      "reference": null,
+      "previousRootHash": "63b8cb599b28a3a1602764f4d2caa4209e1dcc9eb56ab8f3c4ec99d837ef8a97",
+      "eventHash": "e784337644b46b8446b42cf1635e7b2524dee0a09b51315f2cf85560d549444e"
+    }
+  ],
+  "eventCount": 2,
+  "rootHash": "b43c9c149a15e1e0cd7b96a29ad2f7b7c9f2b1e1422f84c41f316368e59bc2d9"
+}

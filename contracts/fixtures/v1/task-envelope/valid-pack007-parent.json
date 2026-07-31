@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0",
+  "id": "pack007-parent-task",
+  "parentId": null,
+  "principalRef": "pack007-owner",
+  "delegationChain": [],
+  "kind": "CREATE_ARTICLE_DRAFT",
+  "intent": "把这个想法整理成一篇有证据的短文",
+  "inputRefs": [
+    "capture://pack007-capture"
+  ],
+  "evidenceRefs": [],
+  "modalities": [
+    "text"
+  ],
+  "dataClass": "PUBLIC",
+  "risk": "REVERSIBLE",
+  "latencyClass": "INTERACTIVE",
+  "requiredTools": [],
+  "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+  "acceptanceChecks": [
+    "draft cites the source Capture"
+  ],
+  "allowParallel": false,
+  "maxModelSteps": 2,
+  "maxToolCalls": 1,
+  "deadlineMs": 5000,
+  "budgetUsd": 0,
+  "modelProvider": null,
+  "modelRequested": null,
+  "pricingProfile": null,
+  "idempotencyKey": null,
+  "policyVersion": "agent-draft-policy-v1",
+  "stateVersion": "stage2-s2",
+  "contextPolicyVersion": "ref-only-v1",
+  "toolRegistryVersion": "agent-tools-v2",
+  "environmentSnapshotRef": null,
+  "capabilityRefs": [
+    "capability://worker-handoff/article-draft-read-v1"
+  ],
+  "unresolvedDecisions": [],
+  "returnControlWhen": "structured final or non-success"
+}

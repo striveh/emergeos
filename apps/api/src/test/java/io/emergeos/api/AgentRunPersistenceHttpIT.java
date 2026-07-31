@@ -112,8 +112,8 @@ class AgentRunPersistenceHttpIT {
       assertEquals(
           List.of(
               "MODEL_STEP",
-              "TOOL_REQUEST",
-              "TOOL_RESULT",
+              "HANDOFF_REQUEST",
+              "HANDOFF_RESULT",
               "MODEL_STEP",
               "STRUCTURED_FINAL",
               "ARTIFACT_COMMITTED"),

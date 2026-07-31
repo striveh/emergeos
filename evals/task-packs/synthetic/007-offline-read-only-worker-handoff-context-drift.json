@@ -1,0 +1,186 @@
+{
+  "schemaVersion": "0.6",
+  "taskId": "synthetic-offline-read-only-worker-handoff-context-drift-007",
+  "title": "离线验证单个 read-only Worker 的可重放交付与 context-policy drift fail-closed",
+  "principalRef": "pack007-owner",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic-pack-007",
+    "dataClass": "PUBLIC",
+    "content": "Prompt 工程是在为概率程序构造运行时状态。"
+  },
+  "requiredConstraints": [
+    "control 与 drift 使用完全相同的 principal、Capture、Task、Run、Artifact、时间和组件版本，只改变注册 Worker 的 context-policy version",
+    "Conductor 只能调用一个固定名称、depth=1、serial、read-only Worker，Worker 只能执行 capture.read",
+    "WorkerResult 必须与 child Task、child Run、content hash、evidence refs 和 child Bundle 完整性绑定，只有 parent 可以提交 Artifact",
+    "每个 case 必须用 fresh runner 执行两次并得到完全相同的 typed observation"
+  ],
+  "forbiddenActions": [
+    "访问真实模型、互联网、HTTP endpoint、Connector、真实用户数据或真实账号",
+    "让 Worker 创建 Artifact、Action、Receipt、Checkpoint、再次 handoff 或执行 write-capable Tool",
+    "在 context-policy drift 时创建 child Run、调用 child Model、读取 delegated Capture 或产生 WorkerResult",
+    "把本 Pack 宣称为 parallel multi-agent、checkpoint/resume、自动恢复 RUNNING parent 或 exactly-once 外部行动证据"
+  ],
+  "acceptanceChecks": [
+    "control 产生一个 SUCCEEDED parent、一个 SUCCEEDED child、一个 verified WorkerResult 和且仅一个 parent Artifact",
+    "control 的 parent/child Task、Trace、Bundle、WorkerResult 与 Artifact hashes 匹配冻结回执及 Pack007 contract graph",
+    "drift 在 parent 第一次 WorkerCall 后以 BLOCKED/HANDOFF_CONTEXT_POLICY_DRIFT 结束，且没有 child、WorkerResult 或 Artifact",
+    "control 与 drift 共享同一个 parent Task hash；drift 只留下安全的 MODEL_STEP 与 HANDOFF_REJECTED Trace",
+    "两个 fresh runner 对每个 case 的完整 observation exact-equal"
+  ],
+  "humanReviewQuestions": [
+    "证据是否证明 Worker 的权限、depth、Tool 和输出绑定均由 server-owned profile 决定，而非由 Model 自报？",
+    "context-policy drift 是否在任何 delegated read 和 child persistence 之前 fail-closed？",
+    "回执是否清楚区分 deterministic Fake product-path evidence 与真实模型质量、真实用户价值？"
+  ],
+  "risk": "REVERSIBLE",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "control 注册与 parent 完全一致的 ref-only-v1 Worker profile",
+    "drift 保持所有冻结输入不变，只把注册 Worker profile 的 expected context policy 改为 ref-only-v2",
+    "composition 时先绑定 expected Worker fingerprint，执行前替换 runtime profile，以验证 execution-time drift detection"
+  ],
+  "readOnlyWorkerHandoff": {
+    "suiteId": "offline-read-only-worker-handoff-context-drift-v1",
+    "variable": "registered-worker-context-policy-version",
+    "provenance": {
+      "kind": "LITERAL_CHECKED_IN_SYNTHETIC",
+      "containsRealUserData": false,
+      "containsRealAccount": false,
+      "networkAllowed": false,
+      "realModelAllowed": false,
+      "connectorAllowed": false
+    },
+    "frozen": {
+      "taskSchemaVersion": "1.0",
+      "principalId": "pack007-owner",
+      "captureId": "pack007-capture",
+      "captureNonce": "pack007-nonce",
+      "sourceType": "TEXT",
+      "sourceRef": "synthetic-pack-007",
+      "dataClass": "PUBLIC",
+      "content": "Prompt 工程是在为概率程序构造运行时状态。",
+      "intent": "把这个想法整理成一篇有证据的短文",
+      "parentRunId": "pack007-parent-run",
+      "childRunId": "pack007-child-run",
+      "parentTaskId": "pack007-parent-task",
+      "childTaskId": "pack007-child-task",
+      "artifactId": "pack007-parent-artifact",
+      "frozenTime": "2026-07-31T03:30:00Z",
+      "parentExecutionProfile": "api-fake-worker-agent-draft-v1",
+      "parentModel": "fake-model-v1",
+      "workerProfile": "article-draft-read-worker-v1",
+      "workerRegistry": "agent-workers-v1",
+      "workerName": "article-draft.read-v1",
+      "workerModel": "fake-worker-model-v1",
+      "workerProfileFingerprint": "e5f705bcc49d3e0302ab0a159f18ad597df01199fc7c0594e375b40011d519ac",
+      "harness": "framework-free-agent-kernel-v1",
+      "parentAgent": "agent-draft-service-v1",
+      "workerAgent": "agent-draft-worker-v1",
+      "verifier": "agent-draft-verifier-v1",
+      "policy": "agent-draft-policy-v1",
+      "state": "stage2-s2",
+      "parentContextPolicyVersion": "ref-only-v1",
+      "toolRegistry": "agent-tools-v2",
+      "traceIntegrity": "emergeos-length-prefixed-sha256-v1"
+    },
+    "control": {
+      "id": "matching-context-policy-control",
+      "registeredWorkerContextPolicyVersion": "ref-only-v1",
+      "expected": {
+        "parentStatus": "SUCCEEDED",
+        "parentFailureReason": null,
+        "childStatus": "SUCCEEDED",
+        "parentTraceTypes": [
+          "MODEL_STEP",
+          "HANDOFF_REQUEST",
+          "HANDOFF_RESULT",
+          "MODEL_STEP",
+          "STRUCTURED_FINAL",
+          "ARTIFACT_COMMITTED"
+        ],
+        "parentTraceStatuses": [
+          "COMPLETED",
+          "REQUESTED",
+          "SUCCEEDED",
+          "COMPLETED",
+          "PROPOSED",
+          "SUCCEEDED"
+        ],
+        "childTraceTypes": [
+          "MODEL_STEP",
+          "TOOL_REQUEST",
+          "TOOL_RESULT",
+          "MODEL_STEP",
+          "STRUCTURED_FINAL"
+        ],
+        "childTraceStatuses": [
+          "COMPLETED",
+          "REQUESTED",
+          "SUCCEEDED",
+          "COMPLETED",
+          "PROPOSED"
+        ],
+        "runStartCount": 2,
+        "runCompleteCount": 2,
+        "artifactCount": 1,
+        "workerResultCount": 1,
+        "workerVerifiedReadCount": 1,
+        "pairVerificationCount": 1,
+        "parentModelCallCount": 2,
+        "childModelCallCount": 2,
+        "childToolExecuteCount": 1,
+        "captureReadCount": 3,
+        "workerPreparationCount": 1,
+        "parentTaskHash": "d1dfaa518503963bb71c4401aa51e23000fb2f81b35892b29fb09e01229852e8",
+        "childTaskHash": "f18aeb3d9c5b58929f22c55ead9e71f5aa6f74c5708fddfc413f3ffee94cfbd3",
+        "parentTraceRoot": "eba203ca7e61046363308f297ab94e509d82badf70c601ce1136de2071b3faef",
+        "childTraceRoot": "ea07ac77589c9f71fcae95a5e0e52e16bbdca00343c48ecd70fea7257a5af9f5",
+        "parentBundleHash": "fa3d7840adfc0333dbd071db4229af0664654b50f17b2f1c8d6f6e03eb24efbe",
+        "childBundleHash": "c12b2771c506bf823139af860396ddc8736bb81a1f0bbd9b09a4138d83cd3e0a",
+        "workerResultIntegrityHash": "d69ecb08300f1f1cd378d826243add922c0deb75a15d9393a63d5d00d2a2f5a8",
+        "workerContentHash": "e5b6493d7741cf43b65fb45c29d0351f3d038e470df31f964e6f1fa9cc8f767b",
+        "artifactContentHash": "e5b6493d7741cf43b65fb45c29d0351f3d038e470df31f964e6f1fa9cc8f767b"
+      }
+    },
+    "fault": {
+      "id": "registered-context-policy-drift",
+      "registeredWorkerContextPolicyVersion": "ref-only-v2",
+      "expected": {
+        "parentStatus": "BLOCKED",
+        "parentFailureReason": "HANDOFF_CONTEXT_POLICY_DRIFT",
+        "childStatus": null,
+        "parentTraceTypes": [
+          "MODEL_STEP",
+          "HANDOFF_REJECTED"
+        ],
+        "parentTraceStatuses": [
+          "COMPLETED",
+          "BLOCKED"
+        ],
+        "childTraceTypes": [],
+        "childTraceStatuses": [],
+        "runStartCount": 1,
+        "runCompleteCount": 1,
+        "artifactCount": 0,
+        "workerResultCount": 0,
+        "workerVerifiedReadCount": 0,
+        "pairVerificationCount": 0,
+        "parentModelCallCount": 1,
+        "childModelCallCount": 0,
+        "childToolExecuteCount": 0,
+        "captureReadCount": 1,
+        "workerPreparationCount": 1,
+        "parentTaskHash": "d1dfaa518503963bb71c4401aa51e23000fb2f81b35892b29fb09e01229852e8",
+        "childTaskHash": null,
+        "parentTraceRoot": "b43c9c149a15e1e0cd7b96a29ad2f7b7c9f2b1e1422f84c41f316368e59bc2d9",
+        "childTraceRoot": null,
+        "parentBundleHash": "594793dc386abaef416390e4a4ae76e32fb94d19130c92a1ba0e2c39ad3f1e6e",
+        "childBundleHash": null,
+        "workerResultIntegrityHash": null,
+        "workerContentHash": null,
+        "artifactContentHash": null
+      }
+    }
+  }
+}

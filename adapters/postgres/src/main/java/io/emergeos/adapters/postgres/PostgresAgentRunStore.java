@@ -9,10 +9,16 @@ import io.emergeos.contracts.ResourceRole;
 import io.emergeos.contracts.ResultEnvelope;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.contracts.TraceEventType;
+import io.emergeos.contracts.WorkerResultEnvelope;
+import io.emergeos.core.application.AgentExecutionProfile;
+import io.emergeos.core.application.ReadOnlyWorkerExecutionProfile;
+import io.emergeos.core.application.ReadOnlyWorkerHandoffVerifier;
 import io.emergeos.core.domain.AgentRun;
 import io.emergeos.core.domain.AgentRunLifecycle;
 import io.emergeos.core.domain.ArtifactLineage;
+import io.emergeos.core.port.AgentRunContext;
 import io.emergeos.core.port.AgentRunStore;
+import io.emergeos.core.port.ReadOnlyWorkerRunStore;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -27,11 +33,14 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
-public final class PostgresAgentRunStore implements AgentRunStore {
+public final class PostgresAgentRunStore
+    implements AgentRunStore, ReadOnlyWorkerRunStore {
 
   private static final String RUN_COLUMNS =
       """
-      principal_id, run_id, task_id, lifecycle_status, task_envelope::text AS task_json,
+      principal_id, run_id, task_id, parent_run_id, parent_task_id,
+      run_depth, parent_run_depth,
+      lifecycle_status, task_envelope::text AS task_json,
       result_envelope::text AS result_json, bundle::text AS bundle_json,
       bundle_hash, trace_root_hash, last_event_sequence,
       resolved_model, agent_version, verifier_version, harness_version,
@@ -43,14 +52,36 @@ public final class PostgresAgentRunStore implements AgentRunStore {
   private final JdbcClient jdbc;
   private final TransactionTemplate transactions;
   private final PostgresArtifactLineageStore artifacts;
+  private final ReadOnlyWorkerExecutionProfile workerProfile;
   private final JsonMapper json;
   private final Runnable afterArtifactInsert;
+  private final Runnable afterWorkerResultInsert;
+  private final Runnable afterTerminalUpdateBeforeVerifiedRead;
 
   public PostgresAgentRunStore(
       DataSource dataSource,
       PlatformTransactionManager transactionManager,
       PostgresArtifactLineageStore artifacts) {
-    this(dataSource, transactionManager, artifacts, () -> {});
+    this(
+        dataSource,
+        transactionManager,
+        artifacts,
+        ReadOnlyWorkerExecutionProfile.pack007FakeV1());
+  }
+
+  public PostgresAgentRunStore(
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager,
+      PostgresArtifactLineageStore artifacts,
+      ReadOnlyWorkerExecutionProfile workerProfile) {
+    this(
+        dataSource,
+        transactionManager,
+        artifacts,
+        workerProfile,
+        () -> {},
+        () -> {},
+        () -> {});
   }
 
   PostgresAgentRunStore(
@@ -58,13 +89,55 @@ public final class PostgresAgentRunStore implements AgentRunStore {
       PlatformTransactionManager transactionManager,
       PostgresArtifactLineageStore artifacts,
       Runnable afterArtifactInsert) {
+    this(
+        dataSource,
+        transactionManager,
+        artifacts,
+        ReadOnlyWorkerExecutionProfile.pack007FakeV1(),
+        afterArtifactInsert,
+        () -> {},
+        () -> {});
+  }
+
+  PostgresAgentRunStore(
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager,
+      PostgresArtifactLineageStore artifacts,
+      ReadOnlyWorkerExecutionProfile workerProfile,
+      Runnable afterArtifactInsert,
+      Runnable afterWorkerResultInsert) {
+    this(
+        dataSource,
+        transactionManager,
+        artifacts,
+        workerProfile,
+        afterArtifactInsert,
+        afterWorkerResultInsert,
+        () -> {});
+  }
+
+  PostgresAgentRunStore(
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager,
+      PostgresArtifactLineageStore artifacts,
+      ReadOnlyWorkerExecutionProfile workerProfile,
+      Runnable afterArtifactInsert,
+      Runnable afterWorkerResultInsert,
+      Runnable afterTerminalUpdateBeforeVerifiedRead) {
     this.jdbc = JdbcClient.create(Objects.requireNonNull(dataSource, "dataSource"));
     this.transactions =
         new TransactionTemplate(
             Objects.requireNonNull(transactionManager, "transactionManager"));
     this.transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     this.artifacts = Objects.requireNonNull(artifacts, "artifacts");
+    this.workerProfile = Objects.requireNonNull(workerProfile, "workerProfile");
     this.afterArtifactInsert = Objects.requireNonNull(afterArtifactInsert, "afterArtifactInsert");
+    this.afterWorkerResultInsert =
+        Objects.requireNonNull(afterWorkerResultInsert, "afterWorkerResultInsert");
+    this.afterTerminalUpdateBeforeVerifiedRead =
+        Objects.requireNonNull(
+            afterTerminalUpdateBeforeVerifiedRead,
+            "afterTerminalUpdateBeforeVerifiedRead");
     this.json = JsonMapper.shared();
   }
 
@@ -74,6 +147,13 @@ public final class PostgresAgentRunStore implements AgentRunStore {
     if (running.lifecycle() != AgentRunLifecycle.RUNNING) {
       throw new IllegalArgumentException("start requires a RUNNING AgentRun");
     }
+    if (running.task().parentId() != null
+        || !running.task().delegationChain().isEmpty()
+        || "PROPOSE_ARTICLE_DRAFT".equals(running.task().kind())) {
+      throw new IllegalArgumentException(
+          "Worker child must be started through the parent-scoped capability");
+    }
+    requireWorkerParentAuthorityIfPresent(running.task());
     int inserted =
         jdbc.sql(
                 """
@@ -104,7 +184,14 @@ public final class PostgresAgentRunStore implements AgentRunStore {
             .param("startedAt", Timestamp.from(running.startedAt()))
             .update();
     if (inserted == 1) {
-      return running;
+      AgentRun committed =
+          loadLocalStoredRun(running.principalId(), running.runId(), false)
+              .map(StoredRun::run)
+              .orElseThrow(AgentRunIntegrityException::new);
+      if (!committed.equals(running)) {
+        throw new AgentRunIntegrityException();
+      }
+      return committed;
     }
     AgentRun existing =
         findOwned(running.principalId(), running.runId())
@@ -113,6 +200,88 @@ public final class PostgresAgentRunStore implements AgentRunStore {
       throw new AgentRunConflictException();
     }
     return existing;
+  }
+
+  @Override
+  public AgentRun startWorker(AgentRunContext parent, AgentRun running) {
+    Objects.requireNonNull(parent, "parent");
+    Objects.requireNonNull(running, "running");
+    if (running.lifecycle() != AgentRunLifecycle.RUNNING) {
+      throw new IllegalArgumentException(
+          "startWorker requires a RUNNING child AgentRun");
+    }
+    requireWorkerParentAuthority(parent.task());
+    workerProfile.requireChildBinding(parent.task(), running.task());
+    if (!parent.principalId().equals(running.principalId())) {
+      throw new IllegalArgumentException(
+          "Worker child principal must match its exact parent Run");
+    }
+    return Objects.requireNonNull(
+        transactions.execute(status -> startWorkerInTransaction(parent, running)),
+        "Worker start transaction result");
+  }
+
+  private AgentRun startWorkerInTransaction(
+      AgentRunContext parent, AgentRun running) {
+    StoredRun durableParent =
+        loadLocalStoredRun(
+                parent.principalId(), parent.runId(), true)
+            .orElseThrow(AgentRunConflictException::new);
+    requireExactRunningParent(parent, durableParent);
+
+    int inserted =
+        jdbc.sql(
+                """
+                INSERT INTO agent_runs (
+                    principal_id, run_id, task_id, parent_run_id, parent_task_id,
+                    run_depth, parent_run_depth, lifecycle_status,
+                    task_envelope, tool_registry_version,
+                    policy_version, state_version, context_policy_version,
+                    model_provider, model_requested, pricing_profile, started_at
+                ) VALUES (
+                    :principalId, :runId, :taskId, :parentRunId, :parentTaskId,
+                    1, 0, 'RUNNING', CAST(:taskJson AS jsonb),
+                    :toolRegistryVersion,
+                    :policyVersion, :stateVersion, :contextPolicyVersion,
+                    :modelProvider, :modelRequested, :pricingProfile, :startedAt
+                )
+                ON CONFLICT DO NOTHING
+                """)
+            .param("principalId", running.principalId())
+            .param("runId", running.runId())
+            .param("taskId", running.task().id())
+            .param("parentRunId", parent.runId())
+            .param("parentTaskId", parent.task().id())
+            .param("taskJson", json.writeValueAsString(running.task()))
+            .param("toolRegistryVersion", running.task().toolRegistryVersion())
+            .param("policyVersion", running.task().policyVersion())
+            .param("stateVersion", running.task().stateVersion())
+            .param(
+                "contextPolicyVersion",
+                running.task().contextPolicyVersion())
+            .param(
+                "modelProvider", running.task().modelProvider(), Types.VARCHAR)
+            .param(
+                "modelRequested", running.task().modelRequested(), Types.VARCHAR)
+            .param(
+                "pricingProfile", running.task().pricingProfile(), Types.VARCHAR)
+            .param("startedAt", Timestamp.from(running.startedAt()))
+            .update();
+    Optional<StoredRun> stored =
+        loadLocalStoredRun(
+            running.principalId(), running.runId(), false);
+    if (inserted != 1
+        && stored.isEmpty()) {
+      throw new AgentRunConflictException();
+    }
+    StoredRun canonical =
+        stored.orElseThrow(AgentRunIntegrityException::new);
+    if (!canonical.run().equals(running)
+        || !parent.runId().equals(canonical.parentRunId())
+        || !parent.task().id().equals(canonical.parentTaskId())) {
+      throw new AgentRunConflictException();
+    }
+    return canonical.run();
   }
 
   @Override
@@ -128,20 +297,74 @@ public final class PostgresAgentRunStore implements AgentRunStore {
   }
 
   @Override
-  public Optional<AgentRun> findOwned(String principalId, String runId) {
-    Optional<RunRow> row =
-        jdbc.sql(
-                "SELECT " + RUN_COLUMNS + " FROM agent_runs "
-                    + "WHERE principal_id = :principalId AND run_id = :runId")
-            .param("principalId", principalId)
-            .param("runId", runId)
-            .query(PostgresAgentRunStore::mapRunRow)
-            .optional();
-    if (row.isEmpty()) {
-      return Optional.empty();
+  public WorkerCompletion completeWorker(
+      AgentRunContext parent,
+      AgentRun terminal,
+      WorkerResultEnvelope workerResult) {
+    Objects.requireNonNull(parent, "parent");
+    Objects.requireNonNull(terminal, "terminal");
+    if (!terminal.lifecycle().terminal()) {
+      throw new IllegalArgumentException(
+          "completeWorker requires a terminal child AgentRun");
     }
+    requireWorkerParentAuthority(parent.task());
+    ReadOnlyWorkerHandoffVerifier.verifyChild(
+        parent.task(), terminal, workerResult, workerProfile);
+    return Objects.requireNonNull(
+        transactions.execute(
+            status ->
+                completeWorkerInTransaction(parent, terminal, workerResult)),
+        "Worker completion transaction result");
+  }
+
+  @Override
+  public Optional<WorkerCompletion> findWorkerOwned(
+      AgentRunContext parent, String childRunId) {
+    Objects.requireNonNull(parent, "parent");
+    Objects.requireNonNull(childRunId, "childRunId");
     try {
-      return Optional.of(toVerifiedRun(row.orElseThrow()));
+      requireWorkerParentAuthority(parent.task());
+      Optional<StoredRun> parentStored =
+          loadLocalStoredRun(
+              parent.principalId(), parent.runId(), false);
+      if (parentStored.isEmpty()) {
+        return Optional.empty();
+      }
+      requireExactParentIdentity(parent, parentStored.orElseThrow());
+      Optional<StoredRun> childStored =
+          loadLocalStoredRun(
+              parent.principalId(), childRunId, false);
+      if (childStored.isEmpty()) {
+        return Optional.empty();
+      }
+      StoredRun child = childStored.orElseThrow();
+      requireExactChildLineage(parent, child);
+      if (!child.run().lifecycle().terminal()) {
+        return Optional.empty();
+      }
+      WorkerResultEnvelope workerResult =
+          loadWorkerResultLocal(
+                  parent.principalId(), parent.runId(), childRunId)
+              .orElse(null);
+      ReadOnlyWorkerHandoffVerifier.verifyChild(
+          parent.task(), child.run(), workerResult, workerProfile);
+      return Optional.of(new WorkerCompletion(child.run(), workerResult));
+    } catch (AgentRunIntegrityException knownIntegrityFailure) {
+      throw knownIntegrityFailure;
+    } catch (RuntimeException invalidStoredTruth) {
+      throw new AgentRunIntegrityException(invalidStoredTruth);
+    }
+  }
+
+  @Override
+  public Optional<AgentRun> findOwned(String principalId, String runId) {
+    try {
+      Optional<StoredRun> stored =
+          loadLocalStoredRun(principalId, runId, false);
+      if (stored.isEmpty()) {
+        return Optional.empty();
+      }
+      return Optional.of(verifyStoredGraph(stored.orElseThrow()));
     } catch (AgentRunIntegrityException knownIntegrityFailure) {
       throw knownIntegrityFailure;
     } catch (RuntimeException invalidStoredTruth) {
@@ -151,22 +374,47 @@ public final class PostgresAgentRunStore implements AgentRunStore {
 
   private CompletionResult completeInTransaction(
       AgentRun terminal, ArtifactLineage proposedArtifact) {
-    String current =
-        jdbc.sql(
-                """
-                SELECT lifecycle_status
-                FROM agent_runs
-                WHERE principal_id = :principalId
-                  AND run_id = :runId
-                FOR UPDATE
-                """)
-            .param("principalId", terminal.principalId())
-            .param("runId", terminal.runId())
-            .query(String.class)
-            .optional()
+    StoredRun running =
+        loadLocalStoredRun(
+                terminal.principalId(), terminal.runId(), true)
             .orElseThrow(AgentRunConflictException::new);
-    if (!"RUNNING".equals(current)) {
-      throw new AgentRunConflictException();
+    requireExactRunningTransition(terminal, running, false);
+
+    List<StoredRun> children =
+        loadChildrenForUpdate(terminal.principalId(), terminal.runId());
+    List<ResourceBinding> handoffs =
+        terminal.bundle().resourceBindings().stream()
+            .filter(binding -> binding.role() == ResourceRole.HANDOFF)
+            .toList();
+    if (children.isEmpty()) {
+      if (!handoffs.isEmpty()) {
+        throw new IllegalArgumentException(
+            "parent Handoff names a child that was not started by this Run");
+      }
+      verifyWorkerParentProfileIfPresent(terminal);
+    } else {
+      if (children.size() != 1
+          || handoffs.size() != 1
+          || !handoffs
+              .getFirst()
+              .ref()
+              .equals("agent-run://" + children.getFirst().run().runId())) {
+        throw new IllegalArgumentException(
+            "started Worker child must be observed by the exact parent terminal truth");
+      }
+      StoredRun child = children.getFirst();
+      if (!child.run().lifecycle().terminal()) {
+        throw new IllegalArgumentException(
+            "parent cannot complete before its exact Worker child");
+      }
+      WorkerResultEnvelope workerResult =
+          loadWorkerResultLocal(
+                  terminal.principalId(),
+                  terminal.runId(),
+                  child.run().runId())
+              .orElse(null);
+      ReadOnlyWorkerHandoffVerifier.verifyPair(
+          terminal, child.run(), workerResult, workerProfile);
     }
 
     ArtifactLineage committedArtifact = null;
@@ -176,6 +424,58 @@ public final class PostgresAgentRunStore implements AgentRunStore {
     }
     insertTrace(terminal);
     insertBindings(terminal);
+    updateTerminal(terminal);
+    afterTerminalUpdateBeforeVerifiedRead.run();
+    AgentRun committed =
+        verifyStoredGraph(
+            loadLocalStoredRun(
+                    terminal.principalId(), terminal.runId(), false)
+                .orElseThrow(AgentRunIntegrityException::new));
+    return new CompletionResult(committed, committedArtifact);
+  }
+
+  private WorkerCompletion completeWorkerInTransaction(
+      AgentRunContext parent,
+      AgentRun terminal,
+      WorkerResultEnvelope workerResult) {
+    StoredRun durableParent =
+        loadLocalStoredRun(
+                parent.principalId(), parent.runId(), true)
+            .orElseThrow(AgentRunConflictException::new);
+    requireExactRunningParent(parent, durableParent);
+    StoredRun runningChild =
+        loadLocalStoredRun(
+                parent.principalId(), terminal.runId(), true)
+            .orElseThrow(AgentRunConflictException::new);
+    requireExactChildLineage(parent, runningChild);
+    requireExactRunningTransition(terminal, runningChild, true);
+    ReadOnlyWorkerHandoffVerifier.verifyChild(
+        parent.task(), terminal, workerResult, workerProfile);
+
+    if (workerResult != null) {
+      insertWorkerResult(parent, terminal, workerResult);
+      afterWorkerResultInsert.run();
+    }
+    insertTrace(terminal);
+    insertBindings(terminal);
+    updateTerminal(terminal);
+    afterTerminalUpdateBeforeVerifiedRead.run();
+
+    StoredRun committed =
+        loadLocalStoredRun(
+                parent.principalId(), terminal.runId(), false)
+            .orElseThrow(AgentRunIntegrityException::new);
+    requireExactChildLineage(parent, committed);
+    WorkerResultEnvelope committedResult =
+        loadWorkerResultLocal(
+                parent.principalId(), parent.runId(), terminal.runId())
+            .orElse(null);
+    ReadOnlyWorkerHandoffVerifier.verifyChild(
+        parent.task(), committed.run(), committedResult, workerProfile);
+    return new WorkerCompletion(committed.run(), committedResult);
+  }
+
+  private void updateTerminal(AgentRun terminal) {
     int updated =
         jdbc.sql(
                 """
@@ -205,14 +505,20 @@ public final class PostgresAgentRunStore implements AgentRunStore {
             .param("bundleHash", terminal.bundle().integrityHash())
             .param("traceRootHash", terminal.trace().rootHash())
             .param("eventCount", terminal.trace().eventCount())
-            .param("resolvedModel", terminal.result().resolvedModel(), Types.VARCHAR)
+            .param(
+                "resolvedModel",
+                terminal.result().resolvedModel(),
+                Types.VARCHAR)
             .param("agentVersion", terminal.result().agentVersion())
             .param("verifierVersion", terminal.result().verifierVersion())
             .param("harnessVersion", terminal.bundle().harnessVersion())
             .param("costUsd", terminal.result().costUsd())
             .param("tokenCount", terminal.result().tokenCount())
             .param("latencyMs", terminal.result().latencyMs())
-            .param("failureAttribution", terminal.bundle().failureAttribution(), Types.VARCHAR)
+            .param(
+                "failureAttribution",
+                terminal.bundle().failureAttribution(),
+                Types.VARCHAR)
             .param("completedAt", Timestamp.from(terminal.completedAt()))
             .param("principalId", terminal.principalId())
             .param("runId", terminal.runId())
@@ -220,10 +526,34 @@ public final class PostgresAgentRunStore implements AgentRunStore {
     if (updated != 1) {
       throw new AgentRunConflictException();
     }
-    AgentRun committed =
-        findOwned(terminal.principalId(), terminal.runId())
-            .orElseThrow(AgentRunIntegrityException::new);
-    return new CompletionResult(committed, committedArtifact);
+  }
+
+  private void insertWorkerResult(
+      AgentRunContext parent,
+      AgentRun terminal,
+      WorkerResultEnvelope workerResult) {
+    jdbc.sql(
+            """
+            INSERT INTO agent_worker_results (
+                principal_id, parent_run_id, child_run_id, child_task_id,
+                child_status, worker_result_ref, worker_result_envelope,
+                content_hash, integrity_hash
+            ) VALUES (
+                :principalId, :parentRunId, :childRunId, :childTaskId,
+                :childStatus, :workerResultRef,
+                CAST(:workerResultJson AS jsonb), :contentHash, :integrityHash
+            )
+            """)
+        .param("principalId", terminal.principalId())
+        .param("parentRunId", parent.runId())
+        .param("childRunId", terminal.runId())
+        .param("childTaskId", terminal.task().id())
+        .param("childStatus", terminal.lifecycle().name())
+        .param("workerResultRef", workerResult.workerResultRef())
+        .param("workerResultJson", json.writeValueAsString(workerResult))
+        .param("contentHash", workerResult.contentHash())
+        .param("integrityHash", workerResult.integrityHash())
+        .update();
   }
 
   private void insertTrace(AgentRun terminal) {
@@ -264,14 +594,26 @@ public final class PostgresAgentRunStore implements AgentRunStore {
           binding.role() == ResourceRole.ARTIFACT
               ? parseArtifactIdentity(binding.ref())
               : new ArtifactIdentity(null, null);
+      String handoffChildRunId =
+          binding.role() == ResourceRole.HANDOFF
+              ? parseAgentRunIdentity(binding.ref())
+              : null;
+      String workerResultChildRunId =
+          binding.role() == ResourceRole.WORKER_RESULT
+              ? parseWorkerResultIdentity(binding.ref())
+              : null;
       jdbc.sql(
               """
               INSERT INTO agent_run_resource_bindings (
                   principal_id, run_id, role, ordinal, resource_ref, content_hash,
-                  capture_id, artifact_id, artifact_version
+                  capture_id, artifact_id, artifact_version,
+                  handoff_child_run_id, worker_result_child_run_id,
+                  binding_owner_status
               ) VALUES (
                   :principalId, :runId, :role, :ordinal, :resourceRef, :contentHash,
-                  :captureId, :artifactId, :artifactVersion
+                  :captureId, :artifactId, :artifactVersion,
+                  :handoffChildRunId, :workerResultChildRunId,
+                  :bindingOwnerStatus
               )
               """)
           .param("principalId", terminal.principalId())
@@ -283,20 +625,39 @@ public final class PostgresAgentRunStore implements AgentRunStore {
           .param("captureId", captureId, Types.VARCHAR)
           .param("artifactId", artifactIdentity.artifactId(), Types.VARCHAR)
           .param("artifactVersion", artifactIdentity.version(), Types.INTEGER)
+          .param("handoffChildRunId", handoffChildRunId, Types.VARCHAR)
+          .param(
+              "workerResultChildRunId",
+              workerResultChildRunId,
+              Types.VARCHAR)
+          .param("bindingOwnerStatus", terminal.lifecycle().name())
           .update();
     }
   }
 
-  private AgentRun toVerifiedRun(RunRow row) {
+  private AgentRun toLocalVerifiedRun(RunRow row) {
     TaskEnvelope task = json.readValue(row.taskJson(), TaskEnvelope.class);
     if (!row.taskId().equals(task.id())
+        || !row.principalId().equals(task.principalRef())
         || !row.toolRegistryVersion().equals(task.toolRegistryVersion())
         || !row.policyVersion().equals(task.policyVersion())
         || !row.stateVersion().equals(task.stateVersion())
         || !row.contextPolicyVersion().equals(task.contextPolicyVersion())
         || !Objects.equals(row.modelProvider(), task.modelProvider())
         || !Objects.equals(row.modelRequested(), task.modelRequested())
-        || !Objects.equals(row.pricingProfile(), task.pricingProfile())) {
+        || !Objects.equals(row.pricingProfile(), task.pricingProfile())
+        || ("PROPOSE_ARTICLE_DRAFT".equals(task.kind())
+            != (row.parentRunId() != null))
+        || ((row.parentRunId() == null)
+            != (row.parentTaskId() == null))
+        || ("PROPOSE_ARTICLE_DRAFT".equals(task.kind())
+            != (row.runDepth() == 1))
+        || (row.parentRunId() == null
+            ? row.parentRunDepth() != null || row.runDepth() != 0
+            : !Integer.valueOf(0).equals(row.parentRunDepth())
+                || row.runDepth() != 1)
+        || (row.parentTaskId() != null
+            && !row.parentTaskId().equals(task.parentId()))) {
       throw new AgentRunIntegrityException();
     }
     AgentRunLifecycle lifecycle = AgentRunLifecycle.valueOf(row.lifecycleStatus());
@@ -348,6 +709,8 @@ public final class PostgresAgentRunStore implements AgentRunStore {
                     WHEN 'VERIFICATION' THEN 3
                     WHEN 'CHECKPOINT' THEN 4
                     WHEN 'HANDOFF' THEN 5
+                    WHEN 'WORKER_RESULT' THEN 6
+                    ELSE 7
                   END,
                   ordinal
                 """)
@@ -382,6 +745,268 @@ public final class PostgresAgentRunStore implements AgentRunStore {
         bundle,
         row.startedAt(),
         row.completedAt());
+  }
+
+  private Optional<StoredRun> loadLocalStoredRun(
+      String principalId, String runId, boolean forUpdate) {
+    Optional<RunRow> row =
+        jdbc.sql(
+                "SELECT "
+                    + RUN_COLUMNS
+                    + " FROM agent_runs "
+                    + "WHERE principal_id = :principalId AND run_id = :runId"
+                    + (forUpdate ? " FOR UPDATE" : ""))
+            .param("principalId", principalId)
+            .param("runId", runId)
+            .query(PostgresAgentRunStore::mapRunRow)
+            .optional();
+    return row.map(
+        value ->
+            new StoredRun(
+                toLocalVerifiedRun(value),
+                value.parentRunId(),
+                value.parentTaskId(),
+                value.runDepth(),
+                value.parentRunDepth()));
+  }
+
+  private List<StoredRun> loadChildrenForUpdate(
+      String principalId, String parentRunId) {
+    return loadChildren(principalId, parentRunId, true);
+  }
+
+  private List<StoredRun> loadChildren(
+      String principalId, String parentRunId, boolean forUpdate) {
+    List<RunRow> rows =
+        jdbc.sql(
+                "SELECT "
+                    + RUN_COLUMNS
+                    + " FROM agent_runs "
+                    + "WHERE principal_id = :principalId "
+                    + "AND parent_run_id = :parentRunId "
+                    + "ORDER BY run_id"
+                    + (forUpdate ? " FOR UPDATE" : ""))
+            .param("principalId", principalId)
+            .param("parentRunId", parentRunId)
+            .query(PostgresAgentRunStore::mapRunRow)
+            .list();
+    return rows.stream()
+        .map(
+            row ->
+                new StoredRun(
+                    toLocalVerifiedRun(row),
+                    row.parentRunId(),
+                    row.parentTaskId(),
+                    row.runDepth(),
+                    row.parentRunDepth()))
+        .toList();
+  }
+
+  private Optional<WorkerResultEnvelope> loadWorkerResultLocal(
+      String principalId, String parentRunId, String childRunId) {
+    Optional<WorkerResultRow> row =
+        jdbc.sql(
+                """
+                SELECT parent_run_id, child_task_id, child_status,
+                       worker_result_ref,
+                       worker_result_envelope::text AS worker_result_json,
+                       content_hash, integrity_hash
+                FROM agent_worker_results
+                WHERE principal_id = :principalId
+                  AND child_run_id = :childRunId
+                """)
+            .param("principalId", principalId)
+            .param("childRunId", childRunId)
+            .query(
+                (resultSet, rowNumber) ->
+                    new WorkerResultRow(
+                        resultSet.getString("parent_run_id"),
+                        resultSet.getString("child_task_id"),
+                        resultSet.getString("child_status"),
+                        resultSet.getString("worker_result_ref"),
+                        resultSet.getString("worker_result_json"),
+                        resultSet.getString("content_hash"),
+                        resultSet.getString("integrity_hash")))
+            .optional();
+    if (row.isEmpty()) {
+      return Optional.empty();
+    }
+    WorkerResultRow stored = row.orElseThrow();
+    WorkerResultEnvelope workerResult =
+        json.readValue(
+            stored.workerResultJson(), WorkerResultEnvelope.class);
+    if (!parentRunId.equals(stored.parentRunId())
+        || !childRunId.equals(workerResult.childRunId())
+        || !stored.childTaskId().equals(workerResult.childTaskId())
+        || !"SUCCEEDED".equals(stored.childStatus())
+        || !stored.workerResultRef().equals(workerResult.workerResultRef())
+        || !stored.contentHash().equals(workerResult.contentHash())
+        || !stored.integrityHash().equals(workerResult.integrityHash())) {
+      throw new AgentRunIntegrityException();
+    }
+    return Optional.of(workerResult);
+  }
+
+  private AgentRun verifyStoredGraph(StoredRun stored) {
+    AgentRun run = stored.run();
+    if (stored.parentRunId() != null) {
+      StoredRun parent =
+          loadLocalStoredRun(
+                  run.principalId(), stored.parentRunId(), false)
+              .orElseThrow(AgentRunIntegrityException::new);
+      requireExactStoredChildLineage(parent, stored);
+      if (!run.lifecycle().terminal()) {
+        if (parent.run().lifecycle().terminal()) {
+          throw new AgentRunIntegrityException();
+        }
+        return run;
+      }
+      WorkerResultEnvelope workerResult =
+          loadWorkerResultLocal(
+                  run.principalId(), stored.parentRunId(), run.runId())
+              .orElse(null);
+      if (parent.run().lifecycle().terminal()) {
+        ReadOnlyWorkerHandoffVerifier.verifyPair(
+            parent.run(), run, workerResult, workerProfile);
+      } else {
+        ReadOnlyWorkerHandoffVerifier.verifyChild(
+            parent.run().task(), run, workerResult, workerProfile);
+      }
+      return run;
+    }
+
+    requireWorkerParentAuthorityIfPresent(run.task());
+    if (!run.lifecycle().terminal()) {
+      return run;
+    }
+    verifyWorkerParentProfileIfPresent(run);
+    List<StoredRun> children =
+        loadChildren(run.principalId(), run.runId(), false);
+    List<ResourceBinding> handoffs =
+        run.bundle().resourceBindings().stream()
+            .filter(binding -> binding.role() == ResourceRole.HANDOFF)
+            .toList();
+    if (children.isEmpty()) {
+      if (!handoffs.isEmpty()) {
+        throw new AgentRunIntegrityException();
+      }
+      return run;
+    }
+    if (children.size() != 1 || handoffs.size() != 1) {
+      throw new AgentRunIntegrityException();
+    }
+    StoredRun child = children.getFirst();
+    if (!child.run().lifecycle().terminal()) {
+      throw new AgentRunIntegrityException();
+    }
+    WorkerResultEnvelope workerResult =
+        loadWorkerResultLocal(
+                run.principalId(), run.runId(), child.run().runId())
+            .orElse(null);
+    ReadOnlyWorkerHandoffVerifier.verifyPair(
+        run, child.run(), workerResult, workerProfile);
+    return run;
+  }
+
+  private void requireExactRunningParent(
+      AgentRunContext expected, StoredRun stored) {
+    requireExactParentIdentity(expected, stored);
+    if (stored.run().lifecycle() != AgentRunLifecycle.RUNNING) {
+      throw new AgentRunConflictException();
+    }
+  }
+
+  private static void requireExactParentIdentity(
+      AgentRunContext expected, StoredRun stored) {
+    if (stored.parentRunId() != null
+        || stored.parentTaskId() != null
+        || stored.runDepth() != 0
+        || stored.parentRunDepth() != null
+        || !expected.runId().equals(stored.run().runId())
+        || !expected.principalId().equals(stored.run().principalId())
+        || !expected.task().equals(stored.run().task())) {
+      throw new AgentRunIntegrityException();
+    }
+  }
+
+  private void requireExactChildLineage(
+      AgentRunContext parent, StoredRun child) {
+    if (!parent.runId().equals(child.parentRunId())
+        || !parent.task().id().equals(child.parentTaskId())
+        || child.runDepth() != 1
+        || !Integer.valueOf(0).equals(child.parentRunDepth())
+        || !parent.principalId().equals(child.run().principalId())) {
+      throw new AgentRunIntegrityException();
+    }
+    workerProfile.requireChildBinding(
+        parent.task(), child.run().task());
+  }
+
+  private void requireExactStoredChildLineage(
+      StoredRun parent, StoredRun child) {
+    if (parent.parentRunId() != null
+        || parent.runDepth() != 0
+        || parent.parentRunDepth() != null
+        || !parent.run().runId().equals(child.parentRunId())
+        || !parent.run().task().id().equals(child.parentTaskId())
+        || child.runDepth() != 1
+        || !Integer.valueOf(0).equals(child.parentRunDepth())
+        || !parent.run().principalId().equals(child.run().principalId())) {
+      throw new AgentRunIntegrityException();
+    }
+    requireWorkerParentAuthority(parent.run().task());
+    workerProfile.requireChildBinding(
+        parent.run().task(), child.run().task());
+  }
+
+  private static void requireExactRunningTransition(
+      AgentRun terminal, StoredRun running, boolean child) {
+    AgentRun expected =
+        AgentRun.running(
+            terminal.runId(),
+            terminal.principalId(),
+            terminal.task(),
+            terminal.startedAt());
+    if (!running.run().equals(expected)
+        || child != (running.parentRunId() != null)) {
+      throw new AgentRunConflictException();
+    }
+  }
+
+  private void requireWorkerParentAuthority(TaskEnvelope parent) {
+    workerProfile.requireParentBinding(parent);
+  }
+
+  private void requireWorkerParentAuthorityIfPresent(TaskEnvelope parent) {
+    if (parent
+        .capabilityRefs()
+        .contains(AgentExecutionProfile.READ_ONLY_WORKER_CAPABILITY)) {
+      requireWorkerParentAuthority(parent);
+    }
+  }
+
+  private void verifyWorkerParentProfileIfPresent(AgentRun parent) {
+    if (!parent
+        .task()
+        .capabilityRefs()
+        .contains(AgentExecutionProfile.READ_ONLY_WORKER_CAPABILITY)) {
+      return;
+    }
+    requireWorkerParentAuthority(parent.task());
+    if (!Objects.equals(
+            parent
+                .bundle()
+                .componentVersions()
+                .get("worker-registry"),
+            workerProfile.registryVersion())
+        || !Objects.equals(
+            parent
+                .bundle()
+                .componentVersions()
+                .get("worker-profile-fingerprint"),
+            workerProfile.fingerprint())) {
+      throw new AgentRunIntegrityException();
+    }
   }
 
   private static void validateArtifactBinding(
@@ -447,12 +1072,36 @@ public final class PostgresAgentRunStore implements AgentRunStore {
         Integer.valueOf(remainder.substring(separator + 1)));
   }
 
+  private static String parseAgentRunIdentity(String ref) {
+    if (ref == null
+        || !ref.matches(
+            "agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")) {
+      throw new IllegalArgumentException(
+          "Handoff binding must name one exact child AgentRun");
+    }
+    return ref.substring("agent-run://".length());
+  }
+
+  private static String parseWorkerResultIdentity(String ref) {
+    if (ref == null
+        || !ref.matches(
+            "worker-result://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")) {
+      throw new IllegalArgumentException(
+          "Worker Result binding must name one exact child AgentRun");
+    }
+    return ref.substring("worker-result://".length());
+  }
+
   private static RunRow mapRunRow(ResultSet resultSet, int rowNumber) throws SQLException {
     Timestamp completed = resultSet.getTimestamp("completed_at");
     return new RunRow(
         resultSet.getString("principal_id"),
         resultSet.getString("run_id"),
         resultSet.getString("task_id"),
+        resultSet.getString("parent_run_id"),
+        resultSet.getString("parent_task_id"),
+        resultSet.getInt("run_depth"),
+        resultSet.getObject("parent_run_depth", Integer.class),
         resultSet.getString("lifecycle_status"),
         resultSet.getString("task_json"),
         resultSet.getString("result_json"),
@@ -504,6 +1153,22 @@ public final class PostgresAgentRunStore implements AgentRunStore {
 
   private record ArtifactIdentity(String artifactId, Integer version) {}
 
+  private record StoredRun(
+      AgentRun run,
+      String parentRunId,
+      String parentTaskId,
+      int runDepth,
+      Integer parentRunDepth) {}
+
+  private record WorkerResultRow(
+      String parentRunId,
+      String childTaskId,
+      String childStatus,
+      String workerResultRef,
+      String workerResultJson,
+      String contentHash,
+      String integrityHash) {}
+
   private record StoredTraceEntry(
       AgentTraceEntry event,
       String currentRootHash) {}
@@ -512,6 +1177,10 @@ public final class PostgresAgentRunStore implements AgentRunStore {
       String principalId,
       String runId,
       String taskId,
+      String parentRunId,
+      String parentTaskId,
+      int runDepth,
+      Integer parentRunDepth,
       String lifecycleStatus,
       String taskJson,
       String resultJson,

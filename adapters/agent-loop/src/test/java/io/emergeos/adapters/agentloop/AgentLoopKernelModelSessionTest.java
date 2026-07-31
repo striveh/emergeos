@@ -13,6 +13,7 @@ import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.AgentRunOutcome;
 import io.emergeos.core.domain.AgentTraceEventType;
+import io.emergeos.core.port.AgentRunContext;
 import io.emergeos.core.port.CancellationSignal;
 import java.math.BigDecimal;
 import java.util.List;
@@ -73,7 +74,7 @@ class AgentLoopKernelModelSessionTest {
             2,
             1);
 
-    var outcome = kernel.run(task("usage-task"), CancellationSignal.never());
+    var outcome = run(kernel, task("usage-task"), CancellationSignal.never());
 
     assertEquals(RunStatus.SUCCEEDED, outcome.status());
     assertEquals("provider-model-snapshot", outcome.resolvedModel());
@@ -121,8 +122,8 @@ class AgentLoopKernelModelSessionTest {
             1);
 
     try (var executor = Executors.newFixedThreadPool(2)) {
-      var first = executor.submit(() -> kernel.run(task("session-a"), CancellationSignal.never()));
-      var second = executor.submit(() -> kernel.run(task("session-b"), CancellationSignal.never()));
+      var first = executor.submit(() -> run(kernel, task("session-a"), CancellationSignal.never()));
+      var second = executor.submit(() -> run(kernel, task("session-b"), CancellationSignal.never()));
 
       assertEquals(RunStatus.SUCCEEDED, first.get(5, TimeUnit.SECONDS).status());
       assertEquals(RunStatus.SUCCEEDED, second.get(5, TimeUnit.SECONDS).status());
@@ -158,7 +159,7 @@ class AgentLoopKernelModelSessionTest {
             2,
             1);
 
-    var outcome = kernel.run(task("drift-task"), CancellationSignal.never());
+    var outcome = run(kernel, task("drift-task"), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("MODEL_IDENTITY_DRIFT", outcome.failureReason());
@@ -196,7 +197,7 @@ class AgentLoopKernelModelSessionTest {
             1);
 
     var outcome =
-        kernel.run(
+        run(kernel,
             task("drift-and-over-budget-task", 5_000, new BigDecimal("0.010000")),
             CancellationSignal.never());
 
@@ -224,7 +225,7 @@ class AgentLoopKernelModelSessionTest {
             2,
             1);
 
-    var outcome = kernel.run(task("failure-task"), CancellationSignal.never());
+    var outcome = run(kernel, task("failure-task"), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("MODEL_RATE_LIMITED", outcome.failureReason());
@@ -246,7 +247,7 @@ class AgentLoopKernelModelSessionTest {
             1);
 
     var outcome =
-        kernel.run(task("model-call-cancelled"), CancellationSignal.never());
+        run(kernel, task("model-call-cancelled"), CancellationSignal.never());
 
     assertEquals(RunStatus.CANCELLED, outcome.status());
     assertEquals("CANCELLED", outcome.failureReason());
@@ -269,7 +270,7 @@ class AgentLoopKernelModelSessionTest {
             1);
 
     var outcome =
-        kernel.run(task("attributed-failure-task"), CancellationSignal.never());
+        run(kernel, task("attributed-failure-task"), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("MODEL_RESPONSE_MALFORMED", outcome.failureReason());
@@ -300,7 +301,7 @@ class AgentLoopKernelModelSessionTest {
             () -> now.getAndSet(TimeUnit.MILLISECONDS.toNanos(40)));
 
     var outcome =
-        kernel.run(task("deadline-task", 100), CancellationSignal.never());
+        run(kernel, task("deadline-task", 100), CancellationSignal.never());
 
     assertEquals(RunStatus.SUCCEEDED, outcome.status());
     assertEquals(60, observed.get().remainingDeadlineMs());
@@ -350,7 +351,7 @@ class AgentLoopKernelModelSessionTest {
             2,
             1);
 
-    var outcome = kernel.run(task("validator-failure"), CancellationSignal.never());
+    var outcome = run(kernel, task("validator-failure"), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("TOOL_ARGUMENT_VALIDATION_FAILED", outcome.failureReason());
@@ -380,7 +381,7 @@ class AgentLoopKernelModelSessionTest {
             1);
 
     var outcome =
-        kernel.run(task("cancel-during-validation"), cancelled::get);
+        run(kernel, task("cancel-during-validation"), cancelled::get);
 
     assertEquals(RunStatus.CANCELLED, outcome.status());
     assertEquals("CANCELLED", outcome.failureReason());
@@ -405,7 +406,7 @@ class AgentLoopKernelModelSessionTest {
             now::get);
 
     var outcome =
-        kernel.run(task("deadline-during-validation", 1), CancellationSignal.never());
+        run(kernel, task("deadline-during-validation", 1), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("DEADLINE_EXHAUSTED", outcome.failureReason());
@@ -440,7 +441,7 @@ class AgentLoopKernelModelSessionTest {
             now::get);
 
     AgentRunOutcome outcome =
-        kernel.run(
+        run(kernel,
             task("late-tool-" + mode.name().toLowerCase(), 5),
             CancellationSignal.never());
 
@@ -475,7 +476,7 @@ class AgentLoopKernelModelSessionTest {
             now::get);
 
     AgentRunOutcome outcome =
-        kernel.run(task("exact-tool-deadline", 5), CancellationSignal.never());
+        run(kernel, task("exact-tool-deadline", 5), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("DEADLINE_EXHAUSTED", outcome.failureReason());
@@ -524,7 +525,7 @@ class AgentLoopKernelModelSessionTest {
             now::get);
 
     AgentRunOutcome outcome =
-        kernel.run(
+        run(kernel,
             taskWithMaxModelSteps("final-step-exact-deadline", 5, 1),
             CancellationSignal.never());
 
@@ -568,7 +569,7 @@ class AgentLoopKernelModelSessionTest {
             now::get);
 
     AgentRunOutcome outcome =
-        kernel.run(task("pre-deadline-tool-throw", 5), CancellationSignal.never());
+        run(kernel, task("pre-deadline-tool-throw", 5), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("TOOL_EXECUTION_FAILED", outcome.failureReason());
@@ -619,7 +620,7 @@ class AgentLoopKernelModelSessionTest {
             now::get);
 
     AgentRunOutcome outcome =
-        kernel.run(task("simultaneous-post-dispatch-stop", 5), cancelled::get);
+        run(kernel, task("simultaneous-post-dispatch-stop", 5), cancelled::get);
 
     assertPostDispatchDeadlineOutcome(outcome);
     assertTrue(cancelled.get());
@@ -654,7 +655,7 @@ class AgentLoopKernelModelSessionTest {
             now::get);
 
     AgentRunOutcome outcome =
-        kernel.run(task("post-dispatch-cancellation-only", 5), cancelled::get);
+        run(kernel, task("post-dispatch-cancellation-only", 5), cancelled::get);
 
     assertEquals(RunStatus.CANCELLED, outcome.status());
     assertEquals("CANCELLED", outcome.failureReason());
@@ -699,7 +700,7 @@ class AgentLoopKernelModelSessionTest {
             now::get);
 
     AgentRunOutcome outcome =
-        kernel.run(
+        run(kernel,
             taskWithMaxModelSteps("final-step-cancelled", 5, 1),
             cancelled::get);
 
@@ -734,7 +735,7 @@ class AgentLoopKernelModelSessionTest {
             1);
 
     var outcome =
-        kernel.run(
+        run(kernel,
             task(
                 "registry-version-mismatch",
                 5_000,
@@ -990,6 +991,15 @@ class AgentLoopKernelModelSessionTest {
   }
 
   private record Arguments(String reference) implements AgentTool.ValidatedArguments {}
+
+  private static AgentRunOutcome run(
+      AgentLoopKernel kernel,
+      TaskEnvelope task,
+      CancellationSignal cancellation) {
+    return kernel.run(
+        new AgentRunContext(task.id(), task.principalRef(), task),
+        cancellation);
+  }
 
   private static TaskEnvelope task(String id) {
     return task(id, 5_000);

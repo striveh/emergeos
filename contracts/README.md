@@ -19,6 +19,13 @@ SafeText/numeric domains, typed resource bindings, Trace protocol, and
 integrity-hash recomputation. A payload is not accepted merely because AJV
 accepts its shape.
 
+`WorkerResultEnvelope` 是 child durable output 的 language-neutral contract；
+`WORKER_RESULT` binding 把 child Bundle 绑定到它的 integrity hash，`HANDOFF`
+binding 再把 parent Bundle 绑定到 exact child Run/Bundle。JSON Schema 只能验证单个
+payload 的 shape 与局部字段关系，不能独自证明 same-owner、terminal child、
+parent/child Task lineage、single-consume 或 cross-run hash relation。这些关系还必须由
+Core pair verifier 与 PostgreSQL verified read/constraints 证明。
+
 Versioning rules:
 
 - Because v1 objects use `additionalProperties: false`, adding an optional property is not

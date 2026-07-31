@@ -1,8 +1,8 @@
 package io.emergeos.evalrunner;
 
-import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.AgentRunOutcome;
 import io.emergeos.core.port.AgentKernel;
+import io.emergeos.core.port.AgentRunContext;
 import io.emergeos.core.port.CancellationSignal;
 import java.util.Objects;
 
@@ -29,10 +29,10 @@ final class PermitBoundAgentKernel implements AgentKernel {
 
   @Override
   public AgentRunOutcome run(
-      TaskEnvelope task, CancellationSignal cancellation) {
-    permit.consume(task);
+      AgentRunContext context, CancellationSignal cancellation) {
+    permit.consume(context.task());
     consumeObserver.run();
-    return delegate.run(task, cancellation);
+    return delegate.run(context, cancellation);
   }
 
   @Override

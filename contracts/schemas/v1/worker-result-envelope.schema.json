@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:emergeos:schema:v1:worker-result-envelope",
+  "title": "WorkerResultEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "safeText2048": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    },
+    "safeContent65536": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 65536,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    },
+    "id128": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "workerResultRef",
+    "childRunId",
+    "childTaskId",
+    "outputSchema",
+    "content",
+    "contentHash",
+    "evidenceRefs",
+    "integrityProfile",
+    "integrityHash"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "workerResultRef": {
+      "type": "string",
+      "pattern": "^worker-result://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+    },
+    "childRunId": {"$ref": "#/$defs/id128"},
+    "childTaskId": {"$ref": "#/$defs/id128"},
+    "outputSchema": {"$ref": "#/$defs/safeText2048"},
+    "content": {"$ref": "#/$defs/safeContent65536"},
+    "contentHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evidenceRefs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/safeText2048"}
+    },
+    "integrityProfile": {"const": "emergeos-length-prefixed-sha256-v1"},
+    "integrityHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

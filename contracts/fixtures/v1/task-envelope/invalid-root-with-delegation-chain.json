@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.1",
+  "id": "pack007-invalid-root",
+  "parentId": null,
+  "principalRef": "synthetic-pack007-owner",
+  "delegationChain": [
+    "pack007-parent-task"
+  ],
+  "kind": "CREATE_ARTICLE_DRAFT",
+  "intent": "Create one article draft",
+  "inputRefs": [
+    "capture://pack007-capture"
+  ],
+  "evidenceRefs": [
+    "capture://pack007-capture"
+  ],
+  "modalities": [
+    "text"
+  ],
+  "dataClass": "PERSONAL",
+  "risk": "REVERSIBLE",
+  "latencyClass": "INTERACTIVE",
+  "requiredTools": [
+    "capture.read"
+  ],
+  "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+  "acceptanceChecks": [
+    "draft preserves the delegated Capture"
+  ],
+  "allowParallel": false,
+  "maxModelSteps": 2,
+  "maxToolCalls": 1,
+  "deadlineMs": 30000,
+  "budgetUsd": 0.02,
+  "modelProvider": "offline.fixture",
+  "modelRequested": "literal-parent-v1",
+  "pricingProfile": "offline-zero-cost-v1",
+  "idempotencyKey": "pack007-invalid-root-attempt",
+  "policyVersion": "pack007-policy-v1",
+  "stateVersion": "pack007-state-v1",
+  "contextPolicyVersion": "pack007-context-v1",
+  "toolRegistryVersion": "pack007-tools-v1",
+  "environmentSnapshotRef": "environment://sha256:7777777777777777777777777777777777777777777777777777777777777777",
+  "capabilityRefs": [
+    "capability://worker-handoff/article-draft-read-v1"
+  ],
+  "unresolvedDecisions": [],
+  "returnControlWhen": "artifact committed or non-success"
+}

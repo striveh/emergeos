@@ -263,6 +263,8 @@ class OfflineToolDeadlineFaultTest {
           assertEquals(CaptureReadTool.NAME, event.toolName());
           assertEquals(frozen.captureRef(), event.reference());
         }
+        case HANDOFF_REQUEST, HANDOFF_RESULT, HANDOFF_REJECTED ->
+            throw new AssertionError("Pack 006 cannot contain Handoff events");
         case ARTIFACT_COMMITTED -> {
           assertNull(event.toolName());
           assertEquals(frozen.artifactRef(), event.reference());

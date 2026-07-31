@@ -50,10 +50,11 @@ public record AgentRun(
           || !result.equals(bundle.result())
           || !trace.rootHash().equals(bundle.traceRootHash())
           || !lifecycle.name().equals(result.status().name())
-          || (result.costUsd().compareTo(task.budgetUsd()) > 0
-              && !("1.1".equals(task.schemaVersion())
-                  && result.status() != RunStatus.SUCCEEDED
-                  && "MODEL_BUDGET_EXHAUSTED".equals(result.failureReason())))
+          || !ObservedExecutionLimits.permitsBudget(
+              task,
+              result.status(),
+              result.costUsd(),
+              result.failureReason())
           || !ObservedExecutionLimits.permitsLatency(
               task, result.status(), result.latencyMs())
           || !ObservedExecutionLimits.permitsFailureAttribution(

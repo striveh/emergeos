@@ -42,7 +42,8 @@ class AgentDraftSecurityBoundaryTest extends PostgresApiTest {
     mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
     JdbcClient.create(dataSource)
         .sql(
-            "TRUNCATE TABLE agent_trace_events, agent_run_resource_bindings, agent_runs, "
+            "TRUNCATE TABLE agent_trace_events, agent_run_resource_bindings, "
+                + "agent_worker_results, agent_runs, "
                 + "action_receipts, action_attempt_transitions, action_attempts, "
                 + "artifact_versions, artifacts, captures")
         .update();
@@ -77,7 +78,7 @@ class AgentDraftSecurityBoundaryTest extends PostgresApiTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(validRequest(captureId)))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.result.resolvedModel").value("scripted-fake-draft-v1"));
+        .andExpect(jsonPath("$.result.resolvedModel").value("fake-model-v1"));
 
     JdbcClient jdbc = JdbcClient.create(dataSource);
     assertEquals(
@@ -188,7 +189,7 @@ class AgentDraftSecurityBoundaryTest extends PostgresApiTest {
     }
     assertEquals("FAILED", JsonPath.read(foreignBody, "$.result.status"));
     assertEquals(
-        "TOOL_EXECUTION_FAILED",
+        "HANDOFF_CHILD_FAILED",
         JsonPath.read(foreignBody, "$.result.failureReason"));
     assertFalse(foreignBody.contains(hiddenContent));
     assertFalse(foreignBody.contains("another-owner"));

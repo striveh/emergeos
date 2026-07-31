@@ -1,11 +1,11 @@
 package io.emergeos.core.port;
 
-import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.AgentRunOutcome;
 
 public interface AgentKernel {
 
-  AgentRunOutcome run(TaskEnvelope task, CancellationSignal cancellation);
+  AgentRunOutcome run(
+      AgentRunContext context, CancellationSignal cancellation);
 
   /**
    * Returns the immutable execution profile identity attested by a live model route.
@@ -24,6 +24,16 @@ public interface AgentKernel {
    * Provider-neutral and legacy Fake kernels leave both values {@code null}.
    */
   default String executionProfileFingerprint() {
+    return null;
+  }
+
+  /** Exact Worker registry identity, when this Kernel can dispatch Workers. */
+  default String workerRegistryVersion() {
+    return null;
+  }
+
+  /** Exact Worker profile fingerprint, when this Kernel can dispatch Workers. */
+  default String workerProfileFingerprint() {
     return null;
   }
 }

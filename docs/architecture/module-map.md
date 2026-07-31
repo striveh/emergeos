@@ -4,27 +4,31 @@
 
 ```text
 modules/contracts
-  跨进程与跨参与者稳定契约、safe Trace、Result 与 HarnessRunBundle 完整性规则
+  跨进程与跨参与者稳定契约、safe Trace、Result、WorkerResultEnvelope、
+  typed HANDOFF/WORKER_RESULT binding 与 HarnessRunBundle 完整性规则
 
 modules/core
   domain       领域实体、值对象、状态机、不变量
-  application  用例编排与 Agent 结果的确定性验收/提交
-  port         对外能力端口，包括 provider-neutral AgentKernel
+  application  用例编排、Agent/Worker 结果的确定性验收、pair verification 与提交
+  port         provider-neutral AgentKernel、AgentWorkerRuntime 与 durable Store 端口
 
 adapters/agent-loop
   framework-free 有限工具循环、provider-neutral Model/Tool SPI、版本化固定工具注册表
+  Model 可返回 typed WorkerCall；Kernel 只允许一个 serial、one-shot Handoff，
+  并把 verified WorkerResult 作为下一 Model turn 的 bounded input
   Model 只交付 bounded/immutable/redacted raw arguments；Tool 先做纯 validation，
   生成 typed arguments 后才允许一次性 execute
   不依赖具体模型 SDK、Spring、数据库、Temporal 或其他 Agent Runtime
 
 adapters/inmemory
   内存 Ledger、确定性草稿生成、Policy、Action Stub
-  脚本 Fake Model 与 frozen synthetic Offline golden runner
+  脚本 Fake Conductor/Worker、Offline golden runner 与 Pack007 strict replay test fixture
 
 adapters/postgres
   Capture、Artifact lineage、local Action 与 AgentRun 的 JdbcClient 适配器
-  以及前向 Flyway migrations；V5 将 model execution binding 同时冻结在
-  Task JSON 与 typed columns，并在读取时双向核验
+  以及前向 Flyway migrations；V5 冻结 model execution binding，V6 增加
+  parent/child Run lineage、immutable agent_worker_results 与 deferred graph guards；
+  verified read 同时核验 JSON、typed columns、hash chain 与跨 Run relation
 
 adapters/openai
   OpenAI Java SDK 4.43.0 的 Responses protocol adapter；实现 strict tool、
@@ -50,7 +54,8 @@ apps/offline-harness-runner
 
 apps/api
   HTTP DTO、Controller、异常映射、loopback 启动保护、Agent draft 入口、
-  owner-scoped Run/Trace/Bundle 查询、S3 模拟 Provider HTTP adapter、依赖装配
+  owner-scoped Run/Trace/Bundle 查询、Fake Conductor + 一个 Fake read-only Worker、
+  S3 模拟 Provider HTTP adapter与依赖装配
 ```
 
 ## 依赖规则
@@ -89,6 +94,10 @@ flowchart RL
 - `core` 不依赖 Spring、数据库、Temporal、AgentScope 或模型 SDK。
 - `contracts` 不依赖任何实现模块。
 - `agent-loop` 不依赖具体模型 SDK、Spring、数据库、Temporal 或上层 Agent Runtime。
+- Pack007 的 `AgentWorkerRuntime` 是 Core port，不是通用 workflow graph。
+  product composition 先校验 exact Worker registry/profile identity；
+  `AgentLoopKernel` 最多接受一个 synchronous child，且 Worker Kernel 本身不能再挂
+  Worker runtime。
 - 当前 `agent-tools-v2` manifest 精确绑定
   `capture.read → urn:emergeos:tool:capture-read-arguments:v1`；缺失、额外 Tool 或
   schema drift 都在打开 Model session 前 fail fast。Task 的 server-owned allowlist
@@ -204,8 +213,8 @@ hash/replay 也不是 signature、producer attestation 或 WORM。
 
 ```text
 adapters/agent-loop        # 已实现：provider-neutral、framework-free 有界 Loop 与 Tool SPI
-adapters/inmemory/agent    # 已实现：脚本 Fake Model 与 Offline golden baseline
-adapters/postgres          # 已实现：Capture、Artifact、local Action、AgentRun/Trace
+adapters/inmemory/agent    # 已实现：Fake Conductor/Worker、Offline golden 与 Pack007 replay
+adapters/postgres          # 已实现：Capture、Artifact、local Action、AgentRun/Trace/WorkerResult
 adapters/openai            # 已实现 protocol adapter；只由独立 synthetic Eval runner 装配
 adapters/object-storage
 adapters/agent-agentscope

@@ -139,6 +139,30 @@
                 }
               }
             }
+          },
+          {
+            "if": {"properties": {"role": {"const": "HANDOFF"}}},
+            "then": {
+              "properties": {
+                "ordinal": {"const": 0},
+                "ref": {
+                  "type": "string",
+                  "pattern": "^agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+                }
+              }
+            }
+          },
+          {
+            "if": {"properties": {"role": {"const": "WORKER_RESULT"}}},
+            "then": {
+              "properties": {
+                "ordinal": {"const": 0},
+                "ref": {
+                  "type": "string",
+                  "pattern": "^worker-result://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+                }
+              }
+            }
           }
         ],
         "required": ["role", "ordinal", "ref", "contentHash"],
@@ -150,7 +174,8 @@
               "RECEIPT",
               "VERIFICATION",
               "CHECKPOINT",
-              "HANDOFF"
+              "HANDOFF",
+              "WORKER_RESULT"
             ]
           },
           "ordinal": {"type": "integer", "minimum": 0, "maximum": 127},

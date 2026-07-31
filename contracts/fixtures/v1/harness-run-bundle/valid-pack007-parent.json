@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "pack007-parent-run",
+  "taskId": "pack007-parent-task",
+  "experiment": null,
+  "modelResolved": "fake-model-v1",
+  "harnessVersion": "framework-free-agent-kernel-v1",
+  "componentVersions": {
+    "agent": "agent-draft-service-v1",
+    "verifier": "agent-draft-verifier-v1",
+    "trace-integrity": "emergeos-length-prefixed-sha256-v1",
+    "worker-registry": "agent-workers-v1",
+    "worker-profile-fingerprint": "e5f705bcc49d3e0302ab0a159f18ad597df01199fc7c0594e375b40011d519ac"
+  },
+  "environmentSnapshotRef": null,
+  "toolRegistryVersion": "agent-tools-v2",
+  "task": {
+    "schemaVersion": "1.0",
+    "id": "pack007-parent-task",
+    "parentId": null,
+    "principalRef": "pack007-owner",
+    "delegationChain": [],
+    "kind": "CREATE_ARTICLE_DRAFT",
+    "intent": "把这个想法整理成一篇有证据的短文",
+    "inputRefs": [
+      "capture://pack007-capture"
+    ],
+    "evidenceRefs": [],
+    "modalities": [
+      "text"
+    ],
+    "dataClass": "PUBLIC",
+    "risk": "REVERSIBLE",
+    "latencyClass": "INTERACTIVE",
+    "requiredTools": [],
+    "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+    "acceptanceChecks": [
+      "draft cites the source Capture"
+    ],
+    "allowParallel": false,
+    "maxModelSteps": 2,
+    "maxToolCalls": 1,
+    "deadlineMs": 5000,
+    "budgetUsd": 0,
+    "modelProvider": null,
+    "modelRequested": null,
+    "pricingProfile": null,
+    "idempotencyKey": null,
+    "policyVersion": "agent-draft-policy-v1",
+    "stateVersion": "stage2-s2",
+    "contextPolicyVersion": "ref-only-v1",
+    "toolRegistryVersion": "agent-tools-v2",
+    "environmentSnapshotRef": null,
+    "capabilityRefs": [
+      "capability://worker-handoff/article-draft-read-v1"
+    ],
+    "unresolvedDecisions": [],
+    "returnControlWhen": "structured final or non-success"
+  },
+  "result": {
+    "schemaVersion": "1.0",
+    "runId": "pack007-parent-run",
+    "taskId": "pack007-parent-task",
+    "status": "SUCCEEDED",
+    "artifactRefs": [
+      "artifact-version://pack007-parent-artifact/1"
+    ],
+    "evidenceRefs": [
+      "capture://pack007-capture"
+    ],
+    "claims": [],
+    "uncertainty": [],
+    "receiptRefs": [],
+    "resolvedModel": "fake-model-v1",
+    "agentVersion": "agent-draft-service-v1",
+    "verifierVersion": "agent-draft-verifier-v1",
+    "costUsd": 0,
+    "tokenCount": 0,
+    "latencyMs": 0,
+    "traceRef": "/api/v1/agent-runs/pack007-parent-run/trace",
+    "failureReason": null
+  },
+  "workingSelfRef": null,
+  "traceRef": "/api/v1/agent-runs/pack007-parent-run/trace",
+  "traceRootHash": "eba203ca7e61046363308f297ab94e509d82badf70c601ce1136de2071b3faef",
+  "handoffRefs": [
+    "agent-run://pack007-child-run"
+  ],
+  "checkpointRefs": [],
+  "resourceBindings": [
+    {
+      "role": "EVIDENCE",
+      "ordinal": 0,
+      "ref": "capture://pack007-capture",
+      "contentHash": "ea86cdf8585ecd4755efc65c6f50d59ddea0802c198ec4e791934581bf010758"
+    },
+    {
+      "role": "ARTIFACT",
+      "ordinal": 0,
+      "ref": "artifact-version://pack007-parent-artifact/1",
+      "contentHash": "e5b6493d7741cf43b65fb45c29d0351f3d038e470df31f964e6f1fa9cc8f767b"
+    },
+    {
+      "role": "HANDOFF",
+      "ordinal": 0,
+      "ref": "agent-run://pack007-child-run",
+      "contentHash": "c12b2771c506bf823139af860396ddc8736bb81a1f0bbd9b09a4138d83cd3e0a"
+    }
+  ],
+  "verificationRef": null,
+  "failureAttribution": null,
+  "outcome": "SUCCEEDED",
+  "costUsd": 0,
+  "tokenCount": 0,
+  "latencyMs": 0,
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "integrityHash": "fa3d7840adfc0333dbd071db4229af0664654b50f17b2f1c8d6f6e03eb24efbe"
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.1",
+  "id": "pack007-invalid-child",
+  "parentId": "pack007-parent-task",
+  "principalRef": "synthetic-pack007-owner",
+  "delegationChain": [
+    "pack007-other-parent-task"
+  ],
+  "kind": "PROPOSE_ARTICLE_DRAFT",
+  "intent": "Propose one article draft from the delegated Capture",
+  "inputRefs": [
+    "capture://pack007-capture"
+  ],
+  "evidenceRefs": [
+    "capture://pack007-capture"
+  ],
+  "modalities": [
+    "text"
+  ],
+  "dataClass": "PERSONAL",
+  "risk": "READ_ONLY",
+  "latencyClass": "INTERACTIVE",
+  "requiredTools": [
+    "capture.read"
+  ],
+  "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+  "acceptanceChecks": [
+    "proposal is derived only from the delegated Capture"
+  ],
+  "allowParallel": false,
+  "maxModelSteps": 2,
+  "maxToolCalls": 1,
+  "deadlineMs": 20000,
+  "budgetUsd": 0.01,
+  "modelProvider": "offline.fixture",
+  "modelRequested": "literal-worker-v1",
+  "pricingProfile": "offline-zero-cost-v1",
+  "idempotencyKey": "pack007-invalid-child-attempt",
+  "policyVersion": "pack007-policy-v1",
+  "stateVersion": "pack007-state-v1",
+  "contextPolicyVersion": "pack007-context-v1",
+  "toolRegistryVersion": "pack007-tools-v1",
+  "environmentSnapshotRef": "environment://sha256:7777777777777777777777777777777777777777777777777777777777777777",
+  "capabilityRefs": [],
+  "unresolvedDecisions": [],
+  "returnControlWhen": "structured proposal or non-success"
+}

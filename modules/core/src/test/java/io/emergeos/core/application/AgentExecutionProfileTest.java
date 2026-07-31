@@ -214,6 +214,29 @@ class AgentExecutionProfileTest {
     assertEquals(profile.fingerprint(), profile.fingerprint());
   }
 
+  @Test
+  void workerBoundConductorTaskHasNoDirectToolAuthority() {
+    AgentExecutionProfile profile =
+        AgentExecutionProfile.readOnlyWorkerFakeV1();
+
+    TaskEnvelope task =
+        profile.newDraftTask(
+            "pack007-parent-task",
+            "pack007-owner",
+            "Create one delegated synthetic draft",
+            "capture://pack007-capture",
+            DataClass.PUBLIC);
+
+    assertTrue(profile.workerBound());
+    assertEquals(List.of(), task.requiredTools());
+    profile.requireTaskBinding(task);
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            profile.requireTaskBinding(
+                withRequiredTools(task, List.of("capture.read"))));
+  }
+
   private static AgentExecutionProfile modelBoundProfile(BigDecimal budgetUsd) {
     return modelBoundProfile(1_000, 200, budgetUsd);
   }
@@ -324,5 +347,43 @@ class AgentExecutionProfileTest {
         profile.capabilityRefs(),
         List.of(),
         "structured final or non-success");
+  }
+
+  private static TaskEnvelope withRequiredTools(
+      TaskEnvelope source, List<String> requiredTools) {
+    return new TaskEnvelope(
+        source.schemaVersion(),
+        source.id(),
+        source.parentId(),
+        source.principalRef(),
+        source.delegationChain(),
+        source.kind(),
+        source.intent(),
+        source.inputRefs(),
+        source.evidenceRefs(),
+        source.modalities(),
+        source.dataClass(),
+        source.risk(),
+        source.latencyClass(),
+        requiredTools,
+        source.outputSchema(),
+        source.acceptanceChecks(),
+        source.allowParallel(),
+        source.maxModelSteps(),
+        source.maxToolCalls(),
+        source.deadlineMs(),
+        source.budgetUsd(),
+        source.modelProvider(),
+        source.modelRequested(),
+        source.pricingProfile(),
+        source.idempotencyKey(),
+        source.policyVersion(),
+        source.stateVersion(),
+        source.contextPolicyVersion(),
+        source.toolRegistryVersion(),
+        source.environmentSnapshotRef(),
+        source.capabilityRefs(),
+        source.unresolvedDecisions(),
+        source.returnControlWhen());
   }
 }

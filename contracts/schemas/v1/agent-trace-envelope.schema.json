@@ -67,6 +67,9 @@
               "TOOL_REQUEST",
               "TOOL_RESULT",
               "TOOL_REJECTED",
+              "HANDOFF_REQUEST",
+              "HANDOFF_RESULT",
+              "HANDOFF_REJECTED",
               "STRUCTURED_FINAL",
               "ARTIFACT_COMMITTED"
             ]
@@ -80,7 +83,93 @@
           },
           "previousRootHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
           "eventHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"type": {"const": "HANDOFF_REQUEST"}},
+              "required": ["type"]
+            },
+            "then": {
+              "properties": {
+                "toolName": {"type": "null"},
+                "status": {"const": "REQUESTED"},
+                "reference": {
+                  "type": "string",
+                  "pattern": "^agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {"type": {"const": "HANDOFF_RESULT"}},
+              "required": ["type"]
+            },
+            "then": {
+              "properties": {
+                "toolName": {"type": "null"},
+                "status": {"const": "SUCCEEDED"},
+                "reference": {
+                  "type": "string",
+                  "pattern": "^agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {"type": {"const": "HANDOFF_REJECTED"}},
+              "required": ["type"]
+            },
+            "then": {
+              "properties": {
+                "toolName": {"type": "null"},
+                "status": {
+                  "enum": [
+                    "BLOCKED",
+                    "FAILED",
+                    "CANCELLED_UNOBSERVED",
+                    "DEADLINE_EXHAUSTED",
+                    "DEADLINE_EXCEEDED_UNOBSERVED",
+                    "DEADLINE_EXCEEDED_AFTER_CHILD",
+                    "LIMIT_EXHAUSTED",
+                    "CHILD_FAILED",
+                    "CHILD_BLOCKED",
+                    "CHILD_NEEDS_INPUT",
+                    "CHILD_CANCELLED",
+                    "MALFORMED_RESULT"
+                  ]
+                },
+                "reference": {
+                  "oneOf": [
+                    {"type": "null"},
+                    {
+                      "type": "string",
+                      "pattern": "^agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {"type": {"const": "STRUCTURED_FINAL"}},
+              "required": ["type"]
+            },
+            "then": {
+              "properties": {
+                "toolName": {"type": "null"},
+                "status": {"const": "PROPOSED"},
+                "reference": {
+                  "type": "string",
+                  "pattern": "^(?:task://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}|proposal://sha256:[a-f0-9]{64})$"
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "eventCount": {"type": "integer", "minimum": 0, "maximum": 128},

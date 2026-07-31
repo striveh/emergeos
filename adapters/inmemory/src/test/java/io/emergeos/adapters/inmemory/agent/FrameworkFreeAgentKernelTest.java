@@ -19,6 +19,8 @@ import io.emergeos.core.domain.CaptureRequestHashes;
 import io.emergeos.core.domain.CaptureSourceType;
 import io.emergeos.core.domain.AgentTraceEvent;
 import io.emergeos.core.domain.AgentTraceEventType;
+import io.emergeos.core.domain.AgentRunOutcome;
+import io.emergeos.core.port.AgentRunContext;
 import io.emergeos.core.port.CancellationSignal;
 import io.emergeos.core.port.CaptureStore;
 import java.math.BigDecimal;
@@ -50,7 +52,7 @@ class FrameworkFreeAgentKernelTest {
             2,
             1);
 
-    var outcome = kernel.run(task(List.of("capture.read")), CancellationSignal.never());
+    var outcome = run(kernel, task(List.of("capture.read")), CancellationSignal.never());
 
     assertEquals(RunStatus.SUCCEEDED, outcome.status());
     assertEquals(2, model.observedTurns().size());
@@ -72,7 +74,7 @@ class FrameworkFreeAgentKernelTest {
             2,
             1);
 
-    var outcome = kernel.run(task(List.of("capture.read")), CancellationSignal.never());
+    var outcome = run(kernel, task(List.of("capture.read")), CancellationSignal.never());
 
     assertEquals(RunStatus.SUCCEEDED, outcome.status());
     assertEquals(
@@ -99,7 +101,7 @@ class FrameworkFreeAgentKernelTest {
             2,
             1);
 
-    var outcome = kernel.run(task(List.of()), CancellationSignal.never());
+    var outcome = run(kernel, task(List.of()), CancellationSignal.never());
 
     assertEquals(RunStatus.BLOCKED, outcome.status());
     assertNull(outcome.proposal());
@@ -122,7 +124,7 @@ class FrameworkFreeAgentKernelTest {
     AtomicInteger checks = new AtomicInteger();
     CancellationSignal cancelBeforeSecondModel = () -> checks.incrementAndGet() >= 4;
 
-    var outcome = kernel.run(task(List.of("capture.read")), cancelBeforeSecondModel);
+    var outcome = run(kernel, task(List.of("capture.read")), cancelBeforeSecondModel);
 
     assertEquals(RunStatus.CANCELLED, outcome.status());
     assertNull(outcome.proposal());
@@ -152,7 +154,7 @@ class FrameworkFreeAgentKernelTest {
             now::get);
 
     var outcome =
-        kernel.run(task(List.of("capture.read"), 1), CancellationSignal.never());
+        run(kernel, task(List.of("capture.read"), 1), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("DEADLINE_EXHAUSTED", outcome.failureReason());
@@ -179,7 +181,7 @@ class FrameworkFreeAgentKernelTest {
             now::get);
 
     var outcome =
-        kernel.run(task(List.of(), 1, 1, 1), CancellationSignal.never());
+        run(kernel, task(List.of(), 1, 1, 1), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("DEADLINE_EXHAUSTED", outcome.failureReason());
@@ -205,7 +207,7 @@ class FrameworkFreeAgentKernelTest {
             1,
             1);
 
-    var outcome = kernel.run(task(List.of(), 5_000, 1, 1), cancelled::get);
+    var outcome = run(kernel, task(List.of(), 5_000, 1, 1), cancelled::get);
 
     assertEquals(RunStatus.CANCELLED, outcome.status());
     assertEquals("CANCELLED", outcome.failureReason());
@@ -247,7 +249,7 @@ class FrameworkFreeAgentKernelTest {
             2,
             1);
 
-    var outcome = kernel.run(task(List.of("capture.read")), CancellationSignal.never());
+    var outcome = run(kernel, task(List.of("capture.read")), CancellationSignal.never());
 
     assertEquals(RunStatus.FAILED, outcome.status());
     assertEquals("MALFORMED_TOOL_RESULT", outcome.failureReason());
@@ -303,7 +305,7 @@ class FrameworkFreeAgentKernelTest {
               1);
 
       var outcome =
-          kernel.run(
+          run(kernel,
               task(
                   List.of("capture.read"),
                   5_000,
@@ -383,7 +385,7 @@ class FrameworkFreeAgentKernelTest {
               1);
 
       var outcome =
-          kernel.run(
+          run(kernel,
               task(
                   List.of("capture.read"),
                   5_000,
@@ -439,7 +441,7 @@ class FrameworkFreeAgentKernelTest {
             1);
 
     var outcome =
-        kernel.run(
+        run(kernel,
             task(
                 List.of("capture.read"),
                 5_000,
@@ -479,7 +481,7 @@ class FrameworkFreeAgentKernelTest {
             2,
             1);
 
-    var outcome = kernel.run(task(List.of("capture.read")), CancellationSignal.never());
+    var outcome = run(kernel, task(List.of("capture.read")), CancellationSignal.never());
 
     assertEquals(RunStatus.SUCCEEDED, outcome.status());
     assertEquals(
@@ -510,7 +512,7 @@ class FrameworkFreeAgentKernelTest {
             1);
 
     var outcome =
-        kernel.run(
+        run(kernel,
             task(List.of("capture.read"), 5_000, 1, 1),
             CancellationSignal.never());
 
@@ -538,7 +540,7 @@ class FrameworkFreeAgentKernelTest {
             1);
 
     var outcome =
-        kernel.run(
+        run(kernel,
             task(List.of("unknown.read"), 5_000, 1, 1),
             CancellationSignal.never());
 
@@ -565,7 +567,7 @@ class FrameworkFreeAgentKernelTest {
             2,
             1);
 
-    var outcome = kernel.run(task(List.of("capture.read")), CancellationSignal.never());
+    var outcome = run(kernel, task(List.of("capture.read")), CancellationSignal.never());
 
     assertEquals(RunStatus.BLOCKED, outcome.status());
     assertEquals("TOOL_CALL_LIMIT_EXHAUSTED", outcome.failureReason());
@@ -590,7 +592,7 @@ class FrameworkFreeAgentKernelTest {
             3);
 
     var outcome =
-        kernel.run(
+        run(kernel,
             task(List.of("capture.read"), 5_000, 2, 3),
             CancellationSignal.never());
 
@@ -679,6 +681,15 @@ class FrameworkFreeAgentKernelTest {
   }
 
   private record InvalidReference(String reference, String rawArguments) {}
+
+  private static AgentRunOutcome run(
+      AgentLoopKernel kernel,
+      TaskEnvelope task,
+      CancellationSignal cancellation) {
+    return kernel.run(
+        new AgentRunContext(task.id(), task.principalRef(), task),
+        cancellation);
+  }
 
   private static Capture capture() {
     return new Capture(

@@ -31,11 +31,17 @@ public record AgentTraceEnvelope(
       if (event.sequence() != index + 1 || !event.previousRootHash().equals(root)) {
         throw new IllegalArgumentException("Trace sequence and root chain must be continuous");
       }
-      if ((event.type() == TraceEventType.MODEL_STEP
-              || event.type() == TraceEventType.STRUCTURED_FINAL)
+      if (event.type() == TraceEventType.MODEL_STEP
           && !("task://" + taskId).equals(event.reference())) {
         throw new IllegalArgumentException(
             "Task-scoped Trace events must reference the same taskId");
+      }
+      if (event.type() == TraceEventType.STRUCTURED_FINAL
+          && !(("task://" + taskId).equals(event.reference())
+              || event.reference().matches(
+                  "proposal://sha256:[a-f0-9]{64}"))) {
+        throw new IllegalArgumentException(
+            "Structured final must bind the Task or a proposal content hash");
       }
       root = IntegrityHashes.nextTraceRoot(root, event.eventHash());
     }

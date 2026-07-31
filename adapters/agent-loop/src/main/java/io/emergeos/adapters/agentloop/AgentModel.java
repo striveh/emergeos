@@ -62,7 +62,7 @@ public interface AgentModel {
       Objects.requireNonNull(decision, "decision");
       ContractText.require(
           resolvedModel, "resolvedModel", ContractText.MAX_MODEL_LENGTH);
-      if (!resolvedModel.matches("[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}")) {
+      if (!ContractText.isSafeModelIdentifier(resolvedModel)) {
         throw new IllegalArgumentException("resolvedModel is outside the safe model domain");
       }
       Objects.requireNonNull(usage, "usage");
@@ -81,21 +81,49 @@ public interface AgentModel {
     }
   }
 
-  record Turn(TaskEnvelope task, List<ToolResult> toolResults) {
+  record Turn(
+      TaskEnvelope task,
+      List<ToolResult> toolResults,
+      List<WorkerResult> workerResults) {
 
     public Turn {
       Objects.requireNonNull(task, "task");
       toolResults = List.copyOf(Objects.requireNonNull(toolResults, "toolResults"));
+      workerResults =
+          List.copyOf(Objects.requireNonNull(workerResults, "workerResults"));
+    }
+
+    public Turn(TaskEnvelope task, List<ToolResult> toolResults) {
+      this(task, toolResults, List.of());
     }
   }
 
-  sealed interface Decision permits ToolCall, FinalDraft, Failed {}
+  sealed interface Decision permits ToolCall, WorkerCall, FinalDraft, Failed {}
 
   record ToolCall(String toolName, ToolArguments arguments) implements Decision {
 
     public ToolCall {
       requireToolName(toolName);
       Objects.requireNonNull(arguments, "arguments");
+    }
+  }
+
+  /**
+   * A typed request for a server-authorized Worker.
+   *
+   * <p>The Model may propose intent and a subset of Task refs. It cannot provide principal,
+   * policy, capability, budget, model route or child identity.
+   */
+  record WorkerCall(
+      String workerName,
+      String intent,
+      List<String> inputRefs)
+      implements Decision {
+
+    public WorkerCall {
+      requireWorkerName(workerName);
+      ContractText.require(intent, "worker intent");
+      inputRefs = ContractText.copyStrings(inputRefs, "worker inputRefs");
     }
   }
 
@@ -191,10 +219,54 @@ public interface AgentModel {
     }
   }
 
+  /** Ephemeral verified Worker output delivered to the parent Model. */
+  record WorkerResult(
+      String workerName,
+      String workerResultRef,
+      String content,
+      String contentHash,
+      List<String> evidenceRefs) {
+
+    public WorkerResult {
+      requireWorkerName(workerName);
+      if (workerResultRef == null
+          || !workerResultRef.matches(
+              "worker-result://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")) {
+        throw new IllegalArgumentException("workerResultRef is invalid");
+      }
+      ContractText.require(content, "worker result content");
+      if (contentHash == null || !contentHash.matches("[a-f0-9]{64}")) {
+        throw new IllegalArgumentException("worker result contentHash is invalid");
+      }
+      evidenceRefs =
+          ContractText.copyStrings(evidenceRefs, "worker result evidenceRefs");
+    }
+
+    @Override
+    public String toString() {
+      return "WorkerResult[workerName="
+          + workerName
+          + ", workerResultRef="
+          + workerResultRef
+          + ", content=[redacted], contentHash="
+          + contentHash
+          + ", evidenceRefs="
+          + evidenceRefs
+          + "]";
+    }
+  }
+
   private static void requireToolName(String value) {
     if (value == null || !value.matches("[a-z][a-z0-9_.-]{0,127}")) {
       throw new IllegalArgumentException(
           "toolName must be a bounded lowercase canonical name");
+    }
+  }
+
+  private static void requireWorkerName(String value) {
+    if (value == null || !value.matches("[a-z][a-z0-9._-]{0,127}")) {
+      throw new IllegalArgumentException(
+          "workerName must be a bounded lowercase canonical name");
     }
   }
 

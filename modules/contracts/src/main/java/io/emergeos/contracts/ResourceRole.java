@@ -6,5 +6,6 @@ public enum ResourceRole {
   RECEIPT,
   VERIFICATION,
   CHECKPOINT,
-  HANDOFF
+  HANDOFF,
+  WORKER_RESULT
 }

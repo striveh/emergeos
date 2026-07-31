@@ -59,7 +59,9 @@ flowchart TB
 
 ### Agent Control Plane
 
-负责模型选择、工具循环、Subagent、上下文压缩和流式事件。必须被 `AgentKernel` 端口隔离。
+负责模型选择、工具循环、Worker、上下文压缩和流式事件。必须被 `AgentKernel`
+端口隔离。当前只实现一个 fixed、serial、depth=1 的 read-only Worker，不等同于
+通用 Subagent graph 或 distributed scheduler。
 
 ### Durable Action Plane
 
@@ -87,8 +89,13 @@ flowchart TB
   Runner/generator 的独立 verifier 重建 candidate、重跑 H0/H1、重算完整 report，
   得到 deterministic `VERIFIED_PASSED`；packaged writer 已把相同结果写成 canonical
   durable report，fresh JVM 可只读加载并 independent replay；
+- Pack 005 已固定 Tool arguments pre-dispatch fault；Pack 006 已固定 trusted
+  read-only Tool 的 post-dispatch deadline truth；Pack007 又增加一个 typed、
+  synchronous、depth=1 的 read-only Worker vertical：Fake Conductor 发出
+  `WorkerCall`，child 只读同一个 owner-scoped Capture，durable
+  `WorkerResultEnvelope` 经 parent verified consume 后才提交 parent-only Artifact；
 - PostgreSQL 已持有 Capture、Artifact lineage、local ActionAttempt/Receipt 与
-  AgentRun truth；
+  AgentRun/Trace/WorkerResult、parent/child Handoff truth；
 - Stage 1 S3 Action 仅通过 loopback HTTP 调用独立、文件持久化的 Fake Provider；
 - OpenAI real-model protocol adapter 与受控 Eval Runner 实现已形成，但只有当前最终验证
   全部通过后才能宣称 runner engineering complete；live-provider smoke 尚未执行，
@@ -96,6 +103,25 @@ flowchart TB
 - Temporal、AgentScope 和真实 Connector 仍是后续外层适配器，不是当前实现。
 
 此时拆微服务只会增加一致性、部署和调试成本，不能增加用户价值。未来只有出现独立扩缩、故障隔离、团队所有权或合规边界时才拆服务。
+
+Pack007 当前产品路径是：
+
+```text
+owner-scoped Capture
+→ server-owned parent Task + Fake Conductor
+→ typed WorkerCall
+→ child Task/Run（serial，depth=1）
+→ capture.read
+→ durable WorkerResult + terminal child Trace/Bundle
+→ verified parent HANDOFF
+→ parent-only Artifact + terminal parent Run
+```
+
+registered child `contextPolicyVersion` drift 会在 child Run、Model、Tool 与 delegated
+read 前 fail closed。child terminal commit 后、parent terminal commit 前若 JVM
+终止，数据库保留 terminal child + WorkerResult 与仍为 `RUNNING` 的 parent；当前不会
+自动 resume。Pack007 不使用 Temporal，也没有 workflow graph、parallel scheduling、
+distributed Worker service、write-capable Worker 或 live model。
 
 `apps/eval-runner` 属于 Verification/Eval 边界，不属于普通 Product API 或 Durable
 Action Plane。它使用单次内存 Store 执行冻结案例；本地 JSON record 只保存该 synthetic

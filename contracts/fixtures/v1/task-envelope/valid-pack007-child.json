@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0",
+  "id": "pack007-child-task",
+  "parentId": "pack007-parent-task",
+  "principalRef": "pack007-owner",
+  "delegationChain": [
+    "pack007-parent-task"
+  ],
+  "kind": "PROPOSE_ARTICLE_DRAFT",
+  "intent": "产出一篇引用该 Capture 的短文 proposal",
+  "inputRefs": [
+    "capture://pack007-capture"
+  ],
+  "evidenceRefs": [],
+  "modalities": [
+    "text"
+  ],
+  "dataClass": "PUBLIC",
+  "risk": "READ_ONLY",
+  "latencyClass": "INTERACTIVE",
+  "requiredTools": [
+    "capture.read"
+  ],
+  "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+  "acceptanceChecks": [
+    "proposal cites the delegated Capture"
+  ],
+  "allowParallel": false,
+  "maxModelSteps": 2,
+  "maxToolCalls": 1,
+  "deadlineMs": 5000,
+  "budgetUsd": 0,
+  "modelProvider": null,
+  "modelRequested": null,
+  "pricingProfile": null,
+  "idempotencyKey": null,
+  "policyVersion": "agent-draft-policy-v1",
+  "stateVersion": "stage2-s2",
+  "contextPolicyVersion": "ref-only-v1",
+  "toolRegistryVersion": "agent-tools-v2",
+  "environmentSnapshotRef": null,
+  "capabilityRefs": [],
+  "unresolvedDecisions": [],
+  "returnControlWhen": "typed Worker Result or non-success"
+}

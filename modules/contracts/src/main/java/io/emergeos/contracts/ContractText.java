@@ -43,6 +43,11 @@ public final class ContractText {
     return value;
   }
 
+  public static boolean isSafeModelIdentifier(String value) {
+    return value != null
+        && value.matches("[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}");
+  }
+
   public static List<String> copyStrings(List<String> value, String name) {
     return copyStrings(value, name, MAX_TEXT_LENGTH);
   }

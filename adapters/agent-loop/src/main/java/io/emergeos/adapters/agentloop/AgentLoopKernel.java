@@ -1,14 +1,21 @@
 package io.emergeos.adapters.agentloop;
 
 import io.emergeos.contracts.ContractValueDomains;
+import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.ObservedExecutionLimits;
 import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.AgentDraftProposal;
+import io.emergeos.core.domain.AgentHandoffObservation;
 import io.emergeos.core.domain.AgentRunOutcome;
 import io.emergeos.core.domain.AgentTraceEvent;
 import io.emergeos.core.domain.AgentTraceEventType;
+import io.emergeos.core.domain.AgentTraceProtocol;
+import io.emergeos.core.domain.AgentWorkerExecution;
+import io.emergeos.core.domain.WorkerHandoffRequest;
 import io.emergeos.core.port.AgentKernel;
+import io.emergeos.core.port.AgentRunContext;
+import io.emergeos.core.port.AgentWorkerRuntime;
 import io.emergeos.core.port.CancellationSignal;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -26,6 +33,7 @@ public final class AgentLoopKernel implements AgentKernel {
 
   private final AgentModel model;
   private final AgentToolRegistry tools;
+  private final AgentWorkerRuntime workers;
   private final int modelStepCeiling;
   private final int toolCallCeiling;
   private final LongSupplier nanoTime;
@@ -35,7 +43,28 @@ public final class AgentLoopKernel implements AgentKernel {
       AgentToolRegistry tools,
       int maxModelSteps,
       int maxToolCalls) {
-    this(model, tools, maxModelSteps, maxToolCalls, System::nanoTime);
+    this(
+        model,
+        tools,
+        AgentWorkerRuntime.disabled(),
+        maxModelSteps,
+        maxToolCalls,
+        System::nanoTime);
+  }
+
+  public AgentLoopKernel(
+      AgentModel model,
+      AgentToolRegistry tools,
+      AgentWorkerRuntime workers,
+      int maxModelSteps,
+      int maxToolCalls) {
+    this(
+        model,
+        tools,
+        workers,
+        maxModelSteps,
+        maxToolCalls,
+        System::nanoTime);
   }
 
   /** Deterministic clock injection for frozen evaluation and deadline tests. */
@@ -45,8 +74,26 @@ public final class AgentLoopKernel implements AgentKernel {
       int maxModelSteps,
       int maxToolCalls,
       LongSupplier nanoTime) {
+    this(
+        model,
+        tools,
+        AgentWorkerRuntime.disabled(),
+        maxModelSteps,
+        maxToolCalls,
+        nanoTime);
+  }
+
+  /** Deterministic clock injection for frozen Worker, evaluation and deadline tests. */
+  public AgentLoopKernel(
+      AgentModel model,
+      AgentToolRegistry tools,
+      AgentWorkerRuntime workers,
+      int maxModelSteps,
+      int maxToolCalls,
+      LongSupplier nanoTime) {
     this.model = Objects.requireNonNull(model, "model");
     this.tools = Objects.requireNonNull(tools, "tools");
+    this.workers = Objects.requireNonNull(workers, "workers");
     if (maxModelSteps < 1 || maxToolCalls < 1) {
       throw new IllegalArgumentException("model and tool limits must be positive");
     }
@@ -66,7 +113,24 @@ public final class AgentLoopKernel implements AgentKernel {
   }
 
   @Override
-  public AgentRunOutcome run(TaskEnvelope task, CancellationSignal cancellation) {
+  public String workerRegistryVersion() {
+    return workers == AgentWorkerRuntime.disabled()
+        ? null
+        : workers.registryVersion();
+  }
+
+  @Override
+  public String workerProfileFingerprint() {
+    return workers == AgentWorkerRuntime.disabled()
+        ? null
+        : workers.profileFingerprint();
+  }
+
+  @Override
+  public AgentRunOutcome run(
+      AgentRunContext context, CancellationSignal cancellation) {
+    Objects.requireNonNull(context, "context");
+    TaskEnvelope task = context.task();
     Objects.requireNonNull(task, "task");
     Objects.requireNonNull(cancellation, "cancellation");
     long startedNanos = nanoTime.getAsLong();
@@ -113,7 +177,8 @@ public final class AgentLoopKernel implements AgentKernel {
     }
 
     try {
-      return runSession(task, cancellation, session, state, startedNanos);
+      return runSession(
+          context, task, cancellation, session, state, startedNanos);
     } finally {
       try {
         session.close();
@@ -124,6 +189,7 @@ public final class AgentLoopKernel implements AgentKernel {
   }
 
   private AgentRunOutcome runSession(
+      AgentRunContext context,
       TaskEnvelope task,
       CancellationSignal cancellation,
       AgentModel.Session session,
@@ -151,7 +217,8 @@ public final class AgentLoopKernel implements AgentKernel {
         step =
             Objects.requireNonNull(
                 session.next(
-                    new AgentModel.Turn(task, state.toolResults),
+                    new AgentModel.Turn(
+                        task, state.toolResults, state.workerResults),
                     new AgentModel.ModelCallContext(
                         remainingDeadlineMs,
                         remainingBudget(task, state.costUsd),
@@ -431,6 +498,9 @@ public final class AgentLoopKernel implements AgentKernel {
         }
         toolCalls++;
         state.toolResults.add(result);
+        if (!state.obtainedEvidenceRefs.contains(result.reference())) {
+          state.obtainedEvidenceRefs.add(result.reference());
+        }
         state.trace.add(
             event(
                 state.trace,
@@ -461,14 +531,355 @@ public final class AgentLoopKernel implements AgentKernel {
         }
         continue;
       }
+      if (decision instanceof AgentModel.WorkerCall call) {
+        if (!AgentTraceProtocol.hasReadOnlyWorkerCapability(task)) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "BLOCKED",
+                  null));
+          return outcome(
+              task,
+              RunStatus.BLOCKED,
+              null,
+              state,
+              "HANDOFF_NOT_ALLOWED",
+              startedNanos);
+        }
+        if (!state.handoffs.isEmpty()) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "BLOCKED",
+                  null));
+          return outcome(
+              task,
+              RunStatus.BLOCKED,
+              null,
+              state,
+              "HANDOFF_LIMIT_EXHAUSTED",
+              startedNanos);
+        }
+
+        AgentWorkerRuntime.Preparation preparation;
+        try {
+          preparation =
+              Objects.requireNonNull(
+                  workers.prepare(
+                      context,
+                      new WorkerHandoffRequest(
+                          call.workerName(), call.intent(), call.inputRefs()),
+                      new AgentWorkerRuntime.ExecutionWindow(
+                          remainingDeadlineMs(task, startedNanos),
+                          remainingBudget(task, state.costUsd),
+                          cancellation)),
+                  "Worker preparation");
+        } catch (RuntimeException unsafePreparation) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "FAILED",
+                  null));
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "HANDOFF_PREPARATION_FAILED",
+              startedNanos);
+        }
+        if (!preparation.accepted()) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "BLOCKED",
+                  null));
+          return outcome(
+              task,
+              preparation.rejectionStatus(),
+              null,
+              state,
+              preparation.failureReason(),
+              startedNanos);
+        }
+
+        AgentWorkerRuntime.PreparedHandoff prepared = preparation.prepared();
+        String preparedWorkerName;
+        String childRunRef;
+        try {
+          preparedWorkerName = prepared.workerName();
+          childRunRef = prepared.childRunRef();
+        } catch (RuntimeException unsafePreparedIdentity) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "MALFORMED_RESULT",
+                  null));
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "UNSAFE_HANDOFF_OUTCOME",
+              startedNanos);
+        }
+        if (!call.workerName().equals(preparedWorkerName)
+            || childRunRef == null
+            || !childRunRef.matches(
+                "agent-run://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}")) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "MALFORMED_RESULT",
+                  null));
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "UNSAFE_HANDOFF_OUTCOME",
+              startedNanos);
+        }
+        state.trace.add(
+            event(
+                state.trace,
+                AgentTraceEventType.HANDOFF_REQUEST,
+                null,
+                "REQUESTED",
+                childRunRef));
+        if (cancellation.isCancelled()) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "CANCELLED_UNOBSERVED",
+                  childRunRef));
+          return outcome(
+              task, RunStatus.CANCELLED, null, state, "CANCELLED", startedNanos);
+        }
+        if (deadlineExhausted(task, startedNanos)) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "DEADLINE_EXHAUSTED",
+                  childRunRef));
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "HANDOFF_DEADLINE_EXHAUSTED",
+              startedNanos);
+        }
+
+        AgentWorkerExecution child;
+        try {
+          child = Objects.requireNonNull(prepared.execute(), "Worker execution");
+        } catch (RuntimeException dispatchFailure) {
+          if (deadlineExceeded(task, startedNanos)) {
+            state.trace.add(
+                event(
+                    state.trace,
+                    AgentTraceEventType.HANDOFF_REJECTED,
+                    null,
+                    "DEADLINE_EXCEEDED_UNOBSERVED",
+                    childRunRef));
+            return outcome(
+                task,
+                RunStatus.FAILED,
+                null,
+                state,
+                ObservedExecutionLimits.POST_HANDOFF_DEADLINE_FAILURE,
+                startedNanos);
+          }
+          if (cancellation.isCancelled()) {
+            state.trace.add(
+                event(
+                    state.trace,
+                    AgentTraceEventType.HANDOFF_REJECTED,
+                    null,
+                    "CANCELLED_UNOBSERVED",
+                    childRunRef));
+            return outcome(
+                task,
+                RunStatus.CANCELLED,
+                null,
+                state,
+                "CANCELLED",
+                startedNanos);
+          }
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "FAILED",
+                  childRunRef));
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "HANDOFF_DISPATCH_FAILED",
+              startedNanos);
+        }
+        if (!call.workerName().equals(child.workerName())
+            || !childRunRef.equals(child.childRunRef())) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "MALFORMED_RESULT",
+                  childRunRef));
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "UNSAFE_HANDOFF_OUTCOME",
+              startedNanos);
+        }
+        try {
+          state.costUsd = state.costUsd.add(child.costUsd());
+          state.tokenCount = Math.addExact(state.tokenCount, child.tokenCount());
+          ContractValueDomains.requireUsd(
+              state.costUsd, "aggregate subtree costUsd");
+          ContractValueDomains.requireSafeCount(
+              state.tokenCount, "aggregate subtree tokenCount");
+        } catch (RuntimeException invalidChildUsage) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "MALFORMED_RESULT",
+                  childRunRef));
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "UNSAFE_HANDOFF_OUTCOME",
+              startedNanos);
+        }
+
+        AgentHandoffObservation observation = child.observation();
+        state.handoffs.add(observation);
+        if (state.costUsd.compareTo(task.budgetUsd()) > 0) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "LIMIT_EXHAUSTED",
+                  childRunRef));
+          return outcome(
+              task,
+              RunStatus.BLOCKED,
+              null,
+              state,
+              "HANDOFF_BUDGET_EXHAUSTED",
+              startedNanos);
+        }
+        if (deadlineExceeded(task, startedNanos)) {
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  "DEADLINE_EXCEEDED_AFTER_CHILD",
+                  childRunRef));
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              ObservedExecutionLimits.POST_HANDOFF_DEADLINE_FAILURE,
+              startedNanos);
+        }
+        if (child.status() != RunStatus.SUCCEEDED) {
+          String rejectionStatus = childRejectionStatus(child.status());
+          state.trace.add(
+              event(
+                  state.trace,
+                  AgentTraceEventType.HANDOFF_REJECTED,
+                  null,
+                  rejectionStatus,
+                  childRunRef));
+          return outcome(
+              task,
+              child.status(),
+              null,
+              state,
+              childFailureReason(child.status()),
+              startedNanos);
+        }
+
+        var result = child.workerResult();
+        state.workerResults.add(
+            new AgentModel.WorkerResult(
+                child.workerName(),
+                result.workerResultRef(),
+                result.content(),
+                result.contentHash(),
+                result.evidenceRefs()));
+        for (String evidenceRef : result.evidenceRefs()) {
+          if (!state.obtainedEvidenceRefs.contains(evidenceRef)) {
+            state.obtainedEvidenceRefs.add(evidenceRef);
+          }
+        }
+        state.trace.add(
+            event(
+                state.trace,
+                AgentTraceEventType.HANDOFF_RESULT,
+                null,
+                "SUCCEEDED",
+                childRunRef));
+        if (cancellation.isCancelled()) {
+          return outcome(
+              task, RunStatus.CANCELLED, null, state, "CANCELLED", startedNanos);
+        }
+        if (deadlineExhausted(task, startedNanos)) {
+          return outcome(
+              task,
+              RunStatus.FAILED,
+              null,
+              state,
+              "DEADLINE_EXHAUSTED",
+              startedNanos);
+        }
+        continue;
+      }
       if (decision instanceof AgentModel.FinalDraft finalDraft) {
+        String finalRef =
+            ("PROPOSE_ARTICLE_DRAFT".equals(task.kind())
+                    || AgentTraceProtocol.hasReadOnlyWorkerCapability(task))
+                ? "proposal://sha256:"
+                    + IntegrityHashes.utf8ContentHash(finalDraft.content())
+                : "task://" + task.id();
         state.trace.add(
             event(
                 state.trace,
                 AgentTraceEventType.STRUCTURED_FINAL,
                 null,
                 "PROPOSED",
-                "task://" + task.id()));
+                finalRef));
         return outcome(
             task,
             RunStatus.SUCCEEDED,
@@ -504,17 +915,14 @@ public final class AgentLoopKernel implements AgentKernel {
     return new AgentRunOutcome(
         status,
         proposal,
-        state.trace.stream()
-            .filter(event -> event.type() == AgentTraceEventType.TOOL_RESULT)
-            .map(AgentTraceEvent::reference)
-            .distinct()
-            .toList(),
+        state.obtainedEvidenceRefs,
         state.trace,
         state.resolvedModel,
         state.costUsd,
         state.tokenCount,
         elapsedMillis(startedNanos),
-        failureReason);
+        failureReason,
+        state.handoffs);
   }
 
   private BigDecimal remainingBudget(TaskEnvelope task, BigDecimal spent) {
@@ -556,8 +964,31 @@ public final class AgentLoopKernel implements AgentKernel {
 
     private final List<AgentTraceEvent> trace = new ArrayList<>();
     private final List<AgentModel.ToolResult> toolResults = new ArrayList<>();
+    private final List<AgentModel.WorkerResult> workerResults = new ArrayList<>();
+    private final List<String> obtainedEvidenceRefs = new ArrayList<>();
+    private final List<AgentHandoffObservation> handoffs = new ArrayList<>();
     private String resolvedModel;
     private BigDecimal costUsd = BigDecimal.ZERO;
     private long tokenCount;
+  }
+
+  private static String childRejectionStatus(RunStatus status) {
+    return switch (status) {
+      case FAILED -> "CHILD_FAILED";
+      case BLOCKED -> "CHILD_BLOCKED";
+      case NEEDS_INPUT -> "CHILD_NEEDS_INPUT";
+      case CANCELLED -> "CHILD_CANCELLED";
+      case SUCCEEDED -> throw new IllegalArgumentException("successful child is not rejected");
+    };
+  }
+
+  private static String childFailureReason(RunStatus status) {
+    return switch (status) {
+      case FAILED -> "HANDOFF_CHILD_FAILED";
+      case BLOCKED -> "HANDOFF_CHILD_BLOCKED";
+      case NEEDS_INPUT -> "HANDOFF_CHILD_NEEDS_INPUT";
+      case CANCELLED -> "HANDOFF_CHILD_CANCELLED";
+      case SUCCEEDED -> throw new IllegalArgumentException("successful child has no failure");
+    };
   }
 }

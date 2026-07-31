@@ -33,9 +33,9 @@ class AgentRunMigrationTest {
   }
 
   @Test
-  void freshInstallCreatesTheV5ModelBoundAgentRunAggregate() {
+  void freshInstallCreatesTheV6WorkerBoundAgentRunAggregate() {
     assertEquals(
-        "5",
+        "6",
         jdbc.sql(
                 """
                 SELECT version
@@ -50,7 +50,8 @@ class AgentRunMigrationTest {
         List.of(
             "agent_run_resource_bindings",
             "agent_runs",
-            "agent_trace_events"),
+            "agent_trace_events",
+            "agent_worker_results"),
         jdbc.sql(
                 """
                 SELECT table_name

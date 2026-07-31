@@ -5,6 +5,7 @@ import io.emergeos.contracts.ContractValueDomains;
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.HarnessExperiment;
 import io.emergeos.contracts.IntegrityHashes;
+import io.emergeos.contracts.ObservedExecutionLimits;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.ContentHashes;
@@ -49,6 +50,8 @@ public record AgentExecutionProfile(
 
   public static final String SYNTHETIC_MODEL_EGRESS_CAPABILITY =
       "capability://model-egress/synthetic-openai-v1";
+  public static final String READ_ONLY_WORKER_CAPABILITY =
+      ObservedExecutionLimits.READ_ONLY_WORKER_CAPABILITY;
   public static final long MAX_REVIEWED_INPUT_TOKENS_PER_STEP = 272_000;
 
   public AgentExecutionProfile {
@@ -187,8 +190,38 @@ public record AgentExecutionProfile(
         null);
   }
 
+  public static AgentExecutionProfile readOnlyWorkerFakeV1() {
+    return new AgentExecutionProfile(
+        "api-fake-worker-agent-draft-v1",
+        "1.0",
+        RiskLevel.REVERSIBLE,
+        2,
+        1,
+        5_000,
+        BigDecimal.ZERO,
+        0,
+        0,
+        null,
+        null,
+        "agent-draft-service-v1",
+        "agent-draft-verifier-v1",
+        "framework-free-agent-kernel-v1",
+        null,
+        "agent-draft-policy-v1",
+        "stage2-s2",
+        "ref-only-v1",
+        "agent-tools-v2",
+        null,
+        List.of(READ_ONLY_WORKER_CAPABILITY),
+        null);
+  }
+
   public boolean modelBound() {
     return pricing != null;
+  }
+
+  public boolean workerBound() {
+    return capabilityRefs.equals(List.of(READ_ONLY_WORKER_CAPABILITY));
   }
 
   public String modelProvider() {
@@ -240,6 +273,12 @@ public record AgentExecutionProfile(
       versions.put("execution-profile-fingerprint", fingerprint());
       versions.put("pricing-profile-fingerprint", pricing.fingerprint());
     }
+    if (workerBound()) {
+      ReadOnlyWorkerExecutionProfile worker =
+          ReadOnlyWorkerExecutionProfile.pack007FakeV1(contextPolicyVersion);
+      versions.put("worker-registry", worker.registryVersion());
+      versions.put("worker-profile-fingerprint", worker.fingerprint());
+    }
     return Map.copyOf(versions);
   }
 
@@ -270,7 +309,7 @@ public record AgentExecutionProfile(
             dataClass,
             risk,
             "INTERACTIVE",
-            List.of("capture.read"),
+            taskRequiredTools(),
             "urn:emergeos:schema:internal:agent-draft-proposal:v1",
             List.of("draft cites the source Capture"),
             false,
@@ -352,7 +391,9 @@ public record AgentExecutionProfile(
     append(
         material,
         "taskShape",
-        "CREATE_ARTICLE_DRAFT|INTERACTIVE|text|capture.read|"
+        "CREATE_ARTICLE_DRAFT|INTERACTIVE|text|"
+            + String.join(",", taskRequiredTools())
+            + "|"
             + "urn:emergeos:schema:internal:agent-draft-proposal:v1|"
             + "draft cites the source Capture|serial");
     return ContentHashes.sha256(material.toString());
@@ -383,7 +424,7 @@ public record AgentExecutionProfile(
         || !"CREATE_ARTICLE_DRAFT".equals(task.kind())
         || !"INTERACTIVE".equals(task.latencyClass())
         || !List.of("text").equals(task.modalities())
-        || !List.of("capture.read").equals(task.requiredTools())
+        || !taskRequiredTools().equals(task.requiredTools())
         || !"urn:emergeos:schema:internal:agent-draft-proposal:v1"
             .equals(task.outputSchema())
         || !List.of("draft cites the source Capture")
@@ -401,6 +442,10 @@ public record AgentExecutionProfile(
       throw new IllegalArgumentException(
           "TaskEnvelope does not match the server-owned execution profile");
     }
+  }
+
+  private List<String> taskRequiredTools() {
+    return workerBound() ? List.of() : List.of("capture.read");
   }
 
   private static String canonicalUsd(BigDecimal value) {

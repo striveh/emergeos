@@ -221,6 +221,8 @@ class OfflineToolArgumentsFaultTest {
           assertNull(event.reference());
           assertEquals("FAILED", event.status());
         }
+        case HANDOFF_REQUEST, HANDOFF_RESULT, HANDOFF_REJECTED ->
+            throw new AssertionError("Pack 005 cannot contain Handoff events");
         case ARTIFACT_COMMITTED -> {
           assertNull(event.toolName());
           assertEquals(

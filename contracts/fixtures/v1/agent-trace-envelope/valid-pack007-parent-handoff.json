@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "pack007-parent-run",
+  "taskId": "pack007-parent-task",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://pack007-parent-task",
+      "previousRootHash": "1e689944b93c8523a09a2fc92b76edfd58adfe5864d2a9b68c72e4043ab9b79f",
+      "eventHash": "316f7ae76ab1aff8fd01169147ac5b3c3b69cb80a8833fd9b59165561c243a87"
+    },
+    {
+      "sequence": 2,
+      "type": "HANDOFF_REQUEST",
+      "toolName": null,
+      "status": "REQUESTED",
+      "reference": "agent-run://pack007-child-run",
+      "previousRootHash": "63b8cb599b28a3a1602764f4d2caa4209e1dcc9eb56ab8f3c4ec99d837ef8a97",
+      "eventHash": "9d0cc7bcccf98239d576f529be0a442eba26bffeb92a927605ce73f36bf770bb"
+    },
+    {
+      "sequence": 3,
+      "type": "HANDOFF_RESULT",
+      "toolName": null,
+      "status": "SUCCEEDED",
+      "reference": "agent-run://pack007-child-run",
+      "previousRootHash": "a2d6db8fdb0a98cb8c39ef92de8e041fa9291b68f050c9ffeee139f039bfa1ec",
+      "eventHash": "ecacdb3d64184626828ba38d9630a240e79f92a151693a3ab067fd52b08229fc"
+    },
+    {
+      "sequence": 4,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://pack007-parent-task",
+      "previousRootHash": "1c147fc6dc122d22b8400644f9817dda93db859aaa475e3a97fa039b069bc003",
+      "eventHash": "002009c8dca5fa54eafc3f9e1bb51c33ef207341769b234e054ffe5811f5d2db"
+    },
+    {
+      "sequence": 5,
+      "type": "STRUCTURED_FINAL",
+      "toolName": null,
+      "status": "PROPOSED",
+      "reference": "proposal://sha256:e5b6493d7741cf43b65fb45c29d0351f3d038e470df31f964e6f1fa9cc8f767b",
+      "previousRootHash": "3ecf4aaabba0c1b9273cbdc009bbab38d8c09209286d306bf0d0768effb13733",
+      "eventHash": "16233e63079134fbc2ad277478dd51f5384a5f91351a15ff376903741005defa"
+    },
+    {
+      "sequence": 6,
+      "type": "ARTIFACT_COMMITTED",
+      "toolName": null,
+      "status": "SUCCEEDED",
+      "reference": "artifact-version://pack007-parent-artifact/1",
+      "previousRootHash": "a575d73be803beefdd85bd1b9e2948097b7d30119c24e1ef0990d588e82671fd",
+      "eventHash": "0da53fd0d917e006d1adb05850ed03877892c62b2c42aa2e280c5247f8a340d1"
+    }
+  ],
+  "eventCount": 6,
+  "rootHash": "eba203ca7e61046363308f297ab94e509d82badf70c601ce1136de2071b3faef"
+}

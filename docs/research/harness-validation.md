@@ -32,10 +32,19 @@ HarnessRunBundle hashes。S4 另完成一个更小、隔离的 Pack 004 单变�
 VerifierEvaluation，independent replay 得到 `VERIFIED_PASSED`；canonical report
 也已通过 packaged process-kill 与 fresh-JVM read-only verification。
 
-这个小实验只证明 frozen synthetic reference-grounding Verifier 的 discrimination
-与 replay equivalence，不是下面规划的完整 Harness 结论。10 个真实任务 × 2 arms ×
-3 repetitions 的 60 次运行、真实模型、人工盲评、完整 fault injection、成本/延迟和
-用户修改时间仍未执行，因此本文继续是一份可证伪的评测计划。
+Pack 005 与 Pack 006 分别把 schema-invalid Tool arguments 的 pre-dispatch rejection、
+read-only Tool 的 post-dispatch deadline truth 固定为 deterministic safety regression。
+Pack 007 又加入一个 single/synchronous/`depth=1`、one Worker、read-only Fake
+vertical：control 形成 terminal parent/child、durable WorkerResult、一个 parent
+Artifact 与一个 exact `HANDOFF`；只改变 registered Worker
+`contextPolicyVersion` 的 fault 会在 child Run/Model/Tool/delegated read 前
+fail-closed。它还覆盖 V6 graph constraints 与 packaged crash-gap read-back，但没有
+比较 H0/H1 的 stochastic model quality。
+
+这些小实验只证明 frozen synthetic reference-grounding discrimination、replay
+equivalence 和被测 safety invariant，不是下面规划的完整 Harness 结论。10 个真实任务
+× 2 arms × 3 repetitions 的 60 次运行、真实模型、人工盲评、完整 fault injection、
+成本/延迟和用户修改时间仍未执行，因此本文继续是一份可证伪的评测计划。
 
 ## 最小任务集
 

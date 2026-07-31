@@ -17,6 +17,7 @@ import io.emergeos.core.domain.Capture;
 import io.emergeos.core.domain.CaptureSourceType;
 import io.emergeos.core.domain.ContentHashes;
 import io.emergeos.core.port.AgentKernel;
+import io.emergeos.core.port.AgentRunContext;
 import io.emergeos.core.port.CancellationSignal;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -762,7 +763,7 @@ class PosixAttemptJournalVerifierTest {
         new AgentKernel() {
           @Override
           public AgentRunOutcome run(
-              TaskEnvelope task,
+              AgentRunContext context,
               CancellationSignal cancellation) {
             return new AgentRunOutcome(
                 RunStatus.FAILED,

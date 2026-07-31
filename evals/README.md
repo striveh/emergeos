@@ -216,3 +216,51 @@ PostgreSQL round-trip/fresh-store read 证明 terminal status、failure、7ms la
 write-capable action guarantee。它没有调用真实模型、网络或 Connector，也不证明用户
 价值。完整回执见
 [Post-dispatch Deadline Build Note](../docs/operations/build-notes/2026-07-31-s2-s4-post-dispatch-deadline.md)。
+
+## Stage 2 Pack007 · typed read-only Worker 与 context-policy drift
+
+`task-packs/synthetic/007-offline-read-only-worker-handoff-context-drift.json`
+冻结唯一变量 `registered-worker-context-policy-version`：
+
+- exact bytes：`8,443`；
+- raw SHA-256：
+  `808661ba78fc1cd43aa0b54c6271fccf7002399b9d24690cfbb55b97ebbb831c`；
+- control registry 使用 `ref-only-v1`，与 parent 相同；
+- fault 只把 registered Worker profile 改为 `ref-only-v2`。
+
+control 经过 production class path
+`AgentDraftService → AgentLoopKernel → DurableReadOnlyWorkerService`，底层使用
+test recording stores，形成两个
+terminal Run、一个 child `capture.read` execute、一个 durable WorkerResult、
+一个 parent HANDOFF 与一个 parent-only Artifact。parent/child Trace、Bundle、
+WorkerResult、proposal 与 Artifact 的 exact hashes 被 Task Pack、Java replay 与
+Node validator 交叉冻结；每个 case 都由两个 fresh runner 完整重放并 exact-equal。
+parent Task 的 `requiredTools` 固定为空；只有 child Task 获得
+`requiredTools=[capture.read]`，因此 Conductor Model 不能绕过 typed handoff 直接读
+Capture。
+
+同一 least-authority 不变量也在 PostgreSQL root `AgentRun` INSERT 前和 root verified
+read（包括 `RUNNING`）执行：非法 direct-tool Worker parent 不留下 durable row，
+持久 JSON 被篡改后读取会 fail-closed。另有 protocol regression 拒绝 accepted
+Handoff 后缺 terminal event 的 non-success outcome；仅真实 cancellation、deadline
+boundary 与 step exhaustion 可以 implicit 结束。这两项是 runtime/durability
+hardening，不是 Pack007 control/fault 的新增变量，因此不改变 frozen Pack bytes 或
+hash。
+
+control 的 `captureReadCount=3` 不是三个 Tool call：
+
+1. parent service 预读 owner-scoped Capture，用于建立 parent Evidence truth；
+2. child `capture.read` 的 delegated Tool-backed read；
+3. Worker durable evidence binding 提交前的 owner-scoped read。
+
+fault 只发生第一次 parent preload，因此 `captureReadCount=1`；child Run、child
+Model、Tool execute、delegated read、WorkerResult、HANDOFF binding 与 Artifact 全部为 0，
+parent 以
+`BLOCKED / HANDOFF_CONTEXT_POLICY_DRIFT` 和
+`MODEL_STEP → HANDOFF_REJECTED` 结束。
+
+`OfflineReadOnlyWorkerReplayTest` 是 strict test fixture，不是 filesystem CLI 或
+product replay API。Pack007 只证明 PUBLIC synthetic、single、synchronous、
+depth=1、read-only Fake Worker 的 deterministic safety/correctness；它没有网络、
+真实模型、Connector、parallel Worker、checkpoint/resume、write-capable Worker、
+真实用户数据或用户价值证据。

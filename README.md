@@ -30,7 +30,8 @@ identity 与预算，保持零 key read、零 client、零 marker 和零网络�
 append-only attempt journal 与 create-only terminal run record。production client 固定官方
 base URL、`Proxy.NO_PROXY`、`maxRetries(0)`、日志关闭和 30 秒 deadline。完整执行目前
 只在本机 loopback `HttpServer` 验证；**尚未读取真实 key、尚未访问 OpenAI、尚无 live
-模型结果或费用回执**。普通 `apps/api` 仍只装配 Fake。adapter 历史回执见
+模型结果或费用回执**。普通 `apps/api` 仍只装配 deterministic Fake，目前具体是
+Fake Conductor + 一个 Fake read-only Worker。adapter 历史回执见
 [Stage 2 S3 Adapter Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-openai-responses-adapter.md)，
 runner 工程回执见
 [Stage 2 S3 Eval Runner Build Note](./docs/operations/build-notes/2026-07-30-s2-s3-bounded-synthetic-eval-runner.md)。
@@ -86,6 +87,15 @@ Trace 与 terminal truth 可以跨 PostgreSQL fresh-store read 保持一致；Mo
 attribution/usage 则由 product aggregate 与 Eval Runner regression 保真。exact boundary
 与 cancellation precedence 也有 adversarial regression。完整回执见
 [Stage 2 S4 Post-dispatch Deadline Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-post-dispatch-deadline.md)。
+Pack 007 在普通 `apps/api` 的 deterministic Fake 路径加入一个 server-owned、
+serial、synchronous、`depth=1` 的 typed read-only Worker：parent Conductor 发出
+`WorkerCall`，registered Worker 只读 parent 已授权的同一 owner-scoped Capture，
+proposal 先作为 `WorkerResultEnvelope` 独立持久化，parent verified consume 后仍是唯一
+Artifact writer。V6 保存 parent/child relation、`WORKER_RESULT` 与 `HANDOFF` binding；
+PUBLIC synthetic control、context-policy drift、PostgreSQL constraint、真实 JVM
+process-kill 和两个 fresh JVM read-back 已形成可重放证据。这不是通用 multi-agent、
+parallel Worker、checkpoint/resume、lease/fencing、live model、write-capable Worker
+或用户价值证明。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
@@ -124,19 +134,22 @@ V1/V2/V3 → V4 升级与恢复演练保持旧 truth；V4 同时为 Capture iden
 增加 composite unique constraint。Stage 2 S3 的 additive V5 不新增业务表，只加入
 `model_provider`、`model_requested`、`pricing_profile` 三个 typed columns；真实模型
 Task 1.1 的 routing/pricing identity 必须与 Task JSON 双向一致，而历史 Task 1.0 JSON
-与 Bundle hash 不被改写。当前 schema version 是 V5。
+与 Bundle hash 不被改写。Pack 007 的 additive V6 新增 `agent_worker_results`，并在
+AgentRun/Trace/binding truth 上冻结 exact-one-child、same-owner、terminal、hash-chain
+与 single-consume 约束；V1–V5 历史 JSON 与 hash 不被改写。当前 schema version 是 V6。
 
-当前 Stage 2 S1 + S2 Agent 路径是：
+当前普通 API 仍只装配 deterministic Fake；Pack 007 Agent 路径是：
 
 ```text
-PostgreSQL Capture reference
-  → server-owned TaskEnvelope
-  → scripted Fake Model
+owner-scoped PostgreSQL Capture
+  → server-owned parent Task + Fake Conductor
+  → typed WorkerCall
+  → registered child Task/Run（serial，depth=1）
   → capture.read
-  → structured draft proposal
-  → deterministic evidence validation
-  → PostgreSQL Artifact v1 + terminal AgentRun（同一 transaction）
-  → verified Result + safe hashed Trace + HarnessRunBundle
+  → durable WorkerResult + terminal child Trace/Bundle
+  → verified parent HANDOFF
+  → deterministic verification
+  → parent-only Artifact + terminal parent Run
 ```
 
 ## 快速开始
@@ -231,6 +244,11 @@ curl -s http://localhost:8080/api/v1/agent-runs/{runId}
 curl -s http://localhost:8080/api/v1/agent-runs/{runId}/trace
 curl -s http://localhost:8080/api/v1/agent-runs/{runId}/bundle
 
+# 从 parent Bundle 的 handoffRefs 取得 agent-run://{childRunId} 后，只读 child truth
+curl -s http://localhost:8080/api/v1/agent-runs/{childRunId}
+curl -s http://localhost:8080/api/v1/agent-runs/{childRunId}/trace
+curl -s http://localhost:8080/api/v1/agent-runs/{childRunId}/bundle
+
 # 也可以绕过 Fake Agent，直接用确定性内容创建 Artifact v1
 curl -s \
   -H 'Content-Type: application/json' \
@@ -274,10 +292,15 @@ curl -s \
   http://localhost:8080/api/v1/manifestations/{manifestationId}/approve
 ```
 
-Capture、Agent 生成的 Artifact、AgentRun、safe Trace、HarnessRunBundle 与独立 Artifact
-lineage 写入本机 PostgreSQL。Manifestation 仍只写入应用进程内存中的草稿回执。独立 local
-ActionAttempt/Receipt 也写入 PostgreSQL，但只在测试中访问 loopback Fake Provider 并产生
-模拟对象。它们都不会访问或发布到任何真实外部平台。
+当前没有公开 WorkerResult content 的 HTTP endpoint；它只存在于 owner-scoped
+PostgreSQL truth，并通过 child `WORKER_RESULT` binding、parent `HANDOFF` 与 hash chain
+间接核验。不要把 Run/Bundle read API 描述成 WorkerResult content API。
+
+Capture、Agent 生成的 Artifact、AgentRun、safe Trace、HarnessRunBundle、
+WorkerResult、parent/child relation 与独立 Artifact lineage 写入本机 PostgreSQL。
+Manifestation 仍只写入应用进程内存中的草稿回执。独立 local ActionAttempt/Receipt
+也写入 PostgreSQL，但只在测试中访问 loopback Fake Provider 并产生模拟对象。它们都不会
+访问或发布到任何真实外部平台。
 
 状态含义、`UNKNOWN` 恢复入口、迁移/备份演练和明确限制见
 [Stage 1 Operating Runbook](./docs/operations/stage1-operating-runbook.md)。
@@ -290,11 +313,11 @@ apps/eval-runner/         隔离 synthetic model Eval；默认 zero-egress，liv
 apps/offline-harness-runner/ 固定 Pack 004 comparison、canonical durable report、packaged CLI 与独立 replay verifier
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例、AgentKernel 与端口
-adapters/inmemory/        本地适配器、有限 Fake Agent 循环与 Offline golden runner
-adapters/postgres/        Capture、Artifact、local Action、AgentRun/Trace 的 PostgreSQL 适配器
+adapters/inmemory/        Fake Conductor/Worker、有限 Agent loop 与 Offline Pack replay
+adapters/postgres/        Capture、Artifact、Action、AgentRun/Trace/WorkerResult 的 PostgreSQL 适配器
 adapters/openai/          隔离 Responses adapter；已接 Eval Runner、未接产品 API，当前无 live receipt
 contracts/                跨语言 JSON Schema
-evals/                    合成任务与回归证据
+evals/                    Pack 001–007 合成任务、Harness 对照与故障回归证据
 docs/                     产品、架构、研究、运营和共同治理
 ```
 

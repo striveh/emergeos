@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "pack007-parent-run",
+  "taskId": "pack007-parent-task",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "MODEL_STEP",
+      "toolName": null,
+      "status": "COMPLETED",
+      "reference": "task://pack007-parent-task",
+      "previousRootHash": "1e689944b93c8523a09a2fc92b76edfd58adfe5864d2a9b68c72e4043ab9b79f",
+      "eventHash": "316f7ae76ab1aff8fd01169147ac5b3c3b69cb80a8833fd9b59165561c243a87"
+    },
+    {
+      "sequence": 2,
+      "type": "HANDOFF_REQUEST",
+      "toolName": null,
+      "status": "REQUESTED",
+      "reference": "agent-run://pack007-child-run",
+      "previousRootHash": "63b8cb599b28a3a1602764f4d2caa4209e1dcc9eb56ab8f3c4ec99d837ef8a97",
+      "eventHash": "9d0cc7bcccf98239d576f529be0a442eba26bffeb92a927605ce73f36bf770bb"
+    },
+    {
+      "sequence": 3,
+      "type": "HANDOFF_RESULT",
+      "toolName": null,
+      "status": "CHILD_FAILED",
+      "reference": "agent-run://pack007-child-run",
+      "previousRootHash": "a2d6db8fdb0a98cb8c39ef92de8e041fa9291b68f050c9ffeee139f039bfa1ec",
+      "eventHash": "2d95865de28990e333dea1626867bf473e99bee942e0bb16984180cdd72fe76d"
+    },
+    {
+      "sequence": 4,
+      "type": "STRUCTURED_FINAL",
+      "toolName": null,
+      "status": "PROPOSED",
+      "reference": "proposal://sha256:7197957b1acefa6b690e0d063e0e247e9b8d52e0be01659e28fb7ce77e1361ea",
+      "previousRootHash": "5da75679ef1532896facc27dc8aa50415840b107b179837debbc911f19957bfb",
+      "eventHash": "58c5a714b177721470a4d63804b5bfb671a93465bdfe963b184fb31dbec80cb9"
+    },
+    {
+      "sequence": 5,
+      "type": "ARTIFACT_COMMITTED",
+      "toolName": null,
+      "status": "SUCCEEDED",
+      "reference": "artifact-version://pack007-artifact/1",
+      "previousRootHash": "3db7cbe98f8dd4db522fbd25d65a302aaf6a029d5e8ffb5252c34950b971bc40",
+      "eventHash": "1c98d60f3a26f4a180178e7598ce682598b73feb6fa277d517d1de942b53ba69"
+    }
+  ],
+  "eventCount": 5,
+  "rootHash": "d184e1317199563f47ec7712c0afe3e7098b65bf5851ba000cbd5964cf23e689"
+}

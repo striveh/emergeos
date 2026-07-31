@@ -97,7 +97,7 @@ class AgentDraftHttpIT {
           List.of("capture://" + captureId),
           JsonPath.read(drafted.body(), "$.result.evidenceRefs"));
       assertEquals(
-          "scripted-fake-draft-v1",
+          "fake-model-v1",
           JsonPath.read(drafted.body(), "$.result.resolvedModel"));
       assertEquals(0.0, JsonPath.<Number>read(drafted.body(), "$.result.costUsd").doubleValue());
       assertEquals(List.of(), JsonPath.read(drafted.body(), "$.result.receiptRefs"));
@@ -111,8 +111,8 @@ class AgentDraftHttpIT {
       assertEquals(
           List.of(
               "MODEL_STEP",
-              "TOOL_REQUEST",
-              "TOOL_RESULT",
+              "HANDOFF_REQUEST",
+              "HANDOFF_RESULT",
               "MODEL_STEP",
               "STRUCTURED_FINAL",
               "ARTIFACT_COMMITTED"),
@@ -120,11 +120,14 @@ class AgentDraftHttpIT {
       assertEquals(
           List.of(1, 2, 3, 4, 5, 6),
           JsonPath.read(drafted.body(), "$.trace[*].sequence"));
-      assertEquals(
-          List.of("capture.read", "capture.read"),
+      List<String> handoffRefs =
           JsonPath.read(
               drafted.body(),
-              "$.trace[?(@.type == 'TOOL_REQUEST' || @.type == 'TOOL_RESULT')].toolName"));
+              "$.trace[?(@.type == 'HANDOFF_REQUEST' || "
+                  + "@.type == 'HANDOFF_RESULT')].reference");
+      assertEquals(2, handoffRefs.size());
+      assertEquals(handoffRefs.getFirst(), handoffRefs.getLast());
+      assertTrue(handoffRefs.getFirst().startsWith("agent-run://"));
       assertFalse(
           JsonPath.parse(drafted.body()).read("$.trace").toString().contains(SEED_SENTINEL),
           "safe Trace must not contain raw Capture content");

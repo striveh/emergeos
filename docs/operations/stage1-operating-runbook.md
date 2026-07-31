@@ -102,21 +102,24 @@ Run the real PostgreSQL upgrade and restore game day:
 ```bash
 ./mvnw --batch-mode --no-transfer-progress \
   -pl adapters/postgres -am \
-  -Dtest=Stage1MigrationAndRecoveryTest,AgentRunModelBindingMigrationTest \
+  -Dtest=Stage1MigrationAndRecoveryTest,AgentRunModelBindingMigrationTest,AgentWorkerResultAndHandoffMigrationTest \
   -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
 `Stage1MigrationAndRecoveryTest` 创建独立的 populated V1、V2、V3 schema 和一个
-fresh install，再全部升级到 V5。升级前后逐列比较既有稳定业务 truth：S1
+fresh install，再全部升级到 V6。升级前后逐列比较既有稳定业务 truth：S1
 Capture/request/content hash、S2 Artifact head/version/lineage，以及 S3 Action
 plan/artifact hash、budget、transition 和 Receipt。
 
 `AgentRunModelBindingMigrationTest` 另外创建真正 populated 的 raw V4 AgentRun
-1.0 数据，再升级到 V5，验证旧 Task JSON、Bundle JSON 与 Bundle hash 原样保持，
+1.0 数据，再升级到 V6，验证旧 Task JSON、Bundle JSON 与 Bundle hash 原样保持，
 三个新 model binding typed columns 为 `NULL`，且新版 Store 可以读回历史记录。
-V4 新增三张 AgentRun/Trace/binding 表，fresh schema 仍有九张业务表；V5 只为
-AgentRun 增加三个 model binding typed columns。所有路径最终都在 V5；V4 还为
-Capture identity/request hash 增加 composite unique constraint。
+`AgentWorkerResultAndHandoffMigrationTest` 从 populated V5 验证 additive V6：
+合法历史 truth 不被改写，无法证明 parent 的 legacy generic `HANDOFF` 或 orphan
+child 则整次 migration fail-fast 并留在 V5。V4 新增三张
+AgentRun/Trace/binding 表，V5 只为 AgentRun 增加三个 model binding typed columns；
+V6 新增 `agent_worker_results` 并收紧 typed parent/child graph。fresh V6 共十张
+业务表；V4 还为 Capture identity/request hash 增加 composite unique constraint。
 
 Run the incompatible migration process check:
 
@@ -127,7 +130,7 @@ Run the incompatible migration process check:
   -Dfailsafe.failIfNoSpecifiedTests=false
 ```
 
-该测试先应用 V1–V5，再故意修改已应用 V3 的 checksum，然后启动 packaged
+该测试先应用 V1–V6，再故意修改已应用 V3 的 checksum，然后启动 packaged
 application。Flyway validation 必须让进程在 readiness 变成 `UP` 之前 non-zero
 退出；测试同时确认 synthetic database password 不会出现在失败日志。
 
@@ -177,8 +180,9 @@ S2 的 durable evidence 由独立 packaged restart acceptance 覆盖。
 ## Scope and open Gates
 
 - Fake Provider objects are simulated and contain no real user data.
-- 当前已有 framework-free `AgentKernel`、scripted Fake Model，以及 V5 持久
-  AgentRun/Safe Trace；仍没有 real model、real Connector、authentication、
+- 当前已有 framework-free `AgentKernel`、scripted Fake Model，以及 V6 持久
+  AgentRun/Safe Trace/WorkerResult 和一个 single/depth=1 read-only Fake Worker
+  graph；仍没有 real model、general multi-agent、real Connector、authentication、
   LAN/public listener、Temporal、正式 UI、general outbox 或 metrics platform。
 - ADR-0004 is `Proposed`: S3 proves recovery after durable `UNKNOWN`, but not
   safe takeover from a crash that leaves `DISPATCHING`.

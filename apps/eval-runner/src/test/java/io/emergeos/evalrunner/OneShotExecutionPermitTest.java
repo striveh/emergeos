@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.domain.AgentRunOutcome;
 import io.emergeos.core.port.AgentKernel;
+import io.emergeos.core.port.AgentRunContext;
 import io.emergeos.core.port.CancellationSignal;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -80,7 +81,7 @@ class OneShotExecutionPermitTest {
         new AgentKernel() {
           @Override
           public AgentRunOutcome run(
-              TaskEnvelope task, CancellationSignal cancellation) {
+              AgentRunContext context, CancellationSignal cancellation) {
             delegateCalls.incrementAndGet();
             return null;
           }
@@ -97,12 +98,16 @@ class OneShotExecutionPermitTest {
         };
     PermitBoundAgentKernel kernel =
         new PermitBoundAgentKernel(permit, delegate);
+    TaskEnvelope task = SyntheticEvalCatalog.task();
+    AgentRunContext context =
+        new AgentRunContext(
+            "permit-bound-run", task.principalRef(), task);
     Callable<String> attempt =
         () -> {
           start.await();
           try {
             kernel.run(
-                SyntheticEvalCatalog.task(),
+                context,
                 CancellationSignal.never());
             return "DELEGATED";
           } catch (OneShotExecutionPermit.Rejected rejected) {

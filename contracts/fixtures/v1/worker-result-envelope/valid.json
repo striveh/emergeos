@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "workerResultRef": "worker-result://pack007-child-run",
+  "childRunId": "pack007-child-run",
+  "childTaskId": "pack007-child-task",
+  "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+  "content": "# 从想法到可信成果\n\nPrompt 工程是在为概率程序构造运行时状态。\n\n目标：产出一篇引用该 Capture 的短文 proposal",
+  "contentHash": "e5b6493d7741cf43b65fb45c29d0351f3d038e470df31f964e6f1fa9cc8f767b",
+  "evidenceRefs": [
+    "capture://pack007-capture"
+  ],
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "integrityHash": "d69ecb08300f1f1cd378d826243add922c0deb75a15d9393a63d5d00d2a2f5a8"
+}
