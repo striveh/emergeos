@@ -121,9 +121,27 @@ public final class OpenAiResponsesModel implements AgentModel {
     return IntegrityHashes.utf8ContentHash(material);
   }
 
+  /**
+   * Computes the reviewed default-codec JSON body hash for the first request
+   * without constructing a client or model session.
+   *
+   * <p>An execution receipt may treat this as the exact transport body
+   * identity only when the SDK client is a {@link ReviewedOpenAiClient}.
+   */
+  public static String firstRequestFingerprint(
+      ModelExecutionProfile profile, TaskEnvelope task) {
+    Objects.requireNonNull(profile, "profile");
+    Objects.requireNonNull(task, "task");
+    profile.requireTaskBinding(task);
+    return ReviewedOpenAiClient.reviewedRequestBodyHash(
+        firstRequest(profile, List.of(initialInput(task)))._body());
+  }
+
   private final ModelExecutionProfile profile;
   private final OpenAIClient client;
-  private final Runnable providerInvocationObserver;
+  private final RequestHasher requestHasher;
+  private final ProviderInvocationObserver
+      providerInvocationObserver;
   private final ProviderAttributionObserver providerAttributionObserver;
 
   public OpenAiResponsesModel(
@@ -133,7 +151,13 @@ public final class OpenAiResponsesModel implements AgentModel {
 
   public OpenAiResponsesModel(
       ModelExecutionProfile profile, OpenAIClient client) {
-    this(profile, client, () -> {}, (ignoredModel, ignoredUsage) -> {});
+    this(
+        profile,
+        client,
+        request ->
+            requestHash(request, ObjectMappers.jsonMapper()),
+        ignoredInvocation -> {},
+        (ignoredModel, ignoredUsage) -> {});
   }
 
   /**
@@ -161,6 +185,28 @@ public final class OpenAiResponsesModel implements AgentModel {
     this(
         profile,
         client,
+        request ->
+            requestHash(request, ObjectMappers.jsonMapper()),
+        ignoredInvocation ->
+            Objects.requireNonNull(
+                    providerInvocationObserver,
+                    "providerInvocationObserver")
+                .run(),
+        (ignoredModel, ignoredUsage) -> {});
+  }
+
+  /**
+   * Creates a model route whose observer receives the exact reviewed-client
+   * request hash immediately before each SDK call.
+   */
+  public OpenAiResponsesModel(
+      ModelExecutionProfile profile,
+      ReviewedOpenAiClient client,
+      ProviderInvocationObserver providerInvocationObserver) {
+    this(
+        profile,
+        Objects.requireNonNull(client, "client").client(),
+        request -> client.requestBodyHash(request._body()),
         providerInvocationObserver,
         (ignoredModel, ignoredUsage) -> {});
   }
@@ -186,8 +232,42 @@ public final class OpenAiResponsesModel implements AgentModel {
       OpenAIClient client,
       Runnable providerInvocationObserver,
       ProviderAttributionObserver providerAttributionObserver) {
+    this(
+        profile,
+        client,
+        request ->
+            requestHash(request, ObjectMappers.jsonMapper()),
+        ignoredInvocation ->
+            Objects.requireNonNull(
+                    providerInvocationObserver,
+                    "providerInvocationObserver")
+                .run(),
+        providerAttributionObserver);
+  }
+
+  public OpenAiResponsesModel(
+      ModelExecutionProfile profile,
+      ReviewedOpenAiClient client,
+      ProviderInvocationObserver providerInvocationObserver,
+      ProviderAttributionObserver providerAttributionObserver) {
+    this(
+        profile,
+        Objects.requireNonNull(client, "client").client(),
+        request -> client.requestBodyHash(request._body()),
+        providerInvocationObserver,
+        providerAttributionObserver);
+  }
+
+  private OpenAiResponsesModel(
+      ModelExecutionProfile profile,
+      OpenAIClient client,
+      RequestHasher requestHasher,
+      ProviderInvocationObserver providerInvocationObserver,
+      ProviderAttributionObserver providerAttributionObserver) {
     this.profile = Objects.requireNonNull(profile, "profile");
     this.client = Objects.requireNonNull(client, "client");
+    this.requestHasher =
+        Objects.requireNonNull(requestHasher, "requestHasher");
     this.providerInvocationObserver =
         Objects.requireNonNull(
             providerInvocationObserver,
@@ -240,16 +320,7 @@ public final class OpenAiResponsesModel implements AgentModel {
       this.task = task;
       this.taskHash = IntegrityHashes.taskHash(task);
       this.captureRef = task.inputRefs().getFirst();
-      this.history.add(
-          ResponseInputItem.ofEasyInputMessage(
-              EasyInputMessage.builder()
-                  .role(EasyInputMessage.Role.USER)
-                  .content(
-                      "Task intent:\n"
-                          + task.intent()
-                          + "\nDeclared capture reference:\n"
-                          + captureRef)
-                  .build()));
+      this.history.add(initialInput(task));
     }
 
     @Override
@@ -267,12 +338,14 @@ public final class OpenAiResponsesModel implements AgentModel {
               AgentModelFailure.Code.EGRESS_NOT_ALLOWED);
         }
         step = 2;
+        ResponseCreateParams request = firstRequest();
         Response response =
             invokeProvider(
+                providerInvocation(1, request),
                 () ->
                     client
                         .responses()
-                        .create(firstRequest(), requestOptions(context)));
+                        .create(request, requestOptions(context)));
         Attribution attribution = attribution(response);
         providerAttributionObserver.attributed(
             attribution.resolvedModel(), attribution.usage());
@@ -302,13 +375,16 @@ public final class OpenAiResponsesModel implements AgentModel {
                     .callerDirect()
                     .build()));
         step = 2;
+        ResponseCreateParams request =
+            secondRequest().rawParams();
         Response response =
             invokeProvider(
+                providerInvocation(2, request),
                 () ->
                     client
                         .responses()
                         .create(
-                            secondRequest().rawParams(),
+                            request,
                             requestOptions(context)));
         Attribution attribution = attribution(response);
         providerAttributionObserver.attributed(
@@ -376,21 +452,8 @@ public final class OpenAiResponsesModel implements AgentModel {
     }
 
     private ResponseCreateParams firstRequest() {
-      ResponseCreateParams.Builder builder =
-          ResponseCreateParams.builder()
-          .model(profile.modelRequested())
-          .instructions(INSTRUCTIONS)
-          .inputOfResponse(List.copyOf(history))
-          .store(false)
-          .parallelToolCalls(false)
-          .serviceTier(ResponseCreateParams.ServiceTier.DEFAULT)
-          .maxOutputTokens(profile.maxOutputTokensPerStep())
-          .addInclude(ResponseIncludable.REASONING_ENCRYPTED_CONTENT)
-          .addTool(CaptureReadArguments.class)
-          .toolChoice(
-              ToolChoiceFunction.builder().name(CAPTURE_TOOL).build());
-      applyReviewedCachePolicy(builder);
-      return builder.build();
+      return OpenAiResponsesModel.firstRequest(
+          profile, List.copyOf(history));
     }
 
     private StructuredResponseCreateParams<FinalDraftPayload>
@@ -414,9 +477,8 @@ public final class OpenAiResponsesModel implements AgentModel {
 
     private void applyReviewedCachePolicy(
         ResponseCreateParams.Builder builder) {
-      if (requiresExplicitCacheOnly(profile.modelRequested())) {
-        builder.promptCacheOptions(EXPLICIT_CACHE_ONLY);
-      }
+      OpenAiResponsesModel.applyReviewedCachePolicy(
+          builder, profile.modelRequested());
     }
 
     private void applyReviewedCachePolicy(
@@ -567,6 +629,51 @@ public final class OpenAiResponsesModel implements AgentModel {
     }
   }
 
+  private static ResponseInputItem initialInput(
+      TaskEnvelope task) {
+    return ResponseInputItem.ofEasyInputMessage(
+        EasyInputMessage.builder()
+            .role(EasyInputMessage.Role.USER)
+            .content(
+                "Task intent:\n"
+                    + task.intent()
+                    + "\nDeclared capture reference:\n"
+                    + task.inputRefs().getFirst())
+            .build());
+  }
+
+  private static ResponseCreateParams firstRequest(
+      ModelExecutionProfile profile,
+      List<ResponseInputItem> input) {
+    ResponseCreateParams.Builder builder =
+        ResponseCreateParams.builder()
+            .model(profile.modelRequested())
+            .instructions(INSTRUCTIONS)
+            .inputOfResponse(input)
+            .store(false)
+            .parallelToolCalls(false)
+            .serviceTier(ResponseCreateParams.ServiceTier.DEFAULT)
+            .maxOutputTokens(profile.maxOutputTokensPerStep())
+            .addInclude(
+                ResponseIncludable.REASONING_ENCRYPTED_CONTENT)
+            .addTool(CaptureReadArguments.class)
+            .toolChoice(
+                ToolChoiceFunction.builder()
+                    .name(CAPTURE_TOOL)
+                    .build());
+    applyReviewedCachePolicy(
+        builder, profile.modelRequested());
+    return builder.build();
+  }
+
+  private static void applyReviewedCachePolicy(
+      ResponseCreateParams.Builder builder,
+      String modelRequested) {
+    if (requiresExplicitCacheOnly(modelRequested)) {
+      builder.promptCacheOptions(EXPLICIT_CACHE_ONLY);
+    }
+  }
+
   private Attribution attribution(Response response) {
     final String resolvedModel;
     final ResponseUsage rawUsage;
@@ -668,9 +775,36 @@ public final class OpenAiResponsesModel implements AgentModel {
         attribution.usage());
   }
 
-  private <T> T invokeProvider(Supplier<T> call) {
+  private ProviderInvocation providerInvocation(
+      int requestOrdinal, ResponseCreateParams request) {
     try {
-      providerInvocationObserver.run();
+      return new ProviderInvocation(
+          requestOrdinal,
+          requestHasher.hash(request),
+          profile.modelRequested());
+    } catch (Exception serializationFailure) {
+      throw new AgentModelFailure(
+          AgentModelFailure.Code.REQUEST_REJECTED);
+    }
+  }
+
+  private static String requestHash(
+      ResponseCreateParams request, ObjectMapper requestMapper) {
+    try {
+      String serialized =
+          requestMapper.writeValueAsString(request._body());
+      return IntegrityHashes.utf8ContentHash(serialized);
+    } catch (Exception serializationFailure) {
+      throw new IllegalStateException(
+          "OpenAI request serialization failed",
+          serializationFailure);
+    }
+  }
+
+  private <T> T invokeProvider(
+      ProviderInvocation invocation, Supplier<T> call) {
+    try {
+      providerInvocationObserver.beforeInvocation(invocation);
       return call.get();
     } catch (UnauthorizedException failure) {
       throw new AgentModelFailure(
@@ -707,11 +841,59 @@ public final class OpenAiResponsesModel implements AgentModel {
   private record FinalDraftPayload(
       String content, List<String> evidenceRefs) {}
 
+  @FunctionalInterface
+  private interface RequestHasher {
+
+    String hash(ResponseCreateParams request);
+  }
+
   private record Attribution(
       String resolvedModel,
       ModelUsage usage,
       boolean withinReviewedLimits,
       boolean matchesRequestedModel) {}
+
+  /**
+   * Safe pre-call identity of the exact JSON request produced by the
+   * reviewed SDK client serializer.
+   *
+   * <p>The hash binds the full request body without exposing prompt, Tool
+   * result, header or credential bytes. It does not prove that the provider
+   * received the request.
+   */
+  public record ProviderInvocation(
+      int requestOrdinal,
+      String requestHash,
+      String modelRequested) {
+
+    public ProviderInvocation {
+      if (requestOrdinal < 1 || requestOrdinal > 128) {
+        throw new IllegalArgumentException(
+            "requestOrdinal is outside the reviewed domain");
+      }
+      if (requestHash == null
+          || !requestHash.matches("[a-f0-9]{64}")) {
+        throw new IllegalArgumentException(
+            "requestHash must be a lowercase SHA-256 digest");
+      }
+      if (modelRequested == null
+          || !modelRequested.matches(
+              "[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}")) {
+        throw new IllegalArgumentException(
+            "modelRequested is outside the safe model domain");
+      }
+    }
+  }
+
+  /**
+   * Receives only a bounded request identity immediately before the SDK
+   * create call. It does not receive raw JSON, headers or credentials.
+   */
+  @FunctionalInterface
+  public interface ProviderInvocationObserver {
+
+    void beforeInvocation(ProviderInvocation invocation);
+  }
 
   /**
    * Receives only provider identity and metering data that passed strict

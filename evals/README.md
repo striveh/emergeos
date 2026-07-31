@@ -310,3 +310,53 @@ real model result、token/cost receipt、durable graph marker/journal 或 billin
 evidence。完整边界见
 [RFC-0005](../docs/rfcs/0005-model-bound-read-only-worker-eval-baseline.md) 与
 [Pack008 Build Note](../docs/operations/build-notes/2026-07-31-s2-s4-model-bound-read-only-worker-baseline.md)。
+
+## Stage 2 Pack009 · PostgreSQL-canonical graph crash boundary
+
+`task-packs/synthetic/009-openai-read-only-worker-provider-accepted-crash.json`
+把 Pack008 graph冻结为一个 checked-in execution slot，并增加独立
+`apps/graph-eval-runner`。shipping App当前只开放 zero-effect preflight/help：
+
+```bash
+java -jar \
+  apps/graph-eval-runner/target/emerge-graph-eval-runner-0.1.0-SNAPSHOT-app.jar \
+  --preflight
+```
+
+`--verify` 仍明确返回 `SHIPPING_VERIFY_ROUTE_DISABLED`，`--execute`、JDBC、provider
+URL、crash phase与 credential override均拒绝。PostgreSQL-backed writer、fresh
+verifier、loopback provider与 crash coordination只存在于 process IT。
+
+当前 frozen identity：
+
+| 项目 | 值 |
+|---|---|
+| Pack raw SHA-256 | `8af9e2a71f6479cdc612eef6c24924e3dff2c5b12419ba3d0a65f37894c221a8` |
+| environment raw SHA-256 | `d6c3cb929a4aa5f9be75dc7f385f1c0afe589277e2622501f684ee8ee5df8899` |
+| execution slot | `pack009-provider-accepted-crash-r1` |
+| graph attempt ID | `68cbc47a23c50b02771881d68d2c585e0662af9fe586c588003d9355fe75287f` |
+| first request raw-body hash | `3b1a11c3bcac1ef123401e82e71bea71d7c0f796e6a8c3d8b9634c016e74b6db` |
+
+process acceptance使用 PostgreSQL 18.4、独立 loopback provider与独立 writer JVM。
+provider durable接收 exactly one synthetic request、matching `PROVIDER_INTENT`已提交后，
+父测试确认 writer仍存活并真实强杀它。provider随后形成 response ledger，但数据库没有
+attribution；两个不同 PID的 fresh verifier byte-equal返回
+`VALID / INCOMPLETE / billing UNKNOWN`。minimal replay与完整 writer replay都在读取
+provider key、构建 client或产生第二次 request前被同一 durable claim拒绝；完整 writer
+replay仍先读取连接数据库所需的 DB password。
+
+V7 graph truth包含 create-only manifest/slot claim、exact parent/child Run/profile
+bindings、append-only hash-chain journal与 CAS head。terminal-seal table当前以
+`CHECK(FALSE)`禁用，只是 schema skeleton；所以本 Pack的
+`terminalSeal=false / INCOMPLETE / UNKNOWN`不是 terminal success、免费或可重试。
+
+shipping boundary由 direct-dependency default-deny、constant-pool inspection、
+multi-release logical-entry normalization、app-owned class-resource exact allowlist与
+实际 test-classes全量排除共同验证；App `target/classes`中的每个 class不论 package
+都必须命中 exact allowlist。真实 crash harness bytecode、误放进 allowed dependency
+package的 synthetic Main与 synthetic multi-release JAR都作为 negative regression。
+
+本 Pack没有 real TTY、real key、external provider、real model result、token/cost
+attribution、terminal Artifact、product route或用户价值证据。完整协议与回执见
+[RFC-0006](../docs/rfcs/0006-postgresql-canonical-one-shot-graph-attempt.md) 与
+[Pack009 Build Note](../docs/operations/build-notes/2026-07-31-s2-s4-pack009-durable-graph-crash.md)。

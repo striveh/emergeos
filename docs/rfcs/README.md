@@ -35,3 +35,10 @@ RFC 被接受并落地后，由 ADR 记录最终采用的决定；RFC 历史不�
   zero-egress `--worker-preflight`，没有 Pack008 live execute route、durable graph
   attempt 或 product API wiring；实现决策见
   [ADR-0009](../architecture/decisions/0009-child-only-model-worker-eval-boundary.md)。
+- [RFC-0006：PostgreSQL-canonical one-shot graph attempt 与 UNKNOWN replay boundary](0006-postgresql-canonical-one-shot-graph-attempt.md)
+  — `Accepted`；Pack009 已用独立 graph Eval composition root、PostgreSQL V7
+  create-only manifest、exact Run/profile binding 与 append-only journal证明：
+  loopback provider accepted / attribution missing 时保持 `UNKNOWN`，两个 fresh
+  verifier exact-equal，least-authority 与完整 writer replay都不能产生第二次
+  request；实现决策见
+  [ADR-0010](../architecture/decisions/0010-postgresql-canonical-graph-attempt.md)。

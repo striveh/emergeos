@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "0.8",
+  "taskId": "synthetic-openai-read-only-worker-provider-accepted-crash-009",
+  "title": "model child provider 已接收但 attribution 缺失的 PUBLIC synthetic crash baseline",
+  "principalRef": "synthetic-graph-eval-owner",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic://eval/openai-read-only-worker-provider-crash-009",
+    "dataClass": "PUBLIC",
+    "content": "虚构产品 Lumen Seed 会把公开测试素材整理成一张可追溯的创作卡片；本段不对应任何真实人物、账号或业务。"
+  },
+  "requiredConstraints": [
+    "execution slot、graph manifest、双 Run、双 Task、双 profile 与 provider ordinal 必须由 checked-in catalog 精确绑定",
+    "只有 depth=1 child Worker 可以消费 durable egress authority，parent 没有 Tool 或 provider route",
+    "provider intent 必须在调用前提交；provider 已接收但 attribution 缺失时 billing 必须保持 UNKNOWN",
+    "同一 execution slot 的 fresh process replay 必须在 credential、client、model 与 provider 前拒绝"
+  ],
+  "forbiddenActions": [
+    "访问真实用户数据、账号、Connector、社交平台或除 exact OpenAI Responses endpoint 以外的网络",
+    "通过 CLI 覆盖 execution slot、attempt、model、pricing、prompt、tool、base URL、Task、Pack path 或 API key",
+    "把 RUNNING AgentRun 当 checkpoint 自动 resume，或在 durable provider intent 后自动 retry",
+    "把 loopback provider accepted、observed cost 为零或 billing UNKNOWN 宣称为真实账单、免费调用或 provider exactly-once"
+  ],
+  "acceptanceChecks": [
+    "strict preflight 在 DataSource、credential、client、model、Run 与 provider construction 前拒绝任一 asset 或 compiled binding drift",
+    "provider durable 接收 exactly one loopback request、writer 在 attribution 前被强杀后，两个 fresh verifier JVM 返回相同 VALID、INCOMPLETE、UNKNOWN",
+    "same-slot replay 在任何第二次 provider request 前拒绝，provider durable request count 保持 1",
+    "read-only verifier 前后 graph、product 与 Flyway PK/xmin snapshot 保持一致"
+  ],
+  "humanReviewQuestions": [
+    "是否理解 UNKNOWN 表示调用可能已发生或计费，而不是免费或可安全重试？",
+    "是否确认本 Pack 只使用 literal PUBLIC synthetic content 与 loopback provider？",
+    "是否确认 shipping CLI 尚未开放 execute，真实 provider smoke 仍需独立 owner approval？"
+  ],
+  "risk": "EXTERNAL",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "任一 Pack/environment byte、execution slot、Task、profile、pricing、prompt 或 graph protocol drift 在 claim 前失败",
+    "错误 TTY challenge、跨 attempt authority、parent consume、duplicate child consume 或 event state drift 在 credential/client/provider 前失败",
+    "provider accepted 后 writer 强杀，保留 durable intent 与 UNKNOWN，禁止 same-slot replay产生第二次 request"
+  ],
+  "modelWorkerEval": {
+    "caseId": "openai-public-read-worker-provider-crash-009-r1",
+    "executionSlotId": "pack009-provider-accepted-crash-r1",
+    "graphProtocolVersion": "postgres-graph-attempt-v1",
+    "startedAt": "2026-07-31T06:00:00Z",
+    "captureId": "capture-openai-worker-009",
+    "clientNonce": "openai-worker-009-r1",
+    "parentRunId": "run-openai-worker-parent-009-r1",
+    "childRunId": "run-openai-worker-child-009-r1",
+    "parentTaskId": "task-openai-worker-parent-009-r1",
+    "childTaskId": "task-openai-worker-child-009-r1",
+    "artifactId": "art-openai-worker-009-r1",
+    "intent": "将完全虚构的公开测试素材整理为一篇不超过 120 字的中文短文。",
+    "parentActor": "SCRIPTED_FAKE",
+    "childActor": "OPENAI_RESPONSES",
+    "workerName": "article-draft.read-v1",
+    "requiredTools": [
+      "capture.read"
+    ],
+    "maximumProviderRequests": 2,
+    "provenance": {
+      "kind": "LITERAL_CHECKED_IN_SYNTHETIC",
+      "containsRealUserData": false,
+      "containsRealAccount": false,
+      "networkAllowed": true,
+      "realModelAllowed": true,
+      "connectorAllowed": false
+    }
+  }
+}

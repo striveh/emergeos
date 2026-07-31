@@ -81,6 +81,7 @@ class Stage1MigrationAndRecoveryTest {
     v1Current.migrate();
     assertCurrent(v1Current);
     assertEquals(v1Before, snapshot(fromV1, S1_TABLES));
+    assertEquals(0L, graphRowCount(fromV1));
 
     DriverManagerDataSource fromV2 = schemaDataSource(SOURCE_DATABASE, "from_v2");
     Flyway v2 = flyway(fromV2, "from_v2", "2");
@@ -92,6 +93,7 @@ class Stage1MigrationAndRecoveryTest {
     v2Current.migrate();
     assertCurrent(v2Current);
     assertEquals(v2Before, snapshot(fromV2, S2_TABLES));
+    assertEquals(0L, graphRowCount(fromV2));
 
     DriverManagerDataSource fromV3 = schemaDataSource(SOURCE_DATABASE, "from_v3");
     Flyway v3 = flyway(fromV3, "from_v3", "3");
@@ -104,18 +106,21 @@ class Stage1MigrationAndRecoveryTest {
     v3Current.migrate();
     assertCurrent(v3Current);
     assertEquals(v3Before, snapshot(fromV3, S3_TABLES));
+    assertEquals(0L, graphRowCount(fromV3));
 
     DriverManagerDataSource fresh =
         schemaDataSource(SOURCE_DATABASE, "fresh_current");
     Flyway freshCurrent = flyway(fresh, "fresh_current", null);
     freshCurrent.migrate();
     assertCurrent(freshCurrent);
-    assertEquals(10, businessTableCount(fresh));
+    assertEquals(15, businessTableCount(fresh));
+    assertEquals(0L, graphRowCount(fresh));
 
     System.out.println(
-        "S2_V6_MIGRATION_RECEIPT "
+        "PACK009_V7_MIGRATION_RECEIPT "
             + "从V1升级=业务真相稳定 从V2升级=业务真相稳定 "
-            + "从V3升级=业务真相稳定 全新安装=V6 业务表=10 synthetic=true");
+            + "从V3升级=业务真相稳定 全新安装=V7 业务表=15 "
+            + "graph真相=空 synthetic=true");
   }
 
   @Test
@@ -180,6 +185,8 @@ class Stage1MigrationAndRecoveryTest {
     Flyway restoredFlyway = flyway(restored, schema, null);
     assertCurrent(restoredFlyway);
     assertEquals(expected, snapshot(restored, S3_TABLES));
+    assertEquals(15, businessTableCount(restored));
+    assertEquals(0L, graphRowCount(restored));
     long recoveryMillis =
         Duration.ofNanos(System.nanoTime() - recoveryStarted).toMillis();
 
@@ -388,7 +395,7 @@ class Stage1MigrationAndRecoveryTest {
   private static void assertCurrent(Flyway flyway) {
     assertTrue(flyway.validateWithResult().validationSuccessful);
     assertEquals(
-        MigrationVersion.fromVersion("6"),
+        MigrationVersion.fromVersion("7"),
         flyway.info().current().getVersion());
     assertEquals(0, flyway.info().pending().length);
   }
@@ -420,10 +427,29 @@ class Stage1MigrationAndRecoveryTest {
                 'captures', 'artifacts', 'artifact_versions',
                 'action_attempts', 'action_attempt_transitions', 'action_receipts',
                 'agent_runs', 'agent_trace_events', 'agent_run_resource_bindings',
-                'agent_worker_results'
+                'agent_worker_results',
+                'agent_graph_attempts', 'agent_graph_attempt_run_bindings',
+                'agent_graph_attempt_events', 'agent_graph_attempt_heads',
+                'agent_graph_attempt_seals'
               )
             """)
         .query(Integer.class)
+        .single();
+  }
+
+  private static long graphRowCount(
+      DriverManagerDataSource dataSource) {
+    return JdbcClient.create(dataSource)
+        .sql(
+            """
+            SELECT
+              (SELECT count(*) FROM agent_graph_attempts)
+              + (SELECT count(*) FROM agent_graph_attempt_run_bindings)
+              + (SELECT count(*) FROM agent_graph_attempt_events)
+              + (SELECT count(*) FROM agent_graph_attempt_heads)
+              + (SELECT count(*) FROM agent_graph_attempt_seals)
+            """)
+        .query(Long.class)
         .single();
   }
 

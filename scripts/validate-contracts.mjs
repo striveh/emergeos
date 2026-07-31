@@ -26,6 +26,13 @@ const frozenEvalEnvironments = new Map([
       toolRegistryVersion: "agent-tools-v2",
       rawSha256: "440fe5ce81202d5083e33463849b19e310077c9906baab8d253c1f59fd7de968"
     }
+  ],
+  [
+    "evals/environments/openai-responses-graph-synthetic-v1.json",
+    {
+      toolRegistryVersion: "agent-tools-v2",
+      rawSha256: "d6c3cb929a4aa5f9be75dc7f385f1c0afe589277e2622501f684ee8ee5df8899"
+    }
   ]
 ]);
 
@@ -965,6 +972,28 @@ function taskIntegrityHash(instance) {
   return domainHash(
     "emergeos.task-envelope.v1",
     canonicalEncode(preimage)
+  );
+}
+
+function graphRunSelectionIntegrityHash(selection) {
+  return domainHash(
+    "emergeos.graph-run-selection.v1",
+    canonicalEncode({
+      executionProfileFingerprint:
+        selection.executionProfileFingerprint,
+      executionProfileId:
+        selection.executionProfileIdUnit.repeat(
+          selection.executionProfileIdRepeat
+        ),
+      role: selection.role,
+      runId: selection.runId,
+      taskHash: selection.taskHash,
+      taskId: selection.taskId,
+      workerProfileFingerprint:
+        selection.workerProfileFingerprint,
+      workerProfileId: selection.workerProfileId,
+      workerRegistryVersion: selection.workerRegistryVersion
+    })
   );
 }
 
@@ -2261,6 +2290,105 @@ for (const vector of taskHashGolden.vectors) {
 }
 process.stdout.write(
   `Validated ${taskHashGolden.vectors.length} cross-language Task hash golden vector.\n`
+);
+
+const graphRunSelectionHashGoldenFile =
+  path.join(
+    goldenDir,
+    "graph-run-selection-integrity-hashes.json"
+  );
+const graphRunSelectionHashGolden =
+  readJson(graphRunSelectionHashGoldenFile);
+if (
+  graphRunSelectionHashGolden.profile !== INTEGRITY_PROFILE
+  || graphRunSelectionHashGolden.domain
+    !== "emergeos.graph-run-selection.v1"
+  || !Array.isArray(graphRunSelectionHashGolden.vectors)
+  || graphRunSelectionHashGolden.vectors.length === 0
+) {
+  throw new Error(
+    `${path.relative(repoRoot, graphRunSelectionHashGoldenFile)} has an unsupported or empty profile`
+  );
+}
+for (const vector of graphRunSelectionHashGolden.vectors) {
+  assertExactObjectKeys(
+    vector,
+    ["name", "selectorHash", "selection"],
+    `${path.relative(repoRoot, graphRunSelectionHashGoldenFile)} vector`
+  );
+  const selection = vector.selection;
+  assertExactObjectKeys(
+    selection,
+    [
+      "role",
+      "runId",
+      "taskId",
+      "taskHash",
+      "executionProfileIdUnit",
+      "executionProfileIdRepeat",
+      "executionProfileFingerprint",
+      "workerRegistryVersion",
+      "workerProfileId",
+      "workerProfileFingerprint"
+    ],
+    `${vector.name}.selection`
+  );
+  if (
+    typeof vector.name !== "string"
+    || !/^[a-f0-9]{64}$/.test(vector.selectorHash)
+    || !["PARENT", "CHILD"].includes(selection.role)
+    || !/^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/.test(
+      selection.runId
+    )
+    || !/^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/.test(
+      selection.taskId
+    )
+    || !/^[a-f0-9]{64}$/.test(selection.taskHash)
+    || !/^[a-f0-9]{64}$/.test(
+      selection.executionProfileFingerprint
+    )
+    || !/^[a-f0-9]{64}$/.test(
+      selection.workerProfileFingerprint
+    )
+    || typeof selection.executionProfileIdUnit !== "string"
+    || !Number.isInteger(selection.executionProfileIdRepeat)
+    || selection.executionProfileIdRepeat < 1
+    || typeof selection.workerRegistryVersion !== "string"
+    || typeof selection.workerProfileId !== "string"
+  ) {
+    throw new Error(
+      `${path.relative(repoRoot, graphRunSelectionHashGoldenFile)} contains an invalid graph Run selection vector`
+    );
+  }
+  const executionProfileId =
+    selection.executionProfileIdUnit.repeat(
+      selection.executionProfileIdRepeat
+    );
+  requireSafeText(
+    executionProfileId,
+    `${vector.name}.executionProfileId`,
+    200
+  );
+  requireSafeText(
+    selection.workerRegistryVersion,
+    `${vector.name}.workerRegistryVersion`,
+    200
+  );
+  requireSafeText(
+    selection.workerProfileId,
+    `${vector.name}.workerProfileId`,
+    200
+  );
+  const expected =
+    graphRunSelectionIntegrityHash(selection);
+  if (vector.selectorHash !== expected) {
+    throw new Error(
+      `${vector.name}: selectorHash mismatch (expected ${expected})`
+    );
+  }
+}
+process.stdout.write(
+  `Validated ${graphRunSelectionHashGolden.vectors.length} cross-language graph Run selection hash golden vectors.\n`
 );
 
 const workerResultHashGoldenFile =
@@ -4064,16 +4192,28 @@ for (const file of evalEnvironmentFiles) {
     ["mode", "cacheWriteFeeIncluded", "reference"],
     `${relative}: promptCachePolicy`
   );
+  const graphEnvironment =
+    relative === "evals/environments/openai-responses-graph-synthetic-v1.json";
   assertExactObjectKeys(
     environment.operatorGate,
-    [
-      "posixOneShotMarkerRequired",
-      "realTtyChallengeRequired",
-      "credentialReadAfterPermit",
-      "durableRunRecordRequired",
-      "attemptJournalRequired",
-      "atomicFinalPublishRequired"
-    ],
+    graphEnvironment
+      ? [
+          "postgresqlCanonicalGraphAttemptRequired",
+          "stableExecutionSlotRequired",
+          "realTtyChallengeRequired",
+          "credentialReadAfterDurableChildConsume",
+          "durableGraphJournalRequired",
+          "terminalGraphSealRequired",
+          "shippingExecuteRouteEnabled"
+        ]
+      : [
+          "posixOneShotMarkerRequired",
+          "realTtyChallengeRequired",
+          "credentialReadAfterPermit",
+          "durableRunRecordRequired",
+          "attemptJournalRequired",
+          "atomicFinalPublishRequired"
+        ],
     `${relative}: operatorGate`
   );
   if (
@@ -4103,12 +4243,22 @@ for (const file of evalEnvironmentFiles) {
     || environment.inputTokenUpperBound.method
       !== "OFFICIAL_MODEL_MAX_INPUT"
     || environment.promptCachePolicy.cacheWriteFeeIncluded !== false
-    || environment.operatorGate.posixOneShotMarkerRequired !== true
-    || environment.operatorGate.realTtyChallengeRequired !== true
-    || environment.operatorGate.credentialReadAfterPermit !== true
-    || environment.operatorGate.durableRunRecordRequired !== true
-    || environment.operatorGate.attemptJournalRequired !== true
-    || environment.operatorGate.atomicFinalPublishRequired !== true
+    || (
+      graphEnvironment
+        ? environment.operatorGate.postgresqlCanonicalGraphAttemptRequired !== true
+          || environment.operatorGate.stableExecutionSlotRequired !== true
+          || environment.operatorGate.realTtyChallengeRequired !== true
+          || environment.operatorGate.credentialReadAfterDurableChildConsume !== true
+          || environment.operatorGate.durableGraphJournalRequired !== true
+          || environment.operatorGate.terminalGraphSealRequired !== true
+          || environment.operatorGate.shippingExecuteRouteEnabled !== false
+        : environment.operatorGate.posixOneShotMarkerRequired !== true
+          || environment.operatorGate.realTtyChallengeRequired !== true
+          || environment.operatorGate.credentialReadAfterPermit !== true
+          || environment.operatorGate.durableRunRecordRequired !== true
+          || environment.operatorGate.attemptJournalRequired !== true
+          || environment.operatorGate.atomicFinalPublishRequired !== true
+    )
   ) {
     throw new Error(`${relative}: unsafe synthetic evaluation environment`);
   }

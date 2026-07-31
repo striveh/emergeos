@@ -3,17 +3,21 @@ package io.emergeos.adapters.openai;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
+import com.openai.core.LogLevel;
 import com.openai.core.ObjectMappers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.emergeos.adapters.agentloop.AgentModel;
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.HarnessExperiment;
+import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.contracts.TaskEnvelope;
 import io.emergeos.core.application.AgentExecutionProfile;
@@ -26,6 +30,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -36,21 +41,90 @@ import org.junit.jupiter.api.Test;
 class OpenAiResponsesModelProtocolTest {
 
   @Test
+  void typedRequestReceiptCannotBindAnOpaqueSdkClient() {
+    assertThrows(
+        NoSuchMethodException.class,
+        () ->
+            OpenAiResponsesModel.class.getConstructor(
+                io.emergeos.core.application.ModelExecutionProfile.class,
+                OpenAIClient.class,
+                OpenAiResponsesModel.ProviderInvocationObserver.class));
+  }
+
+  @Test
+  void reviewedRequestHashSurvivesGlobalMapperMutationBeforeTransportWrite()
+      throws Exception {
+    List<String> requests = new ArrayList<>();
+    List<OpenAiResponsesModel.ProviderInvocation> providerInvocations =
+        new ArrayList<>();
+    boolean indentOriginallyEnabled =
+        ObjectMappers.jsonMapper().isEnabled(
+            SerializationFeature.INDENT_OUTPUT);
+    try (LoopbackResponsesServer server =
+            new LoopbackResponsesServer(requests, firstResponse());
+        ReviewedOpenAiClient client =
+            ReviewedOpenAiClient.defaultCodecNoRetry(
+                "sentinel-loopback-key",
+                server.baseUrl(),
+                Proxy.NO_PROXY,
+                Duration.ofSeconds(2),
+                LogLevel.OFF)) {
+      AgentExecutionProfile profile = profile();
+      TaskEnvelope task =
+          profile.newDraftTask(
+              "task-global-mapper-mutation",
+              "synthetic-owner",
+              "Create a synthetic public draft",
+              "capture://synthetic-003",
+              DataClass.PUBLIC);
+      OpenAiResponsesModel model =
+          new OpenAiResponsesModel(
+              profile,
+              client,
+              invocation -> {
+                providerInvocations.add(invocation);
+                ObjectMappers.jsonMapper()
+                    .enable(SerializationFeature.INDENT_OUTPUT);
+              });
+
+      model
+          .open(task)
+          .next(
+              new AgentModel.Turn(task, List.of()),
+              context(new BigDecimal("0.022000")));
+
+      assertEquals(1, providerInvocations.size());
+      assertEquals(1, requests.size());
+      assertEquals(
+          providerInvocations.getFirst().requestHash(),
+          IntegrityHashes.utf8ContentHash(requests.getFirst()));
+      assertFalse(requests.getFirst().contains("\n"));
+    } finally {
+      ObjectMappers.jsonMapper()
+          .configure(
+              SerializationFeature.INDENT_OUTPUT,
+              indentOriginallyEnabled);
+    }
+  }
+
+  @Test
   void performsTwoStatelessStrictResponsesCallsWithManualItemReplay()
       throws Exception {
     List<String> requests = new ArrayList<>();
     try (LoopbackResponsesServer server =
             new LoopbackResponsesServer(
                 requests, firstResponse(), secondResponse())) {
-      OpenAIClient client =
-          OpenAIOkHttpClient.builder()
-              .apiKey("sentinel-loopback-key")
-              .baseUrl(server.baseUrl())
-              .maxRetries(0)
-              .timeout(Duration.ofSeconds(2))
-              .build();
+      ReviewedOpenAiClient client =
+          ReviewedOpenAiClient.defaultCodecNoRetry(
+              "sentinel-loopback-key",
+              server.baseUrl(),
+              Proxy.NO_PROXY,
+              Duration.ofSeconds(2),
+              LogLevel.OFF);
       try {
         AgentExecutionProfile profile = profile();
+        List<OpenAiResponsesModel.ProviderInvocation>
+            providerInvocations = new ArrayList<>();
         TaskEnvelope task =
             profile.newDraftTask(
                 "task-synthetic-003",
@@ -58,7 +132,9 @@ class OpenAiResponsesModelProtocolTest {
                 "Create a synthetic public draft",
                 "capture://synthetic-003",
                 DataClass.PUBLIC);
-        OpenAiResponsesModel model = new OpenAiResponsesModel(profile, client);
+        OpenAiResponsesModel model =
+            new OpenAiResponsesModel(
+                profile, client, providerInvocations::add);
         AgentModel.Session session = model.open(task);
 
         assertEquals(0, requests.size());
@@ -92,6 +168,23 @@ class OpenAiResponsesModelProtocolTest {
         assertEquals(new BigDecimal("0.001200"), second.usage().costUsd());
 
         assertEquals(2, requests.size());
+        assertEquals(2, providerInvocations.size());
+        assertEquals(
+            new OpenAiResponsesModel.ProviderInvocation(
+                1,
+                IntegrityHashes.utf8ContentHash(requests.get(0)),
+                profile.modelRequested()),
+            providerInvocations.get(0));
+        assertEquals(
+            providerInvocations.get(0).requestHash(),
+            OpenAiResponsesModel.firstRequestFingerprint(
+                profile, task));
+        assertEquals(
+            new OpenAiResponsesModel.ProviderInvocation(
+                2,
+                IntegrityHashes.utf8ContentHash(requests.get(1)),
+                profile.modelRequested()),
+            providerInvocations.get(1));
         assertFirstRequest(
             ObjectMappers.jsonMapper().readTree(requests.get(0)));
         assertSecondRequest(

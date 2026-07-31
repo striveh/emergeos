@@ -140,7 +140,7 @@ class AgentWorkerResultAndHandoffMigrationTest {
         .param("contentHash", "c".repeat(64))
         .update();
 
-    Flyway upgraded = flyway(dataSource, schema, null);
+    Flyway upgraded = flyway(dataSource, schema, "6");
     upgraded.migrate();
 
     assertEquals(
@@ -205,7 +205,7 @@ class AgentWorkerResultAndHandoffMigrationTest {
     ModelBoundSnapshot before =
         modelBoundSnapshot(jdbc, terminal.principalId(), terminal.runId());
 
-    Flyway upgraded = flyway(dataSource, schema, null);
+    Flyway upgraded = flyway(dataSource, schema, "6");
     upgraded.migrate();
     ModelBoundSnapshot after =
         modelBoundSnapshot(jdbc, terminal.principalId(), terminal.runId());
@@ -269,11 +269,11 @@ class AgentWorkerResultAndHandoffMigrationTest {
 
   private static void assertMigrationFailsAndLeavesV5(
       DriverManagerDataSource dataSource, String schema) {
-    Flyway current = flyway(dataSource, schema, null);
+    Flyway current = flyway(dataSource, schema, "6");
 
     assertThrows(FlywayException.class, current::migrate);
 
-    Flyway afterFailure = flyway(dataSource, schema, null);
+    Flyway afterFailure = flyway(dataSource, schema, "6");
     assertEquals(
         MigrationVersion.fromVersion("5"),
         afterFailure.info().current().getVersion());

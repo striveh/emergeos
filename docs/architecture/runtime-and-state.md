@@ -43,6 +43,26 @@ parent-`RUNNING` gap并由新 Store instance 完成 parent；它没有 Pack008 f
 process-kill、lease、checkpoint 或自动 resume。test-only process-local graph permit
 也不是 Durable Runtime state，崩溃后不能用它判断 provider 是否已调用。
 
+Pack009以 PostgreSQL V7把一个 fixed synthetic graph attempt的 claim、Run/profile
+binding、journal与 CAS head放进同一 durable authority。它选择并证明的 crash truth是：
+
+```text
+PROVIDER_INTENT durable + loopback provider accepted exactly one request
+writer killed before provider attribution
+→ evidence = VALID
+→ graph = INCOMPLETE
+→ billing = UNKNOWN
+→ same execution slot cannot replay
+```
+
+两个 fresh verifier JVM从同一 `READ ONLY REPEATABLE READ` snapshot重算 manifest、
+selection、journal、Run与 seal truth；reader不 repair、resume或改写。完整 writer
+replay仍读取 DB password以访问该 authority，但在 provider credential/client/request
+前因 create-only claim冲突退出。`UNKNOWN`不等于免费、未调用或可 retry。
+`agent_graph_attempt_seals`当前以 `CHECK(FALSE)`禁用，只是未来 terminal transaction的
+schema skeleton；Pack009没有 checkpoint、terminal graph、reconciliation、lease或
+provider-side idempotency。
+
 ### read-only Worker 的 observation precedence
 
 Worker dispatch 返回后，Kernel 先验证 child identity 与 usage domain；不可信值直接
@@ -162,7 +182,9 @@ S3 已在不引入 Temporal 的前提下证明数据库 ActionAttempt + provider
 Pack007 同样没有引入 Temporal；`AgentWorkerRuntime` 只是一个 synchronous、
 provider-neutral port，V6 PostgreSQL 持有 child/result/relation 真相。未来 Durable
 Runtime 可以编排等待、resume 与 retry，但不能绕开 V6 same-owner、single-use、
-terminal-child 与 parent atomic commit 约束。
+terminal-child 与 parent atomic commit 约束。Pack009的 V7 one-shot slot、durable
+provider intent与 `UNKNOWN`同样是未来 Runtime必须服从的 truth；Temporal不能删除
+claim、把 `UNKNOWN`改成 `NOT_INVOKED`或自动重放 provider request。
 
 ## 交接契约
 

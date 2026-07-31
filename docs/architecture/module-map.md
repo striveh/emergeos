@@ -29,13 +29,18 @@ adapters/postgres
   Capture、Artifact lineage、local Action 与 AgentRun 的 JdbcClient 适配器
   以及前向 Flyway migrations；V5 冻结 model execution binding，V6 增加
   parent/child Run lineage、immutable agent_worker_results 与 deferred graph guards；
+  V7 增加 PostgreSQL-canonical graph attempt manifest/slot claim、exact Run/profile
+  bindings、append-only journal、CAS head与 disabled terminal-seal skeleton；
   verified read 同时核验 JSON、typed columns、hash chain 与跨 Run relation；
-  exact profile registry 可同时验证 Pack007/Pack008，拒绝 registration-order fallback
+  exact profile registry 可同时验证 Pack007/Pack008/Pack009，拒绝
+  registration-order fallback
 
 adapters/openai
   OpenAI Java SDK 4.43.0 的 Responses protocol adapter；实现 strict tool、
   manual item replay、strict structured final、per-call reservation、usage/cost
-  归因与 typed failure。只接受外部装配好的 client 与 provider-neutral
+  归因与 typed failure；Pack009的 ReviewedOpenAiClient以 private per-client codec
+  同时生成 exact transport bytes与 request hash。adapter只接受外部装配好的 client 与
+  provider-neutral
   ModelExecutionProfile，不读取环境变量或凭据；
   当前已由 isolated Eval Runner 装配，但未接普通 API，也没有 live-provider receipt
 
@@ -57,6 +62,16 @@ apps/offline-harness-runner
   verification；依赖 allowlist 与 production bytecode gate 阻止 model、network、
   process、Connector、DB 和产品 Agent Runtime/Store 路径
 
+apps/graph-eval-runner
+  Pack009独立 PostgreSQL durable graph verification入口；只依赖 contracts、core、
+  agent-loop、openai与postgres。shipping CLI只开放 zero-effect preflight/help，
+  `--verify`明确 disabled且不开放 execute；process IT才组合 synthetic console、
+  independent loopback provider、writer kill、fresh verifier与两种 replay。
+  direct-dependency default-deny、constant-pool Gate、multi-release logical-entry
+  normalization、对全部 App编译输出生效的 class exact allowlist与全量 test-class
+  exclusion共同阻止 API/旧 App/inmemory/Web/Temporal/test harness进入 shipping
+  artifact
+
 apps/api
   HTTP DTO、Controller、异常映射、loopback 启动保护、Agent draft 入口、
   owner-scoped Run/Trace/Bundle 查询、Fake Conductor + 一个 Fake read-only Worker、
@@ -74,6 +89,7 @@ flowchart RL
   OAI["adapters/openai"]
   EVAL["apps/eval-runner"]
   OEVAL["apps/offline-harness-runner"]
+  GEVAL["apps/graph-eval-runner"]
   CORE["modules/core"]
   CT["modules/contracts"]
 
@@ -90,6 +106,11 @@ flowchart RL
   EVAL --> CT
   OEVAL --> CORE
   OEVAL --> CT
+  GEVAL --> OAI
+  GEVAL --> LOOP
+  GEVAL --> PG
+  GEVAL --> CORE
+  GEVAL --> CT
   LOOP --> CORE
   MEM --> CORE
   PG --> CORE
@@ -125,6 +146,13 @@ flowchart RL
   与最小 domain types；independent verifier 的 outer/nested classes 不得引用 Runner 或
   generator。以上扫描是 fail-closed architecture evidence，不是 OS sandbox、历史执行
   attestation 或 packet capture。
+- `graph-eval-runner` 只承载 Pack009 synthetic verification，不是产品 route或长期
+  Worker。PostgreSQL是 one-shot claim与 graph journal的唯一 truth，不再叠加 POSIX
+  marker；provider accepted + attribution缺失保持 `UNKNOWN`并禁止 replay。
+  shipping CLI没有 DB-backed verify/execute；test-only composition不能被类路径旁路，
+  所以 App `target/classes`中的每个 production class resource不论 package都必须逐项
+  进入 exact allowlist。V7 seal table当前以 `CHECK(FALSE)`禁用，不能把 schema
+  skeleton描述成 terminal graph capability。
 - Maven Enforcer 在 `core`、`contracts` 与 `agent-loop` 构建中阻止依赖越界。
 - Adapter 只能实现 Core Port，不能让 SDK 类型进入 Core。
 - API 负责传输协议，不能包含领域状态转移。

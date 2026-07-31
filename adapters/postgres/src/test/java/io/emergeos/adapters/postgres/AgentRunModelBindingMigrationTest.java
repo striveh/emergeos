@@ -71,7 +71,11 @@ class AgentRunModelBindingMigrationTest {
     insertTerminal(jdbc, fixture.terminal(), legacyTaskJson, legacyBundleJson);
 
     LegacyStoredSnapshot before = legacySnapshot(jdbc, fixture.terminal().runId());
-    Flyway current = Flyway.configure().dataSource(dataSource).load();
+    Flyway current =
+        Flyway.configure()
+            .dataSource(dataSource)
+            .target(MigrationVersion.fromVersion("6"))
+            .load();
     current.migrate();
     StoredSnapshot after = snapshot(jdbc, fixture.terminal().runId());
 

@@ -51,11 +51,13 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [Observed latency 与 post-dispatch deadline ADR](./architecture/decisions/0007-observed-latency-and-post-dispatch-tool-deadline.md)
 - [Typed read-only Worker handoff ADR](./architecture/decisions/0008-typed-read-only-worker-handoff.md)
 - [Child-only model Worker Eval boundary ADR](./architecture/decisions/0009-child-only-model-worker-eval-boundary.md)
+- [PostgreSQL canonical graph attempt ADR](./architecture/decisions/0010-postgresql-canonical-graph-attempt.md)
 - [RFC-0001：持久 AgentRun、Safe Trace 与 HarnessRunBundle](./rfcs/0001-persistent-agent-run-trace-and-bundle.md)
 - [RFC-0002：真实模型 synthetic egress 与计量边界](./rfcs/0002-real-model-synthetic-egress-and-metering.md)
 - [RFC-0003：read-only Tool post-dispatch deadline truth](./rfcs/0003-post-dispatch-read-only-tool-deadline-truth.md)
 - [RFC-0004：typed read-only Worker handoff 与 durable Worker Result](./rfcs/0004-typed-read-only-worker-handoff.md)
 - [RFC-0005：child-only model-bound read-only Worker Eval baseline](./rfcs/0005-model-bound-read-only-worker-eval-baseline.md)
+- [RFC-0006：PostgreSQL canonical one-shot graph attempt](./rfcs/0006-postgresql-canonical-one-shot-graph-attempt.md)
 - [Eval Task Packs、Offline baseline 与 bounded provider runner](../evals/README.md)
 
 ### 想参与研究与共同进化
@@ -91,6 +93,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [Stage 2 S4 Post-dispatch Deadline Build Note](./operations/build-notes/2026-07-31-s2-s4-post-dispatch-deadline.md)
 - [Stage 2 S4 Typed Read-only Worker Handoff Build Note](./operations/build-notes/2026-07-31-s2-s4-typed-read-only-worker-handoff.md)
 - [Stage 2 S4 Model-bound Read-only Worker Baseline Build Note](./operations/build-notes/2026-07-31-s2-s4-model-bound-read-only-worker-baseline.md)
+- [Stage 2 S4 Pack009 Durable Graph Crash Build Note](./operations/build-notes/2026-07-31-s2-s4-pack009-durable-graph-crash.md)
 - [Stage 1 Operating Runbook](./operations/stage1-operating-runbook.md)
 - [S4 Durable Operations Case Card](./interview/case-cards/2026-07-29-stage1-durable-operations.md)
 - [商业验证路线](./business/validation-roadmap.md)

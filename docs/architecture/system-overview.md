@@ -98,9 +98,15 @@ flowchart TB
   non-model-bound Fake Conductor。shipping CLI 只新增
   `--worker-preflight`；graph permit 与 OpenAI graph execution 仅存在于 test/loopback，
   没有 Pack008 live execute route、durable attempt journal 或 product API wiring；
+- Pack009 新增 isolated `apps/graph-eval-runner`与 PostgreSQL V7 canonical graph
+  attempt：fixed execution slot、manifest、exact Run/profile binding、hash-chain
+  journal与 CAS head共享一个 durable authority。independent loopback provider
+  durable接收一次 request后，writer JVM被真实强杀；两个 fresh verifier返回相同
+  `VALID / INCOMPLETE / billing UNKNOWN`，两种 replay都不能产生第二次 request；
+  shipping verify/execute仍禁用，terminal-seal table也只是 disabled skeleton；
 - PostgreSQL 已持有 Capture、Artifact lineage、local ActionAttempt/Receipt 与
   AgentRun/Trace/WorkerResult、parent/child Handoff truth；exact profile registry
-  可同时解释 Pack007/Pack008，且不使用 registration order；
+  可同时解释 Pack007/Pack008/Pack009，且不使用 registration order；
 - Stage 1 S3 Action 仅通过 loopback HTTP 调用独立、文件持久化的 Fake Provider；
 - OpenAI real-model protocol adapter 与受控 Eval Runner 实现已形成，但只有当前最终验证
   全部通过后才能宣称 runner engineering complete；live-provider smoke 尚未执行，
@@ -143,6 +149,25 @@ same-JVM fresh Store 不是 fresh JVM/process-kill；process-local permit 也不
 crash recovery、billing truth 或 provider-side one-shot。任何 Pack008 live execution
 都必须先增加 graph-level operator gate、durable marker/journal/terminal record 与
 selected-boundary restart evidence，再取得 owner 对一次 bounded smoke 的独立授权。
+
+Pack009只关闭上述最危险 crash window中的 durable interpretation与 replay boundary：
+
+```text
+preprovisioned PUBLIC synthetic Capture
+→ synthetic operator gate + create-only execution-slot claim
+→ exact parent/child RUNNING + provider intent
+→ independent loopback provider accepts request
+→ writer process kill before attribution
+→ fresh verified read = VALID / INCOMPLETE / UNKNOWN
+→ same attempt replay rejected, provider count remains 1
+```
+
+这不是 provider request与数据库的原子 transaction，也不证明 external provider、
+real key/model result、token/cost receipt、terminal success或真实 owner批准。完整
+writer replay需要先读取连接 durable authority的 DB password，但在 provider
+credential/client/request前被 claim拒绝。V7 terminal-seal table使用 `CHECK(FALSE)`，
+当前没有 terminal seal capability；未来 product execute route还必须进一步收口
+library-level authority、真实 TTY、credential broker与 per-user egress consent。
 
 `apps/eval-runner` 属于 Verification/Eval 边界，不属于普通 Product API 或 Durable
 Action Plane。它使用单次内存 Store 执行冻结案例；本地 JSON record 只保存该 synthetic

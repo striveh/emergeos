@@ -111,6 +111,21 @@ live execute route、durable graph marker/journal、fresh-JVM/process-kill 或�
 wiring，不能把这项 baseline 描述成真实模型已经运行。设计与证据边界见
 [RFC-0005](./docs/rfcs/0005-model-bound-read-only-worker-eval-baseline.md) 与
 [Pack008 Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-model-bound-read-only-worker-baseline.md)。
+Pack009 新增独立 `apps/graph-eval-runner` 与 PostgreSQL V7 canonical graph attempt：
+fixed PUBLIC synthetic graph 的 manifest、exact parent/child Run/profile binding、
+append-only hash-chain journal、CAS head与 one-shot execution slot都以 PostgreSQL为
+唯一 truth。独立 loopback provider durable 接收一次 request后，父测试真实强杀
+writer；两个 fresh verifier exact-equal返回
+`VALID / INCOMPLETE / billing UNKNOWN`，least-authority replay与完整 writer replay
+都不能产生第二次 request。shipping App仍只有 zero-effect preflight/help；
+`--verify` 是明确 disabled的保留参数，`--execute` 不存在。本证据使用 synthetic
+console/key/provider，不是 real TTY、external provider、真实模型结果或账单；V7
+terminal-seal table当前也是 disabled skeleton，不能描述成 terminal graph capability。
+shipping class Gate对全部 App编译输出使用 package-independent exact allowlist，
+并覆盖 multi-release JAR与全部 test-class resources。设计与回执见
+[RFC-0006](./docs/rfcs/0006-postgresql-canonical-one-shot-graph-attempt.md)、
+[ADR-0010](./docs/architecture/decisions/0010-postgresql-canonical-graph-attempt.md) 与
+[Pack009 Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-pack009-durable-graph-crash.md)。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
@@ -151,7 +166,10 @@ V1/V2/V3 → V4 升级与恢复演练保持旧 truth；V4 同时为 Capture iden
 Task 1.1 的 routing/pricing identity 必须与 Task JSON 双向一致，而历史 Task 1.0 JSON
 与 Bundle hash 不被改写。Pack 007 的 additive V6 新增 `agent_worker_results`，并在
 AgentRun/Trace/binding truth 上冻结 exact-one-child、same-owner、terminal、hash-chain
-与 single-consume 约束；V1–V5 历史 JSON 与 hash 不被改写。当前 schema version 是 V6。
+与 single-consume 约束；V1–V5 历史 JSON 与 hash 不被改写。
+Pack009 的 additive V7再增加五张 graph attempt truth tables，并为
+`agent_runs` 增加 all-or-none graph selector；V1–V6 historical rows保持 selector
+全 NULL，不猜测或回填。当前 schema version 是 V7。
 
 当前普通 API 仍只装配 deterministic Fake；Pack 007 Agent 路径是：
 
@@ -183,6 +201,11 @@ java -jar apps/eval-runner/target/emerge-eval-runner-0.1.0-SNAPSHOT.jar
 # Pack008 child-only model Worker 也只做 zero-egress preflight；没有 execute route
 java -jar apps/eval-runner/target/emerge-eval-runner-0.1.0-SNAPSHOT.jar \
   --worker-preflight
+
+# Pack009 durable graph App 只做 zero-effect preflight；verify/execute均未开放
+java -jar \
+  apps/graph-eval-runner/target/emerge-graph-eval-runner-0.1.0-SNAPSHOT-app.jar \
+  --preflight
 
 # 在临时 owner home 执行 fixed Pack 004 并由 fresh invocation 只读重放
 comparison_home=$(mktemp -d /tmp/emerge-comparison.XXXXXX)
@@ -329,6 +352,7 @@ Manifestation 仍只写入应用进程内存中的草稿回执。独立 local Ac
 ```text
 apps/api/                 HTTP 入口与依赖装配
 apps/eval-runner/         隔离 synthetic model Eval；Pack003 default/execute 与 Pack008 preflight 分离
+apps/graph-eval-runner/   Pack009 PostgreSQL graph preflight；shipping verify/execute禁用
 apps/offline-harness-runner/ 固定 Pack 004 comparison、canonical durable report、packaged CLI 与独立 replay verifier
 modules/contracts/        跨 Agent、工具、人类边界的稳定契约
 modules/core/             纯 Java 领域、用例、AgentKernel 与端口
@@ -336,7 +360,7 @@ adapters/inmemory/        Fake Conductor/Worker、有限 Agent loop 与 Offline 
 adapters/postgres/        Capture、Artifact、Action、AgentRun/Trace/WorkerResult 的 PostgreSQL 适配器
 adapters/openai/          隔离 Responses adapter；已接 Eval Runner、未接产品 API，当前无 live receipt
 contracts/                跨语言 JSON Schema
-evals/                    Pack 001–008 合成任务、Harness 对照与故障回归证据
+evals/                    Pack 001–009 合成任务、Harness 对照与故障回归证据
 docs/                     产品、架构、研究、运营和共同治理
 ```
 
@@ -345,6 +369,7 @@ docs/                     产品、架构、研究、运营和共同治理
 ```text
 api → fake/postgres adapters → core → contracts
 eval-runner → openai/agent-loop adapters → core → contracts
+graph-eval-runner → postgres/openai/agent-loop adapters → core → contracts
 offline-harness-runner → core → contracts
 ```
 

@@ -11,9 +11,13 @@ replay 与 packaged success/crash-gap evidence 已 Green。Pack008 已完成
 child-only model profile、zero-egress Worker preflight、process-local exact attempt
 permit、loopback graph、PostgreSQL multi-profile/fresh-store baseline 与 full Maven
 verification command set；exact metering P1 已转成回归，两路 post-fix 独立复审
-均确认 `P0=0、P1=0`，Engineering Gate 已关闭，正在完成独立 commit。尚无 Pack008 live
-execute、fresh-JVM/process-kill 或 product API wiring。完整 fault suite、
-stochastic Harness、真实 Seed 与用户价值 Gate 尚未完成
+均确认 `P0=0、P1=0`，Engineering Gate 已关闭并独立提交。Pack009 又完成
+PostgreSQL V7 canonical graph attempt、provider-accepted writer强杀、两个 fresh
+verifier、least-authority + 完整 writer replay与 executable architecture Gate；
+同一 loopback provider最终 request count为 `1`，billing truth保持 `UNKNOWN`。
+Pack009 shipping execute/DB verify仍禁用，也没有 real TTY/key/provider result。
+完整 terminal graph、live smoke、stochastic Harness、真实 Seed 与用户价值 Gate
+尚未完成。
 
 Owner：项目所有者 + main Codex agent
 
@@ -1293,4 +1297,110 @@ Pack008 progress：
 - [x] 两路 post-fix 独立审查关闭到 `P0=0、P1=0`；其中一路 `P2=0`，另一路
   两个不阻断 P2 已在 Build Note 记录处置；
 - [x] RFC-0005、ADR-0009 与中文 Build Note 已完成最终状态收口；
-- [ ] 独立 commit 与 exact receipt。
+- [x] 独立 commit `19d781a55881d34885c22db580923f0ad5c254c0` 与 exact receipt。
+
+### S4 F5 · Pack009 durable graph attempt / provider-accepted crash · 2026-07-31
+
+- Change class：`R`。本切片新增 composition root、PostgreSQL migration、operator
+  authority、one-shot attempt与 provider crash semantics；继续使用本 living ExecPlan，
+  不复制 Task Brief。
+- 系统结果：一个 fixed PUBLIC synthetic model-child graph 在 loopback provider 已
+  durable 接收 exactly one request、writer却在 attribution commit前被强杀时，两个
+  fresh verifier JVM都返回同一份
+  `VALID / INCOMPLETE / billing UNKNOWN`；same-attempt restart在 provider
+  credential/client/request前拒绝（完整 writer replay仍先读取 DB password），
+  provider request count保持 1。
+- 主要风险：把 `PROVIDER_INTENT` 误写成“provider未执行”或“可以重试”，会造成重复
+  请求与费用；文件 marker + PostgreSQL会形成双 authority；test-only crash bypass
+  若进入 shipping JAR，会绕过真实 owner approval；若只用 manifest hash作为 one-shot
+  key，rolling binary可因 profile/codec drift生成第二个 ID并再次执行同一费用槽位。
+- 本次原理：provider effect与数据库不可能原子提交。正确做法不是伪造 exactly-once，
+  而是 durable intent、create-only claim、UNKNOWN truth、no automatic replay和后续
+  reconciliation boundary。
+- Architecture decision：
+  [RFC-0006](../rfcs/0006-postgresql-canonical-one-shot-graph-attempt.md)
+  与
+  [ADR-0010](../architecture/decisions/0010-postgresql-canonical-graph-attempt.md)
+  提议新建 `apps/graph-eval-runner`；Core持有 graph attempt语义，PostgreSQL V7持有
+  manifest/binding/journal/seal truth，新 App只做 strict assets、operator gate、
+  composition、execution与 read-only verification。
+- Rejected placement：不放宽现有 `apps/eval-runner` 的 PostgreSQL禁令，不把 OpenAI
+  接入普通 API，不用 POSIX marker与数据库争夺 attempt authority。
+- First runnable Acceptance Red：先让新 module/Main/strict Pack009 preflight/test
+  harness可 package/run；process IT启动 PostgreSQL、独立 loopback provider与 execute
+  JVM后，基线应以 `V7_GRAPH_SCHEMA_MISSING`退出，测试因等不到 committed
+  provider-intent phase而失败。失败必须在 runtime，不是 compile、asset parsing、
+  Docker或 provider环境错误。
+- Green target：V7 create-only manifest、exact Run/profile bindings、append-only
+  hash-chain state machine、CAS head、graph-bound AgentRun selector与 stable
+  checked-in execution slot unique claim；
+  provider accepted + DB intent后强杀；两个不同 PID fresh
+  verifier exact-equal且 read-only；replay拒绝；shipping JAR不含 test harness/JUnit/
+  Testcontainers，shipping CLI仍不开放 execute。
+- Nonclaims：不声明 live-provider call、real key/model result/token/cost/invoice；
+  不声明 terminal graph success、product API、checkpoint/resume、reconciliation、
+  provider-side idempotency、cross-database replay protection、power-loss/NFS、
+  Temporal、parallel/write-capable Worker或用户价值。
+
+Pack009 progress：
+
+- [x] 三路 read-only placement/process/least-authority 调研与两轮 post-fix审查完成；
+  main thread是唯一 writer；
+- [x] RFC-0006、ADR-0010与本 slice delta已按最终 evidence收口为 Accepted；
+- [x] strict Pack009 asset/preflight与 non-empty module skeleton Green：
+  `GraphEvalCliTest` + `Pack009GraphPreflightTest` 共 8 tests Green；
+  `GraphEvalArchitectureTest` 5 tests Green；
+  contracts Green（6 schemas / 54 fixtures / 9 Packs / 3 environments）；
+- [x] runtime Acceptance Red真实到达 `V7_GRAPH_SCHEMA_MISSING`：exact command
+  `./mvnw --batch-mode --no-transfer-progress -pl apps/graph-eval-runner -am
+  -Dtest=__NoUnitTests__ -Dsurefire.failIfNoSpecifiedTests=false
+  -Dit.test=Pack009DurableGraphCrashProcessIT
+  -Dfailsafe.failIfNoSpecifiedTests=true verify` 成功 package shipping JAR并启动
+  PostgreSQL 18.4 + writer JVM；preflight与 V1–V6 migration均完成，writer以
+  exit 4 / `GRAPH_HARNESS_REJECTED reason=V7_GRAPH_SCHEMA_MISSING`退出，
+  process IT只因等不到 durable provider-intent phase而 Red；同一 IT中的
+  shipping-JAR isolation/CLI rejection test已 Green；
+- [x] V7 migration、Core domain/port与 PostgreSQL store focused Green：
+  PostgreSQL graph Store 17 tests覆盖 create-only、hash chain、CAS、两个独立
+  Store/DataSource concurrent one-winner、tamper与 read-only snapshot；
+  V1/V2/V3 populated升级和 fresh install均到 V7，历史 business truth不改写；
+- [x] provider-accepted process-kill、双 fresh JVM read-only与两类 replay Green：
+  final targeted receipt为
+  `providerPid=92914 writerPid=92915 verifierPids=92929,92930
+  replayPids=92942,92944 providerCount=1 billing=UNKNOWN
+  headHash=f0dad4...0e501 dbSnapshotSha256=b6de22...8bf85`；
+  minimal replay没有 provider endpoint/key，完整 writer replay只收到 DB password，
+  均在第二次 provider request前拒绝；
+- [x] `ReviewedOpenAiClient` 使用 private codec template/per-client copy；global mapper
+  在 receipt后 mutation的 runnable regression已 Green，typed hash仍与 raw HTTP body
+  exact-equal；
+- [x] direct dependency default-deny、production constant-pool Gate、actual shaded
+  JAR closure、multi-release logical-entry normalization与 app-owned class-resource
+  exact allowlist Green；真实 crash harness bytecode与 synthetic MR-JAR negative
+  fixtures先 Red 后 Green；另以误放到 `io.emergeos.core` 的 synthetic Main证明
+  `target/classes` 中每个 app-owned class不论 package都必须命中 exact allowlist；
+  process IT还会 walk全部 `target/test-classes/**/*.class`（包括
+  nested/anonymous），逐项拒绝进入 shipping JAR；shipping `--verify` 明确 disabled
+  且 stderr receipt无 logging噪声；
+- [x] full Gate Green：11 reactor modules、106 XML reports、616 tests，
+  0 failure/error/skipped；contracts为 6 schemas / 54 fixtures / 9 Packs /
+  3 environments；`git diff --check` Green；
+- [x] recovery/process与 least-authority两类独立 review均关闭到
+  `P0=0、P1=0`；中文
+  [Build Note](../operations/build-notes/2026-07-31-s2-s4-pack009-durable-graph-crash.md)
+  已完成；
+- [ ] 独立 commit（精确 staging，继续排除 `.workbuddy/`）。
+
+Pack009 evidence boundary：
+
+- synthetic console不是 real TTY或 owner真实批准；
+- `billing=UNKNOWN`与 observed cost/token `0`不表示免费、未调用或可 retry；
+- process provider是 independent loopback synthetic provider，不是 external/live
+  provider，不含 real key/model result/token/cost/invoice；
+- terminal seal仍为 false，graph outcome为 INCOMPLETE；
+- concurrent one-winner实测为同 JVM内两个独立 Store/DataSource transaction；
+  fresh进程实测为 sequential replay，没有 simultaneous cross-process/cross-host
+  contention；
+- opaque typestate目前是 composition-level约束，尚不是 library-level不可伪造
+  authority；任何 product execute route开放前必须进一步收口 public Store mutation
+  与 console capability。

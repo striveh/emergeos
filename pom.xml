@@ -21,6 +21,7 @@
     <module>adapters/postgres</module>
     <module>apps/api</module>
     <module>apps/eval-runner</module>
+    <module>apps/graph-eval-runner</module>
     <module>apps/offline-harness-runner</module>
   </modules>
 

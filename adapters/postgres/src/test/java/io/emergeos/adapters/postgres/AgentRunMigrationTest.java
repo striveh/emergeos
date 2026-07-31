@@ -33,9 +33,9 @@ class AgentRunMigrationTest {
   }
 
   @Test
-  void freshInstallCreatesTheV6WorkerBoundAgentRunAggregate() {
+  void freshInstallCreatesTheCurrentGraphBoundAgentRunAggregate() {
     assertEquals(
-        "6",
+        "7",
         jdbc.sql(
                 """
                 SELECT version
@@ -48,6 +48,11 @@ class AgentRunMigrationTest {
             .single());
     assertEquals(
         List.of(
+            "agent_graph_attempt_events",
+            "agent_graph_attempt_heads",
+            "agent_graph_attempt_run_bindings",
+            "agent_graph_attempt_seals",
+            "agent_graph_attempts",
             "agent_run_resource_bindings",
             "agent_runs",
             "agent_trace_events",
