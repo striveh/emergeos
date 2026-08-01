@@ -32,6 +32,7 @@ import io.emergeos.core.port.ReadOnlyWorkerRunStore;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -176,7 +177,7 @@ public final class DurableReadOnlyWorkerService
       ExecutionWindow window) {
     profile.requireChildBinding(parent.task(), childTask);
     taskAuthorizer.authorize(childTask);
-    Instant startedAt = clock.instant();
+    Instant startedAt = canonicalTime(clock.instant());
     AgentRun planned =
         AgentRun.running(
             childRunId, childTask.principalRef(), childTask, startedAt);
@@ -312,7 +313,7 @@ public final class DurableReadOnlyWorkerService
             trace,
             bundle,
             startedAt,
-            clock.instant());
+            canonicalTime(clock.instant()));
     ReadOnlyWorkerHandoffVerifier.verifyChild(
         parent.task(), terminal, workerResult, profile);
     RuntimeException completionFailure = null;
@@ -470,6 +471,10 @@ public final class DurableReadOnlyWorkerService
     }
     return AgentTraceEnvelope.create(
         TRACE_SCHEMA_VERSION, runId, taskId, entries);
+  }
+
+  private static Instant canonicalTime(Instant instant) {
+    return Objects.requireNonNull(instant, "instant").truncatedTo(ChronoUnit.MICROS);
   }
 
   private final class Prepared implements PreparedHandoff {

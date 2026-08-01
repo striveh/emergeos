@@ -33,6 +33,7 @@ import io.emergeos.core.port.IdGenerator;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -215,7 +216,7 @@ public final class AgentDraftService {
     TaskEnvelope task = task(command, captureRef, ownedCapture);
     executionProfile.requireTaskBinding(task);
     taskAuthorizer.authorize(task);
-    Instant startedAt = clock.instant();
+    Instant startedAt = canonicalTime(clock.instant());
     AgentRun planned =
         AgentRun.running(runId, command.principalId(), task, startedAt);
     AgentRun canonical = runs.start(planned);
@@ -301,7 +302,7 @@ public final class AgentDraftService {
     }
 
     String artifactId = ids.next("art");
-    Instant completedAt = clock.instant();
+    Instant completedAt = canonicalTime(clock.instant());
     var initial =
         new ArtifactLineageEntry(
             1,
@@ -427,7 +428,7 @@ public final class AgentDraftService {
             kernelRun.costUsd(),
             kernelRun.tokenCount(),
             kernelRun.latencyMs());
-    Instant completedAt = clock.instant();
+    Instant completedAt = canonicalTime(clock.instant());
     AgentRun terminal =
         new AgentRun(
             runId,
@@ -462,6 +463,10 @@ public final class AgentDraftService {
     }
     return AgentTraceEnvelope.create(
         TRACE_SCHEMA_VERSION, runId, taskId, entries);
+  }
+
+  private static Instant canonicalTime(Instant instant) {
+    return Objects.requireNonNull(instant, "instant").truncatedTo(ChronoUnit.MICROS);
   }
 
   private TaskEnvelope task(

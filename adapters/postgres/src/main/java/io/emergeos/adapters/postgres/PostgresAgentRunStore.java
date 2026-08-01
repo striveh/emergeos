@@ -25,6 +25,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -197,6 +199,7 @@ public final class PostgresAgentRunStore
   @Override
   public AgentRun start(AgentRun running) {
     Objects.requireNonNull(running, "running");
+    requirePersistentTimestamps(running);
     if (running.lifecycle() != AgentRunLifecycle.RUNNING) {
       throw new IllegalArgumentException("start requires a RUNNING AgentRun");
     }
@@ -259,6 +262,7 @@ public final class PostgresAgentRunStore
   public AgentRun startWorker(AgentRunContext parent, AgentRun running) {
     Objects.requireNonNull(parent, "parent");
     Objects.requireNonNull(running, "running");
+    requirePersistentTimestamps(running);
     if (running.lifecycle() != AgentRunLifecycle.RUNNING) {
       throw new IllegalArgumentException(
           "startWorker requires a RUNNING child AgentRun");
@@ -341,6 +345,7 @@ public final class PostgresAgentRunStore
   @Override
   public CompletionResult complete(AgentRun terminal, ArtifactLineage proposedArtifact) {
     Objects.requireNonNull(terminal, "terminal");
+    requirePersistentTimestamps(terminal);
     if (!terminal.lifecycle().terminal()) {
       throw new IllegalArgumentException("complete requires a terminal AgentRun");
     }
@@ -357,6 +362,7 @@ public final class PostgresAgentRunStore
       WorkerResultEnvelope workerResult) {
     Objects.requireNonNull(parent, "parent");
     Objects.requireNonNull(terminal, "terminal");
+    requirePersistentTimestamps(terminal);
     if (!terminal.lifecycle().terminal()) {
       throw new IllegalArgumentException(
           "completeWorker requires a terminal child AgentRun");
@@ -622,6 +628,21 @@ public final class PostgresAgentRunStore
             .update();
     if (updated != 1) {
       throw new AgentRunConflictException();
+    }
+  }
+
+  private static void requirePersistentTimestamps(AgentRun run) {
+    requireDatabaseInstant(run.startedAt(), "AgentRun.startedAt");
+    if (run.completedAt() != null) {
+      requireDatabaseInstant(run.completedAt(), "AgentRun.completedAt");
+    }
+  }
+
+  private static void requireDatabaseInstant(Instant instant, String name) {
+    Objects.requireNonNull(instant, name);
+    if (!instant.equals(instant.truncatedTo(ChronoUnit.MICROS))) {
+      throw new IllegalArgumentException(
+          name + " exceeds PostgreSQL microsecond precision");
     }
   }
 

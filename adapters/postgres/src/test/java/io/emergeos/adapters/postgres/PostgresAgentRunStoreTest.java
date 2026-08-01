@@ -117,6 +117,64 @@ class PostgresAgentRunStoreTest {
   }
 
   @Test
+  void rejectsSubMicrosecondRunTimestampsBeforeAnyPersistenceMutation() {
+    Fixture fixture = fixture("run-sub-microsecond");
+    PostgresAgentRunStore store = store();
+    Instant subMicrosecondStartedAt = STARTED.plusNanos(789);
+    AgentRun overpreciseRunning =
+        AgentRun.running(
+            fixture.running().runId(),
+            PRINCIPAL,
+            fixture.running().task(),
+            subMicrosecondStartedAt);
+
+    IllegalArgumentException startFailure =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> store.start(overpreciseRunning));
+
+    assertEquals(
+        "AgentRun.startedAt exceeds PostgreSQL microsecond precision",
+        startFailure.getMessage());
+    assertEquals(
+        0L,
+        jdbc.sql("SELECT count(*) FROM agent_runs").query(Long.class).single());
+
+    store.start(fixture.running());
+    AgentRun overpreciseTerminal =
+        new AgentRun(
+            fixture.terminal().runId(),
+            fixture.terminal().principalId(),
+            fixture.terminal().task(),
+            fixture.terminal().lifecycle(),
+            fixture.terminal().result(),
+            fixture.terminal().trace(),
+            fixture.terminal().bundle(),
+            fixture.terminal().startedAt(),
+            COMPLETED.plusNanos(789));
+
+    IllegalArgumentException completionFailure =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> store.complete(overpreciseTerminal, fixture.artifact()));
+
+    assertEquals(
+        "AgentRun.completedAt exceeds PostgreSQL microsecond precision",
+        completionFailure.getMessage());
+    assertEquals(
+        fixture.running(),
+        store.findOwned(PRINCIPAL, fixture.running().runId()).orElseThrow());
+    assertEquals(
+        0L,
+        jdbc.sql("SELECT count(*) FROM artifacts").query(Long.class).single());
+    assertEquals(
+        0L,
+        jdbc.sql("SELECT count(*) FROM agent_trace_events")
+            .query(Long.class)
+            .single());
+  }
+
+  @Test
   void legacyV10StoresNullModelBindingColumns() {
     Fixture fixture = fixture("run-v10-null-model-binding");
 
