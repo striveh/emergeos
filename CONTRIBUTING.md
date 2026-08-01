@@ -102,3 +102,7 @@ git commit -s
 如果已有 commit 缺少 sign-off，请在确认自己有权作出 DCO 声明后补签；rebase、squash
 或修改 commit 后，应重新确认 sign-off 仍与最终内容和作者身份一致。DCO 会长期保留你
 主动提交的姓名、邮箱与 sign-off 记录，请使用你愿意公开的身份。
+
+DCO 自 2026-08-01 起适用于新贡献。首次公开时保留的 pre-adoption Git history 不追溯
+改写或补签。当前 Pull Request 模板提供人工确认项，仓库尚未声明已安装自动 DCO bot；
+Maintainer 在合并前负责核验新贡献 commit。

@@ -4,7 +4,7 @@
 - Status：Engineering Green
 - Task：Stage 2 S4/F5 · Pack009
 - Date：2026-07-31
-- Commit：待本增量独立提交，以 Git history 为准
+- Commit：`6d914d8`（`feat: add durable graph crash boundary`）
 - RFC：
   [RFC-0006](../../rfcs/0006-postgresql-canonical-one-shot-graph-attempt.md)
 - ADR：

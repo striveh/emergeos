@@ -95,6 +95,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [Stage 2 S4 Typed Read-only Worker Handoff Build Note](./operations/build-notes/2026-07-31-s2-s4-typed-read-only-worker-handoff.md)
 - [Stage 2 S4 Model-bound Read-only Worker Baseline Build Note](./operations/build-notes/2026-07-31-s2-s4-model-bound-read-only-worker-baseline.md)
 - [Stage 2 S4 Pack009 Durable Graph Crash Build Note](./operations/build-notes/2026-07-31-s2-s4-pack009-durable-graph-crash.md)
+- [GitHub 公开发布 Build Note](./operations/build-notes/2026-08-01-github-public-release.md)
 - [Stage 1 Operating Runbook](./operations/stage1-operating-runbook.md)
 - [S4 Durable Operations Case Card](./interview/case-cards/2026-07-29-stage1-durable-operations.md)
 - [商业验证路线](./business/validation-roadmap.md)

@@ -1,5 +1,7 @@
 # EmergeOS
 
+[![CI](https://github.com/striveh/emergeos/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/striveh/emergeos/actions/workflows/ci.yml)
+
 [中文 README](./README.md) · English
 
 > A user-owned Personal AI OS for turning what you see, think, and intend into

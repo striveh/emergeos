@@ -18,7 +18,8 @@ EmergeOS 已形成可以外部理解、运行和验证的 Pack009 工程基线�
    [Apache License 2.0](../../../LICENSE)。代码、公共 contracts、SDK、测试、合成
    fixture 与项目文档均在同一许可下发布。
 2. 外部贡献采用 [Developer Certificate of Origin 1.1](../../../DCO)，不在首发阶段
-   引入 CLA。每个贡献 commit 必须包含与提交者身份一致的 **Signed-off-by**。
+   引入 CLA。每个 2026-08-01 及之后的新贡献 commit 必须包含与提交者身份一致的
+   **Signed-off-by**；保留的 pre-adoption history 不追溯改写或补签。
 3. 首任 Maintainer 与 Security Response owner 为
    [@striveh](https://github.com/striveh)。漏洞与敏感事件通过 GitHub Private
    Vulnerability Reporting 私密提交。
@@ -44,7 +45,7 @@ EmergeOS 已形成可以外部理解、运行和验证的 Pack009 工程基线�
 ## Consequences
 
 - 外部参与者获得明确、统一的使用与分发权；
-- 贡献者必须对每个 commit 做 DCO sign-off，提交身份会长期存在于公开历史；
+- 贡献者必须对每个新贡献 commit 做 DCO sign-off，提交身份会长期存在于公开历史；
 - 未来若改为 copyleft、多许可证或 CLA，必须处理已接受贡献的权利边界，不能自动
   relicensing；
 - 名称政策保护来源与官方版本辨识，但不声称尚未取得的注册商标权；
@@ -58,11 +59,13 @@ EmergeOS 已形成可以外部理解、运行和验证的 Pack009 工程基线�
 - 根 **DCO** 使用 Developer Certificate of Origin 1.1 标准文本；
 - Maintainer、Security、Code of Conduct、Contributing 与 Pull Request 模板同步到
   同一公开边界；
-- GitHub 仓库创建后必须启用 Private Vulnerability Reporting，并以远端设置回执关闭
-  对应 readiness 项。
+- GitHub Private Vulnerability Reporting 已于 2026-08-01 启用；动态设置、CI 与保护
+  分支回执见[公开准备清单](../../community/open-source-readiness.md)和
+  [GitHub Public Release Build Note](../../operations/build-notes/2026-08-01-github-public-release.md)。
 
-本 ADR 不证明 CI、Secret/PII scan、英文入口或演示已经完成；这些项目只在取得各自
-回执后更新。
+本 ADR 只记录长期决策，不承担动态 readiness 证明。CI、Secret/PII scan、英文入口、
+演示和 GitHub 设置只以准备清单、Build Note 与远端回读为准。当前不声明安装了自动
+DCO bot；Pull Request 模板的 sign-off 由 Maintainer 人工核验。
 
 ## Rollback or migration
 
