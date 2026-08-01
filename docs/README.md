@@ -52,6 +52,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [Typed read-only Worker handoff ADR](./architecture/decisions/0008-typed-read-only-worker-handoff.md)
 - [Child-only model Worker Eval boundary ADR](./architecture/decisions/0009-child-only-model-worker-eval-boundary.md)
 - [PostgreSQL canonical graph attempt ADR](./architecture/decisions/0010-postgresql-canonical-graph-attempt.md)
+- [Apache-2.0、DCO 与公开治理 ADR](./architecture/decisions/0012-open-source-license-and-contributions.md)
 - [RFC-0001：持久 AgentRun、Safe Trace 与 HarnessRunBundle](./rfcs/0001-persistent-agent-run-trace-and-bundle.md)
 - [RFC-0002：真实模型 synthetic egress 与计量边界](./rfcs/0002-real-model-synthetic-egress-and-metering.md)
 - [RFC-0003：read-only Tool post-dispatch deadline truth](./rfcs/0003-post-dispatch-read-only-tool-deadline-truth.md)

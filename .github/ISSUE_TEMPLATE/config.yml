@@ -1,2 +1,5 @@
 blank_issues_enabled: false
-contact_links: []
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/striveh/emergeos/security/advisories/new
+    about: Do not disclose vulnerabilities, credentials, or private user data in a public Issue.

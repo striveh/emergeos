@@ -1,5 +1,7 @@
 # EmergeOS · 显现
 
+[English README](./README_EN.md) · 中文
+
 > A user-owned Personal AI OS that turns what you see, think, and intend into verified outcomes.
 
 EmergeOS 不是聊天机器人、笔记 App 或自动化工具箱。它要解决的是：
@@ -403,6 +405,10 @@ offline-harness-runner → core → contracts
 - [Codex Playbook](./docs/engineering/codex-playbook.md)
 - [Business Validation Roadmap](./docs/business/validation-roadmap.md)
 
-## 许可证状态
+## 许可证与贡献
 
-仓库尚未公开发布，许可证仍是待决 ADR。在许可证被明确接受前，代码不应被视为已授予开源使用权。原因与候选方案见 [开放源码准备清单](./docs/community/open-source-readiness.md)。
+EmergeOS 使用 [Apache License 2.0](./LICENSE)。外部贡献采用
+[Developer Certificate of Origin 1.1](./DCO)，每个贡献 commit 需要
+`Signed-off-by`。决策与边界见
+[ADR-0012](./docs/architecture/decisions/0012-open-source-license-and-contributions.md)；
+项目名称与品牌使用见 [TRADEMARKS.md](./TRADEMARKS.md)。

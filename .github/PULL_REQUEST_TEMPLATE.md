@@ -51,3 +51,4 @@ List updated docs, contracts, ADRs or RFCs.
 - [ ] I did not include credentials, real user data, private prompts, complete real traces or identifying information.
 - [ ] External actions, if any, have explicit authority, idempotency and receipts.
 - [ ] Claims in this PR do not exceed executable evidence.
+- [ ] Every commit in this PR complies with the DCO and includes my `Signed-off-by`.

@@ -4,7 +4,7 @@
 - Status: assigned; owner diagnosis pending
 - Target: `L3` diagnosis for idempotent external action and reconciliation
 - Isolated worktree:
-  `/Users/huangqingxi/workspace/personal-ai-os-stage1-diagnosis`
+  `<workspace>/personal-ai-os-stage1-diagnosis`
 - Branch: `learning/stage1-unknown-fault-20260729`
 - Seed commit: `4c1bea9`
 - Main worktree impact: none
@@ -26,7 +26,7 @@ location: PostgresActionAttemptStoreTest.java:121
 Run:
 
 ```bash
-cd /Users/huangqingxi/workspace/personal-ai-os-stage1-diagnosis
+cd <workspace>/personal-ai-os-stage1-diagnosis
 
 ./mvnw --batch-mode --no-transfer-progress \
   -pl adapters/postgres -am \

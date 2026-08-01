@@ -10,10 +10,13 @@
 
 ## 角色
 
-- **Maintainer**：合并、发布、路线图和跨模块一致性。
+- **Maintainer**：合并、发布、路线图和跨模块一致性。首任 Maintainer 是
+  [@striveh](https://github.com/striveh)。
 - **Domain Steward**：对 Self Model、Runtime、Connectors、UI、Evaluation 或 Security 等领域进行审查。
 - **Contributor**：通过代码、评测、研究、设计、文档或翻译参与。
-- **Security Response**：私下处理漏洞与数据安全事件；成员名单在公开前确定。
+- **Security Response**：私下处理漏洞与数据安全事件；首任 owner 是
+  [@striveh](https://github.com/striveh)，通过 GitHub Private Vulnerability
+  Reporting 接收报告。
 
 早期不会建立名义上的基金会或技术委员会。出现至少三位持续维护者、两个以上独立组织贡献后，再评估更分布式的治理。
 
@@ -40,4 +43,3 @@
 6. 新颖性与流行度。
 
 发生争议时，先明确可证伪假设并做最小实验，不以框架声量、职位或模型口头判断代替证据。
-

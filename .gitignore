@@ -3,6 +3,7 @@
 .vscode/
 .codex-log/
 .private-research/
+.workbuddy/
 *.iml
 
 target/

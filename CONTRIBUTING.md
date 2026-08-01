@@ -83,3 +83,22 @@ RFC 是提议；ADR 是已经接受的决定。已接受 ADR 不改写历史，�
 - 一次提交解决一个可解释问题。
 - Commit message 建议使用 `type(scope): summary`，例如 `feat(core): add receipt idempotency`。
 - PR 描述应包含：问题、决策、验证、风险、回滚方式和文档变化。
+
+## DCO sign-off
+
+项目采用 [Developer Certificate of Origin 1.1](./DCO)，不要求 CLA。每个贡献 commit
+必须包含与提交者身份一致的 `Signed-off-by`：
+
+```text
+Signed-off-by: Your Name <your-public-email@example.com>
+```
+
+创建 commit 时推荐使用：
+
+```bash
+git commit -s
+```
+
+如果已有 commit 缺少 sign-off，请在确认自己有权作出 DCO 声明后补签；rebase、squash
+或修改 commit 后，应重新确认 sign-off 仍与最终内容和作者身份一致。DCO 会长期保留你
+主动提交的姓名、邮箱与 sign-off 记录，请使用你愿意公开的身份。
