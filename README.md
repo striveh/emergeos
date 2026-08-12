@@ -561,5 +561,5 @@ offline-harness-runner → core → contracts
 EmergeOS 使用 [Apache License 2.0](./LICENSE)。外部贡献采用
 [Developer Certificate of Origin 1.1](./DCO)，每个贡献 commit 需要
 `Signed-off-by`。决策与边界见
-[ADR-0012](./docs/architecture/decisions/0019-open-source-license-and-contributions.md)；
+[ADR-0019](./docs/architecture/decisions/0019-open-source-license-and-contributions.md)；
 项目名称与品牌使用见 [TRADEMARKS.md](./TRADEMARKS.md)。

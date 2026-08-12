@@ -28,7 +28,7 @@
 - 项目名称与官方背书边界由 `TRADEMARKS.md` 约束。
 
 完整理由与迁移边界见
-[ADR-0012](../architecture/decisions/0019-open-source-license-and-contributions.md)。
+[ADR-0019](../architecture/decisions/0019-open-source-license-and-contributions.md)。
 
 ## 2026-08-01 GitHub 公开回执
 

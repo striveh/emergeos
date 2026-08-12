@@ -19,9 +19,9 @@ scope=TEST_ONLY_LOCAL_SAME_CONTAINER_POSTGRES_IMMEDIATE_RESTART_READBACK
 productionSchemaProvisioningSourceDelta=0
 shippingCapabilityPayloadDelta=0
 historicalV19Aggregate=b33071c583d05d1ccd8f1c9ff4bf78e258a654a3b6a1fe32965de73163480fc2
-currentV19PathRecompute=9e00c4881257c09030bb4213c7bfb065b8f6eb2a94c40e2160e7cb0adc7ff0d0
+currentV19PathRecompute=610a958d1a4875b781857cae6f5ae2ede710f9ced8691432def6d8d8489218cf
 orderedV20SliceFiles=29
-orderedV20SliceAggregate=ff51f8ae90d929e1f12d7afaf467a52359bf76a1089cd0d7e14560f26191d605
+orderedV20SliceAggregate=0d8f3886d4bb6cf6abcab3c046caa64556eed9d39cacb8b0e556581d574704ee
 schemaVersion=16
 freshVerifierJvms=2
 postgresRestart=PG_CTL_IMMEDIATE_SAME_CONTAINER_SAME_PGDATA
@@ -39,14 +39,14 @@ legacySequence=13
 legacySequence14=0
 overlayRows=4
 shippingLiveRoute=DISABLED
-rootClean=GREEN_159_XML_863_TESTS_0
+rootClean=GREEN_160_XML_865_TESTS_0
 v20SourceSha256=160a9c26a29ebaa94a78116d282f419539a721ae05a355e77df7b89a2108a547
 v20TestClassAggregate=b64ad3fc35eff9a2acd9efbe4ad41abbf07469c87c637463d311b4310f4caf2b
 v19ShippingPayloadParity=5cb31fde30537fef35f2732d0bf57b87356693cf2e540b319906353f14c413fa
-coreJar=d56cfb6e346f203cbee76894db1989e14f4478c27dd826a8b53d38533c65f8ab
-postgresJar=f5b990198ca7c583ba42d7cb3357f30746195838e482889bb4c8e12baf25c24a
-graphEvalJar=513a600adebb398f40f78db959313e06349d92bdffd3873f8700defe0c796272
-shippingAppJar=4ccf68aaf7ab7bc3c663431f7b1b9897f4088912265a3df0bed1bab7a3393418
+coreJar=2624840ad1c3820c2edd3d111dfa5df9b9a6140981ff06f1cacde1f0260e27ad
+postgresJar=c0f77b273dc9b6359b17a4837323b4f7bbd795d4d9da7acca1ab41e258023671
+graphEvalJar=a4955a5682bdb710242796866ff2791b24fd2a2a081e4c4d04f0a3a87d4f39b0
+shippingAppJar=3a85326c1909b685fb7193832fa35f75fe70980ffefac6a9478ebc108a0811e3
 ```
 
 ## Acceptance Red → Green
@@ -101,19 +101,22 @@ ordered aggregate为`b64ad3fc35eff9a2acd9efbe4ad41abbf07469c87c637463d311b4310f4
 
 ## Root clean、artifact与ordered slice
 
-最终命令为root `./mvnw --batch-mode --no-transfer-progress clean verify`，11个module均
-`BUILD SUCCESS`。精确聚合为`159 XML / 863 tests / 0 failures / 0 errors / 0 skipped / 0 flakes`；
+最终rebase `origin/main`后，远端新增的timestamp precision测试最初仍使用pre-Pack010清表集合，
+被V8+外键闭包正确拒绝。minimum integration fix改为复用schema16 canonical 28-table
+`truncateBusinessTruth`，focused `1/0`后重新执行root
+`./mvnw --batch-mode --no-transfer-progress clean verify`，11个module均`BUILD SUCCESS`。
+精确聚合为`160 XML / 865 tests / 0 failures / 0 errors / 0 skipped / 0 flakes`；
 V20 restart IT为`1/0`，V19 Acceptance为`3/0`，provider bytecode Gate为`14/0`，architecture为
 `5/0`，V19 shipping-JAR IT为`1/0`。8个JSON Schema 2020-12 contract与70个fixture通过，
-124个Markdown文件的链接检查及`git diff --check`均Green。
+129个Markdown文件的链接检查及`git diff --check`均Green。
 
 最终whole-artifact SHA-256：
 
 ```text
-core=d56cfb6e346f203cbee76894db1989e14f4478c27dd826a8b53d38533c65f8ab
-postgres=f5b990198ca7c583ba42d7cb3357f30746195838e482889bb4c8e12baf25c24a
-graphEval=513a600adebb398f40f78db959313e06349d92bdffd3873f8700defe0c796272
-shippingApp=4ccf68aaf7ab7bc3c663431f7b1b9897f4088912265a3df0bed1bab7a3393418
+core=2624840ad1c3820c2edd3d111dfa5df9b9a6140981ff06f1cacde1f0260e27ad
+postgres=c0f77b273dc9b6359b17a4837323b4f7bbd795d4d9da7acca1ab41e258023671
+graphEval=a4955a5682bdb710242796866ff2791b24fd2a2a081e4c4d04f0a3a87d4f39b0
+shippingApp=3a85326c1909b685fb7193832fa35f75fe70980ffefac6a9478ebc108a0811e3
 ```
 
 whole-JAR值因本次clean重新生成archive而变化；项目没有冻结reproducible ZIP timestamp，因此不把
@@ -126,14 +129,15 @@ ordered V20 slice沿用V19固定28路径与顺序，并在末尾追加V20 test s
 `shasum -a 256 <path>`，将29行完整标准输出逐字拼接后再次执行`shasum -a 256`，得到：
 
 ```text
-ff51f8ae90d929e1f12d7afaf467a52359bf76a1089cd0d7e14560f26191d605
+0d8f3886d4bb6cf6abcab3c046caa64556eed9d39cacb8b0e556581d574704ee
 ```
 
 本Build Note与living ExecPlan排除在aggregate之外以避免自引用。V19签收时历史aggregate仍为
 `b33071c583d05d1ccd8f1c9ff4bf78e258a654a3b6a1fe32965de73163480fc2`；README与docs/README追加
-V20导航，并在发布前统一清理RFC/ADR的尾随空格与多余EOF空行后，当前树按同一V19 28-path manifest
-重算为`9e00c4881257c09030bb4213c7bfb065b8f6eb2a94c40e2160e7cb0adc7ff0d0`。二者分别代表历史冻结bytes与
-当前导航/whitespace normalization后的bytes，不互相覆盖，也不伪称zero-delta。
+V20导航、rebase合入公开发布导航并将开源治理ADR无歧义重编号为0019，同时在发布前清理RFC/ADR的
+尾随空格与多余EOF空行后，当前树按同一V19 28-path manifest重算为
+`610a958d1a4875b781857cae6f5ae2ede710f9ced8691432def6d8d8489218cf`。二者分别代表历史冻结bytes与
+当前rebase/navigation/whitespace normalization后的bytes，不互相覆盖，也不伪称zero-delta。
 
 ## Claim boundary
 

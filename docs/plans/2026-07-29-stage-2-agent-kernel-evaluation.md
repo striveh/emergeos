@@ -1797,7 +1797,7 @@ Pack010 progress：
     旧sentinel connection失效、新physical connection恢复且postmaster start严格前进；fresh packaged JVM B
     以不同OS PID再次为`Attributed`。restart前后及B读后，public table JSON/`xmin`、legacy seq13/no14、
     V16四行与typed receipt十项bounded identity均不变，restart后没有migrate/provision/fixture writer。
-    focused `1/0`及root `clean verify`均Green；最终为`159 XML / 863 tests / 0`，29-file aggregate、
+    focused `1/0`及rebase后的root `clean verify`均Green；最终为`160 XML / 865 tests / 0`，29-file aggregate、
     V19 normalized shipping payload parity与四个artifact hash均已冻结。证据只覆盖本机same-container
     PostgreSQL process restart，不覆盖host/power/storage/HA、connection-loss/reconcile/race、App/Live或current
     authorization；详细回执见

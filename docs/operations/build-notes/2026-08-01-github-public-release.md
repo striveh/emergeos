@@ -8,7 +8,7 @@
 - Linux timestamp fix：`b3e6db2`
 - License：[Apache License 2.0](../../../LICENSE)
 - Contribution certificate：[DCO 1.1](../../../DCO)
-- Decision：[ADR-0012](../../architecture/decisions/0019-open-source-license-and-contributions.md)
+- Decision：[ADR-0019](../../architecture/decisions/0019-open-source-license-and-contributions.md)
 
 ## Outcome
 
