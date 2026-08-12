@@ -148,7 +148,8 @@ class Pack010ExactProviderAttributionPostgresIT {
             expiresAt);
     Clock clock =
         Clock.fixed(
-            manifest.startedAt().plusMillis(10), ZoneOffset.UTC);
+            manifest.startedAt().plusMillis(10).plusNanos(789),
+            ZoneOffset.UTC);
 
     Pack010ProviderSessionComposer.Pack010AttributedModelOutcome
         finalOutcome;

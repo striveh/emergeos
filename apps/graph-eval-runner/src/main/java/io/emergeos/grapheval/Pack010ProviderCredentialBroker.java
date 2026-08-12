@@ -4,6 +4,7 @@ import io.emergeos.adapters.postgres.OwnerTtyGraphAuthority;
 import io.emergeos.core.application.GraphAttemptCoordinator;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -78,7 +79,7 @@ final class Pack010ProviderCredentialBroker {
         egressAuthority,
         expectedRevision);
     coordinator.credentialReadStarted(
-        egressAuthority, clock.instant());
+        egressAuthority, canonicalTime(clock.instant()));
     return new CredentialLease(
         revision,
         ownerAuthority,
@@ -103,6 +104,11 @@ final class Pack010ProviderCredentialBroker {
       }
     }
     return true;
+  }
+
+  private static Instant canonicalTime(Instant instant) {
+    return Objects.requireNonNull(instant, "instant")
+        .truncatedTo(ChronoUnit.MICROS);
   }
 
   static final class CredentialLease {

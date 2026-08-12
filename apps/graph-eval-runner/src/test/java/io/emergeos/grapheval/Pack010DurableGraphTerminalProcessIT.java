@@ -627,6 +627,10 @@ class Pack010DurableGraphTerminalProcessIT {
                   + "GraphExactPicoProviderValidationAttestor.class",
               "io/emergeos/core/port/"
                   + "GraphExactPicoProviderValidationSigner.class",
+              "io/emergeos/grapheval/"
+                  + "Pack010ProviderCredentialBroker.class",
+              "io/emergeos/grapheval/"
+                  + "Pack010ProviderSessionComposer.class",
               "db/migration/"
                   + "V13__bounded_provider_validation_attestation.sql",
               "db/migration/"
@@ -640,6 +644,25 @@ class Pack010DurableGraphTerminalProcessIT {
         assertTrue(
             jar.getEntry(productionResource) != null,
             productionResource + " is absent");
+      }
+      for (String canonicalizedCapability :
+          List.of(
+              "io/emergeos/grapheval/"
+                  + "Pack010ProviderCredentialBroker.class",
+              "io/emergeos/grapheval/"
+                  + "Pack010ProviderSessionComposer.class")) {
+        byte[] target =
+            Files.readAllBytes(
+                repo()
+                    .resolve("apps/graph-eval-runner/target/classes")
+                    .resolve(canonicalizedCapability));
+        try (var input =
+            jar.getInputStream(jar.getJarEntry(canonicalizedCapability))) {
+          assertArrayEquals(
+              target,
+              input.readAllBytes(),
+              canonicalizedCapability + " target/app parity");
+        }
       }
     }
     assertEquals(

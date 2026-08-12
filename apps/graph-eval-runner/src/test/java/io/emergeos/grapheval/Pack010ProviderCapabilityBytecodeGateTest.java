@@ -704,7 +704,14 @@ class Pack010ProviderCapabilityBytecodeGateTest {
         "OwnerTtyGraphAuthority.requireProviderSessionFresh:",
         "OwnerTtyGraphAuthority.consumeEgress:",
         "GraphAttemptCoordinator.requireEgressManifest:",
+        "java/time/Clock.instant:",
+        "Method canonicalTime:",
         "GraphAttemptCoordinator.credentialReadStarted:");
+    assertCanonicalTimeHelper(broker);
+    assertEquals(
+        1,
+        occurrences(broker, "Method canonicalTime:"),
+        "the broker durable timestamp must be canonicalized exactly once");
 
     String lease =
         javap("Pack010ProviderCredentialBroker$CredentialLease");
@@ -722,10 +729,19 @@ class Pack010ProviderCapabilityBytecodeGateTest {
         composer,
         "CredentialLease.claim:",
         "ReviewedOpenAiClient.defaultCodecNoRetry:",
+        "java/time/Clock.instant:",
+        "Method canonicalTime:",
         "GraphAttemptCoordinator.clientCreated:",
         "OpenAiResponsesModel.withExactResponseOutcome:",
+        "java/time/Clock.instant:",
+        "Method canonicalTime:",
         "GraphAttemptCoordinator.modelCreated:",
         "OpenAiResponsesModel.open:");
+    assertCanonicalTimeHelper(composer);
+    assertEquals(
+        6,
+        occurrences(composer, "Method canonicalTime:"),
+        "every composer durable timestamp must be canonicalized");
     assertTrue(
         composer.indexOf("GraphAttemptCoordinator.providerIntent:")
             >= 0);
@@ -742,6 +758,8 @@ class Pack010ProviderCapabilityBytecodeGateTest {
         observerLambda,
         "CredentialLease.requireFresh:",
         "AtomicInteger.getAndIncrement:",
+        "java/time/Clock.instant:",
+        "Method canonicalTime:",
         "GraphAttemptCoordinator.providerIntent:");
     String outcomeLambda =
         composer.substring(
@@ -749,10 +767,22 @@ class Pack010ProviderCapabilityBytecodeGateTest {
     assertOrdered(
         outcomeLambda,
         "GraphProviderAttribution.create:",
-        "GraphAttemptCoordinator.providerFailureAttributed:");
-    assertTrue(
-        outcomeLambda.indexOf("GraphAttemptCoordinator.providerAttributed:")
-            >= 0);
+        "java/time/Clock.instant:",
+        "Method canonicalTime:",
+        "GraphAttemptCoordinator.providerFailureAttributed:",
+        "java/time/Clock.instant:",
+        "Method canonicalTime:",
+        "GraphAttemptCoordinator.providerAttributed:");
+    String attributionLambda =
+        composer.substring(
+            composer.indexOf("lambda$durableAttributionObserver$1"),
+            composer.indexOf("lambda$durableIntentObserver$0"));
+    assertOrdered(
+        attributionLambda,
+        "GraphProviderAttribution.create:",
+        "java/time/Clock.instant:",
+        "Method canonicalTime:",
+        "GraphAttemptCoordinator.providerAttributed:");
     assertOrdered(
         composer,
         "String https://api.openai.com/v1",
@@ -2641,6 +2671,24 @@ class Pack010ProviderCapabilityBytecodeGateTest {
       assertTrue(next > cursor, instruction + " missing or out of order");
       cursor = next;
     }
+  }
+
+  private static void assertCanonicalTimeHelper(String bytecode) {
+    assertOrdered(
+        bytecode,
+        "private static java.time.Instant canonicalTime",
+        "java/time/temporal/ChronoUnit.MICROS:",
+        "java/time/Instant.truncatedTo:");
+  }
+
+  private static int occurrences(String value, String needle) {
+    int count = 0;
+    int cursor = 0;
+    while ((cursor = value.indexOf(needle, cursor)) >= 0) {
+      count++;
+      cursor += needle.length();
+    }
+    return count;
   }
 
   private static Path classesRoot() {

@@ -30,6 +30,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -65,7 +66,7 @@ class Pack010ProviderSessionEffectOrderingTest {
                 coordinator,
                 egress,
                 Clock.fixed(
-                    manifest.startedAt().plusMillis(7),
+                    manifest.startedAt().plusMillis(7).plusNanos(789),
                     ZoneOffset.UTC));
     try {
       assertEquals(
@@ -85,6 +86,16 @@ class Pack010ProviderSessionEffectOrderingTest {
               GraphAttemptEventType.MODEL_CREATED),
           store.events);
       assertEquals(0, store.providerIntents);
+      assertEquals(
+          List.of(
+              manifest.startedAt().plusMillis(7),
+              manifest.startedAt().plusMillis(7)),
+          store.eventTimes.subList(
+              store.eventTimes.size() - 2, store.eventTimes.size()));
+      store.eventTimes.forEach(
+          occurredAt ->
+              assertEquals(
+                  occurredAt.truncatedTo(ChronoUnit.MICROS), occurredAt));
       assertThrows(
           Pack010ProviderCredentialBroker.CredentialRejected.class,
           () -> lease.claim(
@@ -373,6 +384,7 @@ class Pack010ProviderSessionEffectOrderingTest {
 
     final List<GraphAttemptEventType> events =
         new ArrayList<>();
+    final List<Instant> eventTimes = new ArrayList<>();
     private GraphAttemptCursor cursor;
     final boolean rejectProviderIntent;
     final boolean rejectProviderAttribution;
@@ -405,6 +417,7 @@ class Pack010ProviderSessionEffectOrderingTest {
           GraphAttemptEvent.claimed(manifest, occurredAt);
       cursor = event.cursor(manifest);
       events.add(event.type());
+      eventTimes.add(occurredAt);
       return new CreateResult.Created(cursor);
     }
 
@@ -635,6 +648,7 @@ class Pack010ProviderSessionEffectOrderingTest {
               intent);
       cursor = event.cursor(manifest);
       events.add(type);
+      eventTimes.add(occurredAt);
       return cursor;
     }
 
@@ -659,6 +673,7 @@ class Pack010ProviderSessionEffectOrderingTest {
               occurredAt);
       cursor = event.cursor(manifest);
       events.add(event.type());
+      eventTimes.add(occurredAt);
       attributions.add(attribution);
       providerAttributions++;
       return cursor;

@@ -6,22 +6,29 @@ Stage：Stage 2 / S4
 
 状态：`focused local Engineering Gate Green；overall Authority / Live Red`
 
-结论：本切片只新增一个test-only Testcontainers Acceptance，没有production、schema、provisioning、
+结论：V20冻结时只新增一个test-only Testcontainers Acceptance，没有production、schema、provisioning、
 Core、adapter或shipping App变化；另更新README与docs/README的V20导航。它在独立PostgreSQL 18.4
 keepalive容器中先通过
 production V13、V15与V18 typed path形成完整V16 overlay，再由fresh packaged JVM A取得V19
 `Attributed`；随后真实执行同一容器、同一PGDATA上的`pg_ctl restart -m immediate -w`，由fresh
 packaged JVM B重新验证同一durable receipt仍为`Attributed`。最终独占root `clean verify`与三路
-独立review均已闭合；本回执只签收local Engineering证据，不把它外推为App或Live能力。
+独立review均已闭合。其后Linux CI真实TTY启用所暴露的PostgreSQL时间精度问题，以及最终root回归
+暴露的offline cooperative claim写入窗口，已作为post-V20 portability/race recovery追加收口；没有新增
+App route、schema或provisioning authority。本回执只签收local Engineering证据，不把它外推为App或Live能力。
 
 ```text
 scope=TEST_ONLY_LOCAL_SAME_CONTAINER_POSTGRES_IMMEDIATE_RESTART_READBACK
-productionSchemaProvisioningSourceDelta=0
-shippingCapabilityPayloadDelta=0
+v20HistoricalProductionSchemaProvisioningSourceDeltaAtSliceFreeze=0
+v20HistoricalShippingCapabilityPayloadDeltaAtSliceFreeze=0
+currentSchemaProvisioningDelta=0
+postV20PortabilityAndRaceProductionFiles=4
+postV20PortabilityAndRaceTestFiles=7
 historicalV19Aggregate=b33071c583d05d1ccd8f1c9ff4bf78e258a654a3b6a1fe32965de73163480fc2
-currentV19PathRecompute=610a958d1a4875b781857cae6f5ae2ede710f9ced8691432def6d8d8489218cf
+postRebasePrePortabilityV19PathRecompute=610a958d1a4875b781857cae6f5ae2ede710f9ced8691432def6d8d8489218cf
+currentV19PathRecompute=f58fab301cc3960b6b85ee1e7ed5776dace1125ca35f2eab31689d3fe0b0d5bc
 orderedV20SliceFiles=29
-orderedV20SliceAggregate=0d8f3886d4bb6cf6abcab3c046caa64556eed9d39cacb8b0e556581d574704ee
+postRebasePrePortabilityOrderedV20SliceAggregate=0d8f3886d4bb6cf6abcab3c046caa64556eed9d39cacb8b0e556581d574704ee
+orderedV20SliceAggregate=4ce5524488fa3a72bbaaadebbd56f8a51445e022215d5b395f5db337c4613352
 schemaVersion=16
 freshVerifierJvms=2
 postgresRestart=PG_CTL_IMMEDIATE_SAME_CONTAINER_SAME_PGDATA
@@ -39,14 +46,14 @@ legacySequence=13
 legacySequence14=0
 overlayRows=4
 shippingLiveRoute=DISABLED
-rootClean=GREEN_160_XML_865_TESTS_0
+rootClean=GREEN_160_XML_866_TESTS_0
 v20SourceSha256=160a9c26a29ebaa94a78116d282f419539a721ae05a355e77df7b89a2108a547
 v20TestClassAggregate=b64ad3fc35eff9a2acd9efbe4ad41abbf07469c87c637463d311b4310f4caf2b
 v19ShippingPayloadParity=5cb31fde30537fef35f2732d0bf57b87356693cf2e540b319906353f14c413fa
-coreJar=2624840ad1c3820c2edd3d111dfa5df9b9a6140981ff06f1cacde1f0260e27ad
-postgresJar=c0f77b273dc9b6359b17a4837323b4f7bbd795d4d9da7acca1ab41e258023671
-graphEvalJar=a4955a5682bdb710242796866ff2791b24fd2a2a081e4c4d04f0a3a87d4f39b0
-shippingAppJar=3a85326c1909b685fb7193832fa35f75fe70980ffefac6a9478ebc108a0811e3
+coreJar=b44f450e40a8cd62cc5396841163d1432c0cc346daf6ac2b67f3e5626d1be920
+postgresJar=1432ca43d59da2a674bb6fd884268ab662986abf19af52917d193886021c461d
+graphEvalJar=8f022279b541ad2baff1ed4f4100b01db49aa72d030305241d24e85be734ad8f
+shippingAppJar=6fe73ada8dd572fac913e1267bdf963e673d1ca246e010b53423930bab9614cb
 ```
 
 ## Acceptance Red → Green
@@ -105,7 +112,7 @@ ordered aggregate为`b64ad3fc35eff9a2acd9efbe4ad41abbf07469c87c637463d311b4310f4
 被V8+外键闭包正确拒绝。minimum integration fix改为复用schema16 canonical 28-table
 `truncateBusinessTruth`，focused `1/0`后重新执行root
 `./mvnw --batch-mode --no-transfer-progress clean verify`，11个module均`BUILD SUCCESS`。
-精确聚合为`160 XML / 865 tests / 0 failures / 0 errors / 0 skipped / 0 flakes`；
+精确聚合为`160 XML / 866 tests / 0 failures / 0 errors / 0 skipped / 0 flakes`；
 V20 restart IT为`1/0`，V19 Acceptance为`3/0`，provider bytecode Gate为`14/0`，architecture为
 `5/0`，V19 shipping-JAR IT为`1/0`。8个JSON Schema 2020-12 contract与70个fixture通过，
 129个Markdown文件的链接检查及`git diff --check`均Green。
@@ -113,10 +120,10 @@ V20 restart IT为`1/0`，V19 Acceptance为`3/0`，provider bytecode Gate为`14/0
 最终whole-artifact SHA-256：
 
 ```text
-core=2624840ad1c3820c2edd3d111dfa5df9b9a6140981ff06f1cacde1f0260e27ad
-postgres=c0f77b273dc9b6359b17a4837323b4f7bbd795d4d9da7acca1ab41e258023671
-graphEval=a4955a5682bdb710242796866ff2791b24fd2a2a081e4c4d04f0a3a87d4f39b0
-shippingApp=3a85326c1909b685fb7193832fa35f75fe70980ffefac6a9478ebc108a0811e3
+core=b44f450e40a8cd62cc5396841163d1432c0cc346daf6ac2b67f3e5626d1be920
+postgres=1432ca43d59da2a674bb6fd884268ab662986abf19af52917d193886021c461d
+graphEval=8f022279b541ad2baff1ed4f4100b01db49aa72d030305241d24e85be734ad8f
+shippingApp=6fe73ada8dd572fac913e1267bdf963e673d1ca246e010b53423930bab9614cb
 ```
 
 whole-JAR值因本次clean重新生成archive而变化；项目没有冻结reproducible ZIP timestamp，因此不把
@@ -129,15 +136,44 @@ ordered V20 slice沿用V19固定28路径与顺序，并在末尾追加V20 test s
 `shasum -a 256 <path>`，将29行完整标准输出逐字拼接后再次执行`shasum -a 256`，得到：
 
 ```text
-0d8f3886d4bb6cf6abcab3c046caa64556eed9d39cacb8b0e556581d574704ee
+4ce5524488fa3a72bbaaadebbd56f8a51445e022215d5b395f5db337c4613352
 ```
 
 本Build Note与living ExecPlan排除在aggregate之外以避免自引用。V19签收时历史aggregate仍为
 `b33071c583d05d1ccd8f1c9ff4bf78e258a654a3b6a1fe32965de73163480fc2`；README与docs/README追加
 V20导航、rebase合入公开发布导航并将开源治理ADR无歧义重编号为0019，同时在发布前清理RFC/ADR的
-尾随空格与多余EOF空行后，当前树按同一V19 28-path manifest重算为
-`610a958d1a4875b781857cae6f5ae2ede710f9ced8691432def6d8d8489218cf`。二者分别代表历史冻结bytes与
-当前rebase/navigation/whitespace normalization后的bytes，不互相覆盖，也不伪称zero-delta。
+尾随空格与多余EOF空行后的pre-portability重算为
+`610a958d1a4875b781857cae6f5ae2ede710f9ced8691432def6d8d8489218cf`。post-V20 bytecode Gate把
+timestamp canonicalization精确绑定到durable sinks后，当前树按同一manifest重算为
+`f58fab301cc3960b6b85ee1e7ed5776dace1125ca35f2eab31689d3fe0b0d5bc`；对应29-path当前值为
+`4ce5524488fa3a72bbaaadebbd56f8a51445e022215d5b395f5db337c4613352`。这些值分别代表历史V19冻结、
+post-rebase pre-portability与当前bytes，不互相覆盖，也不伪称zero-delta。
+
+## Post-V20 CI portability与root race recovery
+
+- GitHub Actions显式安装真实`/usr/bin/expect`后，Linux real-TTY矩阵首先暴露test harness把
+  nanosecond `Instant.now()`传给PostgreSQL microsecond contract；三处test-only durable时间统一截断到
+  `MICROS`，而专测challenge expiry的窗口保持不变。两个post-approval expiry场景的test-only TTL从
+  250ms提高到3000ms，仍等待`TTL + 150ms`并要求精确`owner capability expired`、durable sequence与
+  replay fence，不放宽production expiry语义；
+- 同构的dormant production缺口在`Pack010ProviderCredentialBroker`一个durable sink与
+  `Pack010ProviderSessionComposer`六个durable sinks精确canonicalize；`CredentialLease.requireFresh`
+  继续使用raw clock，避免改变expiry判断。Composer由nanosecond unit与真实PostgreSQL/restart行为覆盖；
+  Broker由compiled order、exact call count与target/module/App byte parity覆盖。两类App consumer仍为0；
+- 最终root clean又真实复现offline双writer窗口：winner以`CREATE_NEW`建立claim inode后、固定bytes写满前，
+  loser曾把安全的0/partial claim误分类为通用`REPORT_FILE_UNSAFE`。minimum production fix只把
+  safe regular/0600/owner/ACL正确、稳定读取时内容为固定claim合法前缀、且无pending/final的短claim归为
+  non-authoritative `REPORT_COMMIT_INCOMPLETE`；短伪造、完整伪造、错误mode/owner/ACL/type/symlink、
+  oversize及与pending/final共存仍分别fail closed。确定性latch测试停在inode创建后首byte写入前，
+  证明竞争writer稳定拒绝、释放后winner为FINAL；packaged race没有放宽`REPORT_FILE_UNSAFE` allowlist；
+- 孤立claim若恰在bounded读取期间发生size/identity变化，会保守降为一次non-authoritative UNKNOWN；它不会
+  获得publish authority，第二个`save`仍固定拒绝。该分支未被误写成系统能区分合法增长与hostile replacement；
+- 当前delta为4个production source与7个test source；schema/provisioning、App route、provider network、
+  billing与Live均没有变化。下面Files节按固定词典序列出11个post-V20 code/test路径；逐路径执行
+  `shasum -a 256 <path>`，将11行完整标准输出逐字拼接后再次SHA-256，得到
+  `c3295526654482408930715231408352547af4a7910c31baf05eb6e0b3aaf73e`。Build Note与living ExecPlan
+  排除以避免自引用；同算法对offline三文件subset得到
+  `fc552583b8207750f04704c8805f622badec6c256f870591df4c2cce19b79e74`。
 
 ## Claim boundary
 
@@ -159,12 +195,29 @@ V20导航、rebase合入公开发布导航并将开源治理ADR无歧义重编�
 
 ## Files
 
+V20冻结切片：
+
 - `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010V20ExactPicoOverlayReaderPostgresRestartIT.java`
 - `docs/operations/build-notes/2026-08-12-s2-s4-pack010-v20-postgres-immediate-restart-overlay-readback.md`
 - `docs/plans/2026-07-29-stage-2-agent-kernel-evaluation.md`
 - `docs/README.md`
 - `README.md`
 
-V19 RFC/ADR、production/resource/Gate source与shipping capability bytes均不属于V20修改范围。
+Post-V20 portability/race recovery code/test source（固定词典序）：
+
+- `adapters/postgres/src/test/java/io/emergeos/adapters/postgres/PostgresGraphAttemptStoreTest.java`
+- `apps/graph-eval-runner/src/main/java/io/emergeos/grapheval/Pack010ProviderCredentialBroker.java`
+- `apps/graph-eval-runner/src/main/java/io/emergeos/grapheval/Pack010ProviderSessionComposer.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/GraphEvalBytecodeGate.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010DurableGraphTerminalProcessIT.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ExactProviderAttributionPostgresIT.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ProviderCapabilityBytecodeGateTest.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ProviderSessionEffectOrderingTest.java`
+- `apps/offline-harness-runner/src/main/java/io/emergeos/offlineharness/OfflineComparisonPersistenceObserver.java`
+- `apps/offline-harness-runner/src/main/java/io/emergeos/offlineharness/PosixOfflineComparisonReportStore.java`
+- `apps/offline-harness-runner/src/test/java/io/emergeos/offlineharness/PosixOfflineComparisonReportStoreTest.java`
+
+在V20冻结时，V19 RFC/ADR、production/resource/Gate source与shipping capability bytes均不属于V20修改范围；
+当前post-V20 addendum已显式列出两项dormant production与Gate、test及offline store delta。
 V19的`b33071...`仍是其当时历史冻结回执；因README与docs/README追加V20导航，
 当前树对V19 28-path manifest的重算必然不再等于历史值，不得将二者写成zero-delta或回写V19回执。

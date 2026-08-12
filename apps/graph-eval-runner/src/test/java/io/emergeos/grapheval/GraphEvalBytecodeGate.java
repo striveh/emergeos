@@ -1800,6 +1800,22 @@ final class GraphEvalBytecodeGate {
         }
       }
     }
+    if (logicalName.equals(BROKER_CLASS)
+        || logicalName.equals(COMPOSER_CLASS)) {
+      if (memberReferences(classBytes).stream()
+              .noneMatch(
+                  reference ->
+                      reference.owner().equals("java/time/Instant")
+                          && reference.name().equals("truncatedTo")
+                          && reference.descriptor().equals(
+                              "(Ljava/time/temporal/TemporalUnit;)"
+                                  + "Ljava/time/Instant;"))
+          || !constants.contains("MICROS")) {
+        violations.add(
+            physicalName
+                + " -> capability:postgres-time-canonicalization-missing");
+      }
+    }
     return List.copyOf(violations);
   }
 

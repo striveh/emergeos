@@ -22,8 +22,11 @@ overlay head14不改写legacy head13；V16冻结时production verifier/API为0�
 production-source verifier primitive，V18新增单一typed `complete` adapter，V19再新增专属13表SELECT-only
 role与四态reader，在单一RR/RO snapshot独立重算V13-V16 canonical closure和Ed25519。public Java raw
 stage/commit method、App consumer与shipping signer仍为0，configuration/runtime仍未证明，Authority/Live继续Red。
-V20只以test-only独立keepalive Testcontainer证明同container/system identifier/PGDATA上的PostgreSQL
-immediate process restart后，另一fresh packaged JVM可重验同一`Attributed` receipt；production delta为0。
+V20冻结时只以test-only独立keepalive Testcontainer证明同container/system identifier/PGDATA上的PostgreSQL
+immediate process restart后，另一fresh packaged JVM可重验同一`Attributed` receipt；当时production delta为0。
+其后Linux CI真实TTY启用所暴露的PostgreSQL microsecond portability缺口已在两个dormant production
+consumer的7个durable sinks与3个test-harness callsites精确canonicalize，raw expiry clock保持不变；最终root
+回归发现的offline claim创建窗口也已确定性收口，真实unsafe metadata仍fail closed。App consumer与Live仍为0/Red。
 PostgreSQL不验证Ed25519，credential/attestor caller与V19 reader role/process仍在TCB；TX-B/TX-C、host/
 power/storage/HA fault、connection-loss/reconcile/race、live、billing与pre-egress均未关闭。完整live smoke、stochastic Harness、真实 Seed与
 用户价值 Gate尚未完成。
@@ -1790,18 +1793,24 @@ Pack010 progress：
     post-fix review均已冻结；最终回执见
     [V19 Build Note](../operations/build-notes/2026-08-12-s2-s4-pack010-v19-fresh-jvm-exact-pico-overlay-reader.md)；
   - [x] V20 PostgreSQL immediate-restart overlay readback：V19冻结后新增单一test-only Acceptance，
-    production/schema/provisioning与shipping capability payload delta均为0；README/docs README的V20导航
+    V20冻结时production/schema/provisioning与shipping capability payload delta均为0；README/docs README的V20导航
     增量已单独记账，不伪称V19 frozen 28-path bytes未变。独立keepalive PostgreSQL 18.4 Testcontainer先通过
     V13+V15+V18 typed path形成完整overlay，fresh packaged JVM A为`Attributed`；随后同container ID、
     same `pg_control_system().system_identifier`与PGDATA上的`pg_ctl restart -m immediate -w`返回0，
     旧sentinel connection失效、新physical connection恢复且postmaster start严格前进；fresh packaged JVM B
     以不同OS PID再次为`Attributed`。restart前后及B读后，public table JSON/`xmin`、legacy seq13/no14、
     V16四行与typed receipt十项bounded identity均不变，restart后没有migrate/provision/fixture writer。
-    focused `1/0`及rebase后的root `clean verify`均Green；最终为`160 XML / 865 tests / 0`，29-file aggregate、
+    focused `1/0`及post-portability/race recovery后的root `clean verify`均Green；最终为
+    `160 XML / 866 tests / 0`，29-file aggregate、
     V19 normalized shipping payload parity与四个artifact hash均已冻结。证据只覆盖本机same-container
     PostgreSQL process restart，不覆盖host/power/storage/HA、connection-loss/reconcile/race、App/Live或current
     authorization；详细回执见
     [V20 Build Note](../operations/build-notes/2026-08-12-s2-s4-pack010-v20-postgres-immediate-restart-overlay-readback.md)；
+    post-V20 addendum同时记录：Linux real-TTY时间精度Red已在7个production durable sinks及3个test-harness
+    callsites修复，expiry比较仍用raw clock；offline cooperative writer的safe partial claim现在只会
+    `COMMIT_INCOMPLETE`，稳定读取的malformed/unsafe metadata仍INVALID；孤立claim在读中发生identity/size
+    变化只会保守UNKNOWN且不能获得publish authority。当前只扩大本地Engineering证据，
+    没有App wiring、provider egress或Authority/Live上调；
   - [ ] DeepSeek live PASS与durable multi-provider TX-A：本轮唯一真实请求在intermediate bytes上
     fail closed为`RESPONSE_METADATA_MISMATCH`，没有retry/redirect或第二请求，具体不兼容字段、billing与
     provider retention均未知。下一次请求必须使用owner经隐藏stdin重新提供的rotated credential；未来

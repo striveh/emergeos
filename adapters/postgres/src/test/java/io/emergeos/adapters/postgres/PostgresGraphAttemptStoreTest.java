@@ -67,6 +67,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -3860,7 +3861,7 @@ class PostgresGraphAttemptStoreTest {
       long ttlMs =
           mode.equals("adopt-expired")
                   || mode.equals("egress-expired")
-              ? 250
+              ? 3_000
               : 30_000;
       ProcessResult result =
           runOwnerAuthorityProcess(
@@ -3874,7 +3875,8 @@ class PostgresGraphAttemptStoreTest {
           || mode.equals("egress-expired")) {
         assertEquals(3, result.exitCode(), result.output());
         assertTrue(
-            result.output().contains("owner capability expired"));
+            result.output().contains("owner capability expired"),
+            result.output());
       } else {
         assertTrue(
             List.of(87, 88, 89, 90).contains(result.exitCode()),
@@ -7177,6 +7179,10 @@ class PostgresGraphAttemptStoreTest {
       }
     }
 
+    private static Instant postgresPrecisionNow() {
+      return Instant.now().truncatedTo(ChronoUnit.MICROS);
+    }
+
     private static GraphAttemptCoordinator.EgressAuthority
         advanceToEgress(
             GraphAttemptCoordinator coordinator,
@@ -7188,7 +7194,7 @@ class PostgresGraphAttemptStoreTest {
               manifest.caseId(),
               manifest.principalId(),
               manifest.experiment().repetition());
-      Instant now = Instant.now();
+      Instant now = postgresPrecisionNow();
       GraphAttemptCoordinator.ParentStarted parent =
           coordinator.startParent(
               coordinator.authorizeParent(
@@ -7213,7 +7219,7 @@ class PostgresGraphAttemptStoreTest {
               approvedManifest.caseId() + "-wrong-egress",
               approvedManifest.principalId(),
               approvedManifest.experiment().repetition());
-      Instant now = Instant.now();
+      Instant now = postgresPrecisionNow();
       GraphAttemptCoordinator.Authorized authorized =
           coordinator.approve(
               fixture.manifest(),
@@ -7316,7 +7322,7 @@ class PostgresGraphAttemptStoreTest {
         GraphAttemptCoordinator coordinator,
         GraphAttemptCoordinator.EgressAuthority egress,
         Fixture fixture) {
-      Instant at = Instant.now();
+      Instant at = postgresPrecisionNow();
       coordinator.credentialReadStarted(egress, at);
       coordinator.clientCreated(egress, at.plusMillis(1));
       coordinator.modelCreated(egress, at.plusMillis(2));

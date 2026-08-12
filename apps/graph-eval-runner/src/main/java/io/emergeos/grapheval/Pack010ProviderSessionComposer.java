@@ -19,6 +19,8 @@ import io.emergeos.contracts.RunStatus;
 import java.net.Proxy;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -79,7 +81,7 @@ final class Pack010ProviderSessionComposer {
               LogLevel.OFF);
       credential = null;
       coordinator.clientCreated(
-          egressAuthority, clock.instant());
+          egressAuthority, canonicalTime(clock.instant()));
 
       credentialLease.requireFresh(
           coordinator, egressAuthority, clock);
@@ -103,7 +105,7 @@ final class Pack010ProviderSessionComposer {
                   clock,
                   outcomeLedger));
       coordinator.modelCreated(
-          egressAuthority, clock.instant());
+          egressAuthority, canonicalTime(clock.instant()));
       credentialLease.requireFresh(
           coordinator, egressAuthority, clock);
       modelSession =
@@ -173,7 +175,7 @@ final class Pack010ProviderSessionComposer {
               invocation.requestOrdinal(),
               invocation.requestHash(),
               invocation.modelRequested()),
-          clock.instant());
+          canonicalTime(clock.instant()));
     };
   }
 
@@ -239,7 +241,9 @@ final class Pack010ProviderSessionComposer {
               receipt.totalTokens(),
               receipt.observedCostUsd());
       coordinator.providerAttributed(
-          egressAuthority, attribution, clock.instant());
+          egressAuthority,
+          attribution,
+          canonicalTime(clock.instant()));
       if (outcomeLedger != null) {
         outcomeLedger.record(attribution);
       }
@@ -298,10 +302,12 @@ final class Pack010ProviderSessionComposer {
             egressAuthority,
             attribution,
             GraphAttributedFailureCode.require(outcome.failureReason()),
-            clock.instant());
+            canonicalTime(clock.instant()));
       } else {
         coordinator.providerAttributed(
-            egressAuthority, attribution, clock.instant());
+            egressAuthority,
+            attribution,
+            canonicalTime(clock.instant()));
       }
       outcomeLedger.record(attribution);
     };
@@ -519,6 +525,11 @@ final class Pack010ProviderSessionComposer {
         // The original composition failure remains authoritative.
       }
     }
+  }
+
+  private static Instant canonicalTime(Instant instant) {
+    return Objects.requireNonNull(instant, "instant")
+        .truncatedTo(ChronoUnit.MICROS);
   }
 
   static final class ProviderSession implements AutoCloseable {
