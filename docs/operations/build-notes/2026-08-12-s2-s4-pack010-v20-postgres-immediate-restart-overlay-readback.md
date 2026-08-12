@@ -22,13 +22,17 @@ v20HistoricalProductionSchemaProvisioningSourceDeltaAtSliceFreeze=0
 v20HistoricalShippingCapabilityPayloadDeltaAtSliceFreeze=0
 currentSchemaProvisioningDelta=0
 postV20PortabilityAndRaceProductionFiles=4
-postV20PortabilityAndRaceTestFiles=7
+postV20PortabilityAndRaceTestFiles=16
+postV20PortabilityAndRaceCodeTestFiles=20
+postV20PortabilityAndRaceAggregate=147f428084c8e0e97af8c22f7153e94e6d9ea254f174c82da2ef0a8660c8e471
+providerSessionPrecisionTestFiles=9
+providerSessionPrecisionAggregate=2881cc9fb0df725518f2f61225d1c42de35ff2701698a8cef5b5dc4fb82df3c9
 historicalV19Aggregate=b33071c583d05d1ccd8f1c9ff4bf78e258a654a3b6a1fe32965de73163480fc2
 postRebasePrePortabilityV19PathRecompute=610a958d1a4875b781857cae6f5ae2ede710f9ced8691432def6d8d8489218cf
-currentV19PathRecompute=f58fab301cc3960b6b85ee1e7ed5776dace1125ca35f2eab31689d3fe0b0d5bc
+currentV19PathRecompute=6ac6d56769545b12f8c9c4fd303e508bc8460dbfddb72271a47a028ef4d450e6
 orderedV20SliceFiles=29
 postRebasePrePortabilityOrderedV20SliceAggregate=0d8f3886d4bb6cf6abcab3c046caa64556eed9d39cacb8b0e556581d574704ee
-orderedV20SliceAggregate=4ce5524488fa3a72bbaaadebbd56f8a51445e022215d5b395f5db337c4613352
+orderedV20SliceAggregate=891e43dc5d7fcfdb535dc1baf4a9579f97ba05212f5c18fe05e0db80ed6e5d73
 schemaVersion=16
 freshVerifierJvms=2
 postgresRestart=PG_CTL_IMMEDIATE_SAME_CONTAINER_SAME_PGDATA
@@ -47,14 +51,15 @@ legacySequence14=0
 overlayRows=4
 shippingLiveRoute=DISABLED
 rootClean=GREEN_160_XML_866_TESTS_0
-remoteLinuxCi=RERUN_PENDING_AFTER_SESSION_INTENT_EXPIRY_FIX
-v20SourceSha256=160a9c26a29ebaa94a78116d282f419539a721ae05a355e77df7b89a2108a547
-v20TestClassAggregate=b64ad3fc35eff9a2acd9efbe4ad41abbf07469c87c637463d311b4310f4caf2b
+remoteLinuxCiObserved=RED_RUN_31609813991_HEAD_39B6267_GRAPH_EVAL_4_ERRORS
+remoteLinuxCiAfterFix=NOT_RUN
+v20SourceSha256=cf0d12081fdfb50a911b576e4ff24ff2ef61e94b0b6b35e3ee4ecc71373eaa71
+v20TestClassAggregate=b5c6e1ece85f808f7e7e1b65b24865582ae4f2dbab512e8fd193083e0d272591
 v19ShippingPayloadParity=5cb31fde30537fef35f2732d0bf57b87356693cf2e540b319906353f14c413fa
-coreJar=aa30e8c38e2fe463bc097b2e3aca147978df6eecf33d40aed846e02ce76eefe0
-postgresJar=d26ef652d64576c035318cb2c165d99e1b4af7c2a4499b82f7c35a80e1f55b78
-graphEvalJar=e7214b3717f179d34a058cb25c1a058c3757b31514701459e1dbd1f8798854fd
-shippingAppJar=acfa33159d673066b102bb7ce59ef227f6a5e2879d5a3b3ed3d8054fffe0b9e2
+coreJar=eab8c7bcbee097c497ef5e7151d823fee67315877e819a99bb31a30086209ddb
+postgresJar=e65efd9b59a9d6a80b88726d3209cce0091b414fe17daa0f9bc50630052a5d8f
+graphEvalJar=2afa3d668cd7d2452bcc3191d38d8a733a6bad3c2fc5beab64d608276d08e85e
+shippingAppJar=89ad3a5250c36895e5dccb73fa28f4226af78b7214c3bcce890920d5694a9b44
 ```
 
 ## Acceptance Red → Green
@@ -101,10 +106,10 @@ shippingAppJar=acfa33159d673066b102bb7ce59ef227f6a5e2879d5a3b3ed3d8054fffe0b9e2
 PACK010_V20_OVERLAY_RESTART version=1 fixture=V13_V15_V18_ATTRIBUTED postgresRestart=IMMEDIATE restartExit=0 keepalivePid1=true containerIdentity=SAME systemIdentifier=SAME postmasterChanged=true oldSentinel=DISCONNECTED newConnection=READY freshVerifierJvms=2 verifierPidsDistinct=true verdict=ATTRIBUTED durableReceiptIdentity=UNCHANGED publicTableJsonXmin=UNCHANGED legacySequence=13 legacySequence14=0 overlayRows=4 postRestartMigrateProvisionFixture=0 shippingLiveRoute=DISABLED
 ```
 
-focused source SHA-256：
-`160a9c26a29ebaa94a78116d282f419539a721ae05a355e77df7b89a2108a547`。
+focused source当前SHA-256：
+`cf0d12081fdfb50a911b576e4ff24ff2ef61e94b0b6b35e3ee4ecc71373eaa71`。
 该值只定位本次focused test source，不是最终ordered slice aggregate。8个top/nested test class的
-ordered aggregate为`b64ad3fc35eff9a2acd9efbe4ad41abbf07469c87c637463d311b4310f4caf2b`；它们只存在于
+当前ordered aggregate为`b5c6e1ece85f808f7e7e1b65b24865582ae4f2dbab512e8fd193083e0d272591`；它们只存在于
 `target/test-classes`，production classes、graph module JAR与shipping App JAR中的V20 class计数均为0。
 
 ## Root clean、artifact与ordered slice
@@ -122,10 +127,10 @@ V20 restart IT为`1/0`，V19 Acceptance为`3/0`，provider bytecode Gate为`14/0
 最终whole-artifact SHA-256：
 
 ```text
-core=aa30e8c38e2fe463bc097b2e3aca147978df6eecf33d40aed846e02ce76eefe0
-postgres=d26ef652d64576c035318cb2c165d99e1b4af7c2a4499b82f7c35a80e1f55b78
-graphEval=e7214b3717f179d34a058cb25c1a058c3757b31514701459e1dbd1f8798854fd
-shippingApp=acfa33159d673066b102bb7ce59ef227f6a5e2879d5a3b3ed3d8054fffe0b9e2
+core=eab8c7bcbee097c497ef5e7151d823fee67315877e819a99bb31a30086209ddb
+postgres=e65efd9b59a9d6a80b88726d3209cce0091b414fe17daa0f9bc50630052a5d8f
+graphEval=2afa3d668cd7d2452bcc3191d38d8a733a6bad3c2fc5beab64d608276d08e85e
+shippingApp=89ad3a5250c36895e5dccb73fa28f4226af78b7214c3bcce890920d5694a9b44
 ```
 
 whole-JAR值因本次clean重新生成archive而变化；项目没有冻结reproducible ZIP timestamp，因此不把
@@ -138,7 +143,7 @@ ordered V20 slice沿用V19固定28路径与顺序，并在末尾追加V20 test s
 `shasum -a 256 <path>`，将29行完整标准输出逐字拼接后再次执行`shasum -a 256`，得到：
 
 ```text
-4ce5524488fa3a72bbaaadebbd56f8a51445e022215d5b395f5db337c4613352
+891e43dc5d7fcfdb535dc1baf4a9579f97ba05212f5c18fe05e0db80ed6e5d73
 ```
 
 本Build Note与living ExecPlan排除在aggregate之外以避免自引用。V19签收时历史aggregate仍为
@@ -147,8 +152,8 @@ V20导航、rebase合入公开发布导航并将开源治理ADR无歧义重编�
 尾随空格与多余EOF空行后的pre-portability重算为
 `610a958d1a4875b781857cae6f5ae2ede710f9ced8691432def6d8d8489218cf`。post-V20 bytecode Gate把
 timestamp canonicalization精确绑定到durable sinks后，当前树按同一manifest重算为
-`f58fab301cc3960b6b85ee1e7ed5776dace1125ca35f2eab31689d3fe0b0d5bc`；对应29-path当前值为
-`4ce5524488fa3a72bbaaadebbd56f8a51445e022215d5b395f5db337c4613352`。这些值分别代表历史V19冻结、
+`6ac6d56769545b12f8c9c4fd303e508bc8460dbfddb72271a47a028ef4d450e6`；对应29-path当前值为
+`891e43dc5d7fcfdb535dc1baf4a9579f97ba05212f5c18fe05e0db80ed6e5d73`。这些值分别代表历史V19冻结、
 post-rebase pre-portability与当前bytes，不互相覆盖，也不伪称zero-delta。
 
 ## Post-V20 CI portability与root race recovery
@@ -165,6 +170,15 @@ post-rebase pre-portability与当前bytes，不互相覆盖，也不伪称zero-d
   `REJECTED owner capability expired`的顺序断言；row=1、seq7、restart replay fence均未放宽。修复后本地
   focused连续3次`1/0`、完整Store suite `61/0`及本次root clean均Green；新的Linux CI在本回执冻结时仍待重跑，
   因此不把本地Green写成remote CI Green；
+- 第二轮Linux CI（run `31609813991`，head `39b6267`）已越过Store与API模块，却在4个graph-eval
+  Acceptance首次写provider session intent时触发同一exact read-back fence：16个test fixture调用点把host
+  nanosecond `Instant.now() + 5m`送入test-only bridge，PostgreSQL `timestamptz`回读为microsecond后与参与hash的
+  原始expiry不再逐字相等，production store因此正确回滚。确定性`+1ns` Acceptance先证明旧bridge Red；minimum
+  recovery随后让bridge在打开store/事务前以固定消息拒绝sub-micro输入并证明row=0，让16个positive callers显式
+  canonicalize到`MICROS`，默认synthetic binding同步收口，而两个原本取自数据库`clock_timestamp()`的调用保持
+  不变。production store的hash/read-back equality、TTL与replay fence均未修改。focused 4个Acceptance为`4/0`，
+  覆盖全部18个bridge callsites的consumer suite为`19/0`，最终root clean为`160 XML / 866 tests / 0`；新的Linux CI仍待本次push后重跑，
+  不能把本地证据表述成remote Green；
 - 同构的dormant production缺口在`Pack010ProviderCredentialBroker`一个durable sink与
   `Pack010ProviderSessionComposer`六个durable sinks精确canonicalize；`CredentialLease.requireFresh`
   继续使用raw clock，避免改变expiry判断。Composer由nanosecond unit与真实PostgreSQL/restart行为覆盖；
@@ -177,11 +191,14 @@ post-rebase pre-portability与当前bytes，不互相覆盖，也不伪称zero-d
   证明竞争writer稳定拒绝、释放后winner为FINAL；packaged race没有放宽`REPORT_FILE_UNSAFE` allowlist；
 - 孤立claim若恰在bounded读取期间发生size/identity变化，会保守降为一次non-authoritative UNKNOWN；它不会
   获得publish authority，第二个`save`仍固定拒绝。该分支未被误写成系统能区分合法增长与hostile replacement；
-- 当前delta为4个production source与7个test source；schema/provisioning、App route、provider network、
-  billing与Live均没有变化。下面Files节按固定词典序列出11个post-V20 code/test路径；逐路径执行
-  `shasum -a 256 <path>`，将11行完整标准输出逐字拼接后再次SHA-256，得到
-  `5a03d6d099ece85a2766dbf311b2c672f464175d94aeaacd5ed8f75cb67758fa`。Build Note与living ExecPlan
-  排除以避免自引用；同算法对offline三文件subset得到
+- 当前delta为4个production source与16个test source；schema/provisioning、App route、provider network、
+  billing与Live均没有变化。下面Files节按固定词典序列出20个post-V20 code/test路径；逐路径执行
+  `shasum -a 256 <path>`，将20行完整标准输出逐字拼接后再次SHA-256，得到
+  `147f428084c8e0e97af8c22f7153e94e6d9ea254f174c82da2ef0a8660c8e471`。其中本轮9个test-only
+  provider-session precision路径按同一算法得到
+  `2881cc9fb0df725518f2f61225d1c42de35ff2701698a8cef5b5dc4fb82df3c9`；此前11-path恢复在本轮前的
+  历史值为`5a03d6d099ece85a2766dbf311b2c672f464175d94aeaacd5ed8f75cb67758fa`。Build Note与living ExecPlan
+  排除以避免自引用；同算法对offline三文件subset仍得到
   `fc552583b8207750f04704c8805f622badec6c256f870591df4c2cce19b79e74`。
 
 ## Claim boundary
@@ -217,11 +234,20 @@ Post-V20 portability/race recovery code/test source（固定词典序）：
 - `adapters/postgres/src/test/java/io/emergeos/adapters/postgres/PostgresGraphAttemptStoreTest.java`
 - `apps/graph-eval-runner/src/main/java/io/emergeos/grapheval/Pack010ProviderCredentialBroker.java`
 - `apps/graph-eval-runner/src/main/java/io/emergeos/grapheval/Pack010ProviderSessionComposer.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/adapters/postgres/Pack010GraphTerminalStoreBridge.java`
 - `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/GraphEvalBytecodeGate.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010DurableAttributedFailureResumeProcessIT.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010DurableFailureTerminalResumeProcessIT.java`
 - `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010DurableGraphTerminalProcessIT.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ExactPicoOverlayReaderAcceptanceIT.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ExactPicoOverlayTxAAcceptanceTest.java`
 - `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ExactProviderAttributionPostgresIT.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ExactTxARequirementAcceptanceTest.java`
 - `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ProviderCapabilityBytecodeGateTest.java`
 - `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ProviderSessionEffectOrderingTest.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ProviderValidationAttestationAcceptanceTest.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010ProviderValidationAttestationProcessIT.java`
+- `apps/graph-eval-runner/src/test/java/io/emergeos/grapheval/Pack010V20ExactPicoOverlayReaderPostgresRestartIT.java`
 - `apps/offline-harness-runner/src/main/java/io/emergeos/offlineharness/OfflineComparisonPersistenceObserver.java`
 - `apps/offline-harness-runner/src/main/java/io/emergeos/offlineharness/PosixOfflineComparisonReportStore.java`
 - `apps/offline-harness-runner/src/test/java/io/emergeos/offlineharness/PosixOfflineComparisonReportStoreTest.java`

@@ -35,6 +35,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -513,7 +514,9 @@ class Pack010ProviderValidationAttestationProcessIT {
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.values()[repetition - 1],
         Pack010GraphTerminalFixture.catalogIntent(repetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     PostgresProviderValidationAttestor.open(attestorDataSource())
         .requireValidation(
             manifest,

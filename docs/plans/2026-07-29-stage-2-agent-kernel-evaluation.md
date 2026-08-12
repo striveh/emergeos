@@ -25,7 +25,9 @@ stage/commit method、App consumer与shipping signer仍为0，configuration/runt
 V20冻结时只以test-only独立keepalive Testcontainer证明同container/system identifier/PGDATA上的PostgreSQL
 immediate process restart后，另一fresh packaged JVM可重验同一`Attributed` receipt；当时production delta为0。
 其后Linux CI真实TTY启用所暴露的PostgreSQL microsecond portability缺口已在两个dormant production
-consumer的7个durable sinks与3个test-harness callsites精确canonicalize，raw expiry clock保持不变；最终root
+consumer的7个durable sinks与3个TTY test-harness callsites精确canonicalize，raw expiry clock保持不变；
+第二轮Linux CI又暴露test-only provider-session expiry fixture的host nanosecond输入，bridge现于事务前fail fast，
+16个positive callers与默认synthetic binding显式对齐PostgreSQL `MICROS`，production exact equality/hash不变；最终root
 回归发现的offline claim创建窗口也已确定性收口，真实unsafe metadata仍fail closed。App consumer与Live仍为0/Red。
 PostgreSQL不验证Ed25519，credential/attestor caller与V19 reader role/process仍在TCB；TX-B/TX-C、host/
 power/storage/HA fault、connection-loss/reconcile/race、live、billing与pre-egress均未关闭。完整live smoke、stochastic Harness、真实 Seed与
@@ -1812,7 +1814,11 @@ Pack010 progress：
     变化只会保守UNKNOWN且不能获得publish authority。timestamp修复后的首轮Linux CI又暴露
     `session-intent-expired`的1秒test-only窗口会在durable intent落库前先过期；该场景现使用3秒、仍等待
     `TTL + 150ms`，并强制`PROVIDER_SESSION_INTENT_DURABLE`先于精确expiry rejection。focused连续3次、
-    Store suite `61/0`与root clean均Green；新的Linux CI仍待重跑，未被本地回执冒充Green。当前只扩大本地Engineering证据，
+    Store suite `61/0`与root clean均Green。随后Linux run `31609813991`（head `39b6267`）在4个graph-eval
+    Acceptance中揭示test-only bridge收到sub-micro expiry并被production exact read-back正确回滚；确定性`+1ns`
+    Red后，bridge改为事务前固定fail-fast，16个positive host-clock callers与默认synthetic binding均显式截断到
+    `MICROS`，两个DB-clock callers保持不变。focused Acceptance `4/0`、全部bridge consumer `19/0`与最终
+    `160 XML / 866 tests / 0` root clean已Green；新的Linux CI仍待本次push后重跑，未被本地回执冒充Green。当前只扩大本地Engineering证据，
     没有App wiring、provider egress或Authority/Live上调；
   - [ ] DeepSeek live PASS与durable multi-provider TX-A：本轮唯一真实请求在intermediate bytes上
     fail closed为`RESPONSE_METADATA_MISMATCH`，没有retry/redirect或第二请求，具体不兼容字段、billing与

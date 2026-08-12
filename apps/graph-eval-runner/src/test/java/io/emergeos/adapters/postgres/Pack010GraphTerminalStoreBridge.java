@@ -22,6 +22,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -145,13 +146,15 @@ public final class Pack010GraphTerminalStoreBridge {
       OwnerTtyGraphAuthority.Pack010Revision revision,
       GraphProviderIntent firstRequest,
       Instant expiresAt) {
+    Instant exactExpiresAt =
+        requireDatabaseInstant(expiresAt, "expiresAt");
     PostgresGraphAttemptStore store = openWriter(dataSource);
     PostgresGraphAttemptStore.ProviderSessionClaim claim =
         store.claimProviderSessionIntent(
             manifest,
             revision.name().toLowerCase(java.util.Locale.ROOT),
             firstRequest,
-            expiresAt,
+            exactExpiresAt,
             store.freezeAuthorityIdentity());
     return new ProviderSessionIntentReceipt(
         claim.cursor().lastSequence(),
@@ -165,6 +168,16 @@ public final class Pack010GraphTerminalStoreBridge {
       String cursorHeadHash,
       String intentHash,
       Instant expiresAt) {}
+
+  private static Instant requireDatabaseInstant(
+      Instant instant, String name) {
+    Objects.requireNonNull(instant, name);
+    if (!instant.equals(instant.truncatedTo(ChronoUnit.MICROS))) {
+      throw new IllegalArgumentException(
+          name + " exceeds PostgreSQL microsecond precision");
+    }
+    return instant;
+  }
 
   public static GraphAttemptCursor recordAttributedFailure(
       DataSource dataSource,
@@ -208,7 +221,9 @@ public final class Pack010GraphTerminalStoreBridge {
         child,
         revision,
         egressStep,
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
   }
 
   public static SyntheticTerminalBinding syntheticTerminalBinding(

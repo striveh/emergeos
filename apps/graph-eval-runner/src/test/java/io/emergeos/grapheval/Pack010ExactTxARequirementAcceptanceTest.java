@@ -1,6 +1,7 @@
 package io.emergeos.grapheval;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -34,6 +35,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.HexFormat;
@@ -114,12 +116,46 @@ class Pack010ExactTxARequirementAcceptanceTest {
     GraphAttemptSnapshot sequence7 =
         Pack010GraphTerminalFixture.prepareCatalogEgressPrefixOnly(
             admin, writer, repetition);
+    Instant nonDatabaseExpiry =
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5))
+            .plusNanos(1);
+    IllegalArgumentException precisionFailure =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                Pack010GraphTerminalStoreBridge.claimProviderSessionIntent(
+                    writerDataSource,
+                    manifest,
+                    OwnerTtyGraphAuthority.Pack010Revision.R1,
+                    Pack010GraphTerminalFixture.catalogIntent(repetition, 1),
+                    nonDatabaseExpiry));
+    assertEquals(
+        "expiresAt exceeds PostgreSQL microsecond precision",
+        precisionFailure.getMessage());
+    assertEquals(
+        0L,
+        JdbcClient.create(admin)
+            .sql(
+                """
+                SELECT count(*)
+                FROM agent_graph_provider_session_intents
+                WHERE principal_id = :principalId
+                  AND attempt_id = :attemptId
+                """)
+            .param("principalId", manifest.principalId())
+            .param("attemptId", manifest.attemptId())
+            .query(Long.class)
+            .single());
     Pack010GraphTerminalStoreBridge.claimProviderSessionIntent(
         writerDataSource,
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(repetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     GraphAttemptSnapshot sequence13 =
         Pack010GraphTerminalFixture.advanceCatalogEgressToTxAPrefixOnly(
             writer, sequence7, repetition);
@@ -198,7 +234,9 @@ class Pack010ExactTxARequirementAcceptanceTest {
         v13Manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R2,
         Pack010GraphTerminalFixture.catalogIntent(v13Repetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
 
     String keyId = "pack010-v15-v13-test-key";
     KeyPair keyPair =
@@ -353,7 +391,9 @@ class Pack010ExactTxARequirementAcceptanceTest {
         OwnerTtyGraphAuthority.Pack010Revision.R3,
         Pack010GraphTerminalFixture.catalogIntent(
             commitFirstRepetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     attestor.requireValidation(
         commitFirstManifest,
         commitFirstSequence7.cursor(),

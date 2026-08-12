@@ -32,6 +32,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -111,7 +112,9 @@ class Pack010DurableFailureTerminalResumeProcessIT {
           manifest,
           OwnerTtyGraphAuthority.Pack010Revision.R1,
           Pack010GraphTerminalFixture.catalogIntent(repetition, 1),
-          Instant.now().plus(Duration.ofMinutes(5)));
+          Instant.now()
+              .truncatedTo(ChronoUnit.MICROS)
+              .plus(Duration.ofMinutes(5)));
       GraphAttemptSnapshot sequence13 =
           Pack010GraphTerminalFixture.advanceCatalogEgressToTxAPrefixOnly(
               writer, sequence7, repetition);

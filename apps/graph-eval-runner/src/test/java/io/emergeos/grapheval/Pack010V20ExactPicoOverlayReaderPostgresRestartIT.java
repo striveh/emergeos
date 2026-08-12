@@ -35,6 +35,7 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -133,7 +134,9 @@ class Pack010V20ExactPicoOverlayReaderPostgresRestartIT {
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(REPETITION, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     String policyHash =
         PostgresProviderValidationAttestor.open(
                 dataSource(V13_ROLE, v13Password))

@@ -55,6 +55,7 @@ import java.security.MessageDigest;
 import java.security.Signature;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -128,7 +129,9 @@ class Pack010ProviderValidationAttestationAcceptanceTest {
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(repetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     String keyId = "pack010-v13-test-key";
     KeyPair keyPair =
         KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
@@ -352,7 +355,9 @@ class Pack010ProviderValidationAttestationAcceptanceTest {
         signedManifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         reviewedFirstIntent,
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     attestor.requireValidation(
         signedManifest,
         signedSequence7.cursor(),
@@ -633,7 +638,9 @@ class Pack010ProviderValidationAttestationAcceptanceTest {
         tamperManifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(tamperRepetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     attestor.requireValidation(
         tamperManifest,
         tamperSequence7.cursor(),

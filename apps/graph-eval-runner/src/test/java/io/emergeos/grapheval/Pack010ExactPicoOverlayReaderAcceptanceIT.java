@@ -34,6 +34,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -120,7 +121,9 @@ class Pack010ExactPicoOverlayReaderAcceptanceIT {
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(1, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     GraphAttemptSnapshot sequence13 =
         Pack010GraphTerminalFixture.advanceCatalogEgressToTxAPrefixOnly(
             writer, sequence7, 1);
@@ -183,7 +186,9 @@ class Pack010ExactPicoOverlayReaderAcceptanceIT {
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(2, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     GraphAttemptSnapshot sequence13 =
         Pack010GraphTerminalFixture.advanceCatalogEgressToTxAPrefixOnly(
             writer, sequence7, 2);
@@ -371,7 +376,9 @@ class Pack010ExactPicoOverlayReaderAcceptanceIT {
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(repetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     String policyHash =
         PostgresProviderValidationAttestor.open(
                 dataSource(V13_ROLE, v13Password))

@@ -42,6 +42,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -191,7 +192,9 @@ class Pack010ExactPicoOverlayTxAAcceptanceTest {
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(repetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
 
     KeyPair keyPair =
         KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
@@ -543,7 +546,9 @@ class Pack010ExactPicoOverlayTxAAcceptanceTest {
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(repetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
 
     KeyPair keyPair =
         KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
@@ -2241,7 +2246,9 @@ class Pack010ExactPicoOverlayTxAAcceptanceTest {
         manifest,
         OwnerTtyGraphAuthority.Pack010Revision.R1,
         Pack010GraphTerminalFixture.catalogIntent(repetition, 1),
-        Instant.now().plus(Duration.ofMinutes(5)));
+        Instant.now()
+            .truncatedTo(ChronoUnit.MICROS)
+            .plus(Duration.ofMinutes(5)));
     String policyHash =
         v13Attestor.requireValidation(
             manifest,
