@@ -2,7 +2,8 @@
 
 状态：进行中；S1、S2 工程完成，S3 protocol adapter、isolated synthetic Eval Runner、
 本地 attempt durability 与 terminal record create-only repair 工程切片已通过；
-live-provider smoke 尚未执行。S4 已完成
+live-provider PASS 尚未取得；曾有一次不可独立复现的bounded intermediate request在
+`RESPONSE_METADATA_MISMATCH`处fail closed。S4 已完成
 首个 deterministic Verifier comparison、canonical durable report、packaged
 multi-writer/process-kill 与 fresh-JVM independent replay 工程切片，并完成首个
 Tool arguments pre-dispatch fault及 read-only Tool post-dispatch deadline fault。
@@ -16,8 +17,16 @@ PostgreSQL V7 canonical graph attempt、provider-accepted writer强杀、两个 
 verifier、least-authority + 完整 writer replay与 executable architecture Gate；
 同一 loopback provider最终 request count为 `1`，billing truth保持 `UNKNOWN`。
 Pack009 shipping execute/DB verify仍禁用，也没有 real TTY/key/provider result。
-完整 terminal graph、live smoke、stochastic Harness、真实 Seed 与用户价值 Gate
-尚未完成。
+Pack010当前已推进到V20 test-only PostgreSQL immediate-restart overlay readback focused Gate：V16独立exact-pico
+overlay head14不改写legacy head13；V16冻结时production verifier/API为0，V17新增未接线的
+production-source verifier primitive，V18新增单一typed `complete` adapter，V19再新增专属13表SELECT-only
+role与四态reader，在单一RR/RO snapshot独立重算V13-V16 canonical closure和Ed25519。public Java raw
+stage/commit method、App consumer与shipping signer仍为0，configuration/runtime仍未证明，Authority/Live继续Red。
+V20只以test-only独立keepalive Testcontainer证明同container/system identifier/PGDATA上的PostgreSQL
+immediate process restart后，另一fresh packaged JVM可重验同一`Attributed` receipt；production delta为0。
+PostgreSQL不验证Ed25519，credential/attestor caller与V19 reader role/process仍在TCB；TX-B/TX-C、host/
+power/storage/HA fault、connection-loss/reconcile/race、live、billing与pre-egress均未关闭。完整live smoke、stochastic Harness、真实 Seed与
+用户价值 Gate尚未完成。
 
 Owner：项目所有者 + main Codex agent
 
@@ -1404,3 +1413,420 @@ Pack009 evidence boundary：
 - opaque typestate目前是 composition-level约束，尚不是 library-level不可伪造
   authority；任何 product execute route开放前必须进一步收口 public Store mutation
   与 console capability。
+
+### S4 F6 · Pack010 attributed terminal graph / shared-candidate Harness · 2026-07-31
+
+- Change class：`R`。本切片把 Pack009 的 durable provider intent 扩展为完整 attributed
+  terminal graph，并引入 shared-candidate Harness。继续使用本 living ExecPlan；不为
+  implementation 复制第二份事实来源。
+- Architecture decision：
+  [RFC-0007](../rfcs/0007-attributed-terminal-graph-and-shared-candidate-harness.md)
+  与
+  [ADR-0011](../architecture/decisions/0011-attributed-terminal-graph-and-live-harness-pilot.md)
+  当前仍为 Proposed。PostgreSQL canonical truth 与
+  `HarnessEvaluationReport` 是两条独立但收敛的 Gate：Report 只能从三份 fresh verified
+  sequence-17 snapshot派生，不能写进 V8 transaction，也不能用 synthetic contract
+  golden冒充 live execution receipt。
+- First Acceptance Reds：
+  1. `PostgresGraphAttemptTerminalSurfaceTest` 证明三个 terminal Store方法仍由 port 的
+     default `UnsupportedOperationException` 掩盖，失败为
+     `expected port.isDefault() false, actual true`；
+  2. `GraphAttemptMigrationTest#freshInstallReachesV8WithExactTerminalShape` 证明 latest
+     migration仍停在 V7；
+  3. `populatedV7PrefixesUpgradeToV8WithoutTouchingLegacyRows` 已用冻结的 test-only
+     `V7GraphAttemptSqlSeeder` 构造 sequence 1/10/11，当前同样因 latest仍为 V7而 Red。
+- Migration invariant：V8只能新增 forward migration，绝不修改 V7 bytes/checksum。
+  升级测试比较旧 attempt/binding/event/head/Run 的 JSON、hash、timestamp、`xmin` 与
+  Flyway 1–7 history；新 event列必须保持 NULL，新 terminal tables必须为空。
+- PostgreSQL Green target：
+  `TX-A attribution`、`TX-B child terminal`、`TX-C parent terminal + seal` 三个 semantic
+  transaction；sequence 15可独立 durable，16只能存在于 TX-C 内部，17才是 sealed
+  truth；fresh repeatable-read reader重建 exact attribution/Candidate/Run/Bundle/
+  WorkerResult/Artifact/terminal binding/seal。
+- Fault/concurrency target：每个 statement boundary 的真实 process-kill/restart、
+  child-terminal recovery、两个 JVM same-cursor恰好一个 winner、generic
+  `AgentRunStore`越权 terminalization拒绝、second seal/post-seal append/update/delete
+  拒绝，以及 self-consistent tamper fail closed。
+- Contract/Harness target：`HarnessCandidateEnvelope` 与 Core terminal pure invariants已进入
+  focused Green；下一步冻结 `HarnessEvaluationReport 1.0` Java/Schema/Node golden、H0/H1
+  deterministic evaluator和 complete-only reducer，所有 evaluator effects必须精确为 0。
+- Authority/Live boundary：owner real-TTY facade、r1/r2/r3 predecessor claim、
+  least-privilege V9 role/ACL semantic transaction与 packaged-bytecode successor
+  kill/two-JVM已有本地 focused evidence；dormant exact credential broker/session composer与
+  loopback failure ordering sentinel也已 Green；owner-approved cursor→Coordinator/egress同进程
+  handoff、independent provisioning bootstrap及 dormant fixed-role V9 writer composition也已有
+  focused evidence；exact provider response attribution与 actual success structured-final →
+  process-local opaque outcome → typed TX-B command也已有 focused evidence；actual PUBLIC loopback
+  outcome已经同一 capability链完成 exact PostgreSQL TX-B与 restart reconciliation，但仍是
+  test-only harness，不是 shipping route。successful seq15→strict parent aggregate review→
+  process-local opaque typed TX-C command→exact V9 TX-C也已取得 focused implementation/process
+  evidence；Owner facade自行read-back并绑定 durable seq15，forged/no-burn、wrong runtime、
+  two-command concurrency与PostgreSQL restart reconciliation均已覆盖。adapter-owned canonical
+  TX-B/TX-C transition也已移除production raw payload ABI，并覆盖typed drift no-burn、并发唯一胜者
+  与PostgreSQL restart reconciliation。failure terminal、forward-only durable outcome resume、
+  跨JVM resume与 shipping App route仍未收口。
+  Authority/Live Gate Green且独立 review
+  `P0=0、P1=0` 之前，shipping execute保持 disabled；任何 Green均不自动授权真实模型调用。
+
+Pack010 progress：
+
+- [x] Candidate Java/JSON Schema/semantic fixtures/Chinese + astral Unicode golden与
+  content-redacted logging focused Green；Candidate已绑定 exact request-2 response hash、
+  child structured-final proposal hash和 durable obtained Evidence；
+- [x] Core exact two intent/attribution、15/16/17、usage、Candidate/WorkerResult/Artifact/
+  terminal seal pure invariant focused Green；
+- [x] public read-only `GraphAttemptReader` surface与 Pack009 verifier capability narrowing
+  focused Green；
+- [x] terminal Store surface、fresh V8、populated V7 1/10/11 三条 runnable Acceptance Red；
+- [x] PostgreSQL V8 migration与 TX-A/TX-B/TX-C；terminal protocol的
+  `maximumProviderRequests`已由 Core与 PostgreSQL CHECK共同固定为 exact 2；
+- [x] fresh restricted terminal reader、37-point process-kill、two-JVM CAS、tamper与
+  generic Store negative；
+- [x] `HarnessEvaluationReport` contract/golden/evaluator/reducer，以及真实 PostgreSQL
+  r1/r2/r3 sequence-17 → complete-only canonical Report integration evidence；
+- [x] shipping preflight/packaging、root `verify` 11-module Gate与最终 read-only review
+  `P0=0、P1=0`；execute继续 disabled；
+- [x] production `OwnerTtyGraphAuthority`、server-owned R1/R2/R3 surface、private
+  local permit object one-winner、local real-PTY no/piped/wrong/expired/replayed matrix，
+  以及 r1→r2→r3 predecessor fresh verification + claim同 transaction；successor claim另有
+  test-classpath hard-kill与 two-JVM one-winner evidence；
+- [x] GUC live-safety Acceptance已转为 executable evidence：same writer raw SQL可在
+  transaction内伪造 V8 custom GUC并通过 terminal Run UPDATE trigger，所以明确保持
+  Authority/Live Gate Red，未接入 shipping execute；
+- [x] forward-only V9 role/ACL split与 exact TX-B/TX-C semantic function；generic writer、
+  executor raw GUC/DML、ACL/membership/owner/trigger drift matrix与三路 actual post-fix review
+  focused Green；独立 provisioning artifact现已包含 dedicated DB全 grantee allowlist与
+  single-transaction bootstrap + pure audit；
+- [x] test-only shell加载 shipping fat-JAR production Store/Catalog的 successor
+  `AFTER_HEAD_UPDATE` kill rollback与两个 fresh JVM one-winner；清空 ambient env、dynamic
+  ephemeral credential只经 bounded stdin frame；shipping CLI仍无 execute route；
+- [x] shipping artifact内 dormant exact credential broker/provider session composer；credential
+  lease绑定 revision + exact coordinator/egress identity并 single-use，compiled order固定 local
+  permit burn → durable credential marker → env read，以及 client/model markers → exact intent；
+  descriptor-exact directory/shaded-JAR Gate同时拒绝 indirect reflection、ConstantDynamic与
+  unreviewed InvokeDynamic bootstrap；shipping Main incoming refs仍为0；
+- [x] 本机 loopback effect-ordering sentinel：durable intent persistence failure时 HTTP request
+  exact 0；一次 PUBLIC synthetic response后 attribution因缺少完整 surface而 fail-closed，
+  replay不增加 HTTP或 graph effect；该项未经过 production base URL，也不等于真实 provider；
+- [x] owner-approved cursor→Coordinator同进程线性 capability handoff：exact caller/private
+  permit origin、verified sequence-2 cursor、Coordinator/egress binding、DB-time expiry、local
+  race/replay与 approval/adoption窗口 kill后 fresh-process fail-closed；两份 attribution后又能
+  派生 exact one-shot terminal capability，wrong/replay/concurrent/terminal-binding hard-kill后
+  restart均 fail closed；该项明确不是跨 JVM resume；
+- [x] sequence-7 durable provider-session intent：绑定 exact owner/attempt/revision/
+  Coordinator/egress/cursor/first request/expiry，claim与consume双线程各 exact one winner；
+  wrong/expired/replayed拒绝，INSERT后 commit前 hard-kill完整回滚、commit后 hard-kill可重读，
+  fresh process restart均 fail closed；compiled broker order保证 intent在 credential marker/env read/
+  client/model/session/HTTP之前，shipping Main incoming ref仍为0；
+- [x] production capability lease继续携带 exact durable intent/owner/expiry，在 key read、client
+  factory、model factory与 session open每个 effect boundary前同时做本地 Clock与 DB-time复核；
+  expiry后的动态 negative保持全部 effect counter为0；OwnerTty Coordinator固定使用
+  authority-bound Store，不再接受构造时的原始 Store；
+- [x] compose后 session继续持有同一 lease/Coordinator/egress/Clock；每次 `next`及 exact
+  pre-HTTP observer在 ordinal mutation/provider intent之前分别复核 freshness，compose后过期
+  保持 `MODEL_CREATED`、`providerIntents=0`与 HTTP effect=0；bytecode Gate固定两处调用顺序；
+- [x] 独立于 Flyway 的 production role/ACL bootstrap artifact：transactional check/apply、
+  default-deny确认、LOGIN password-null、NOLOGIN terminal owner、exact writer/executor/reader
+  ACL、幂等 read-back、全 grantee database/schema/relation/sequence/function/default ACL allowlist、
+  exact trigger topology与 drift fail-fast；V9 helper owner/signature/language/SECDEF/volatility/
+  parallel/search_path/body也纳入 pure audit；真实 PostgreSQL注入 audit failure证明 bootstrap
+  + pure audit同一 psql transaction回滚；
+- [x] dormant V9 generic-prefix/executor-terminal writer composition：verified complete
+  response hash/token attribution必须先落库，composition不暴露 generic writer并消费 exact
+  owner terminal claim；OwnerTty DB identity与 prefix/executor runtime DB exact绑定且在 capability
+  burn前验证，claim expiry与 schema-qualified semantic function在同一 SQL statement用 DB time
+  复核；cross-attempt payload、two-database
+  splice、alternating prefix/terminal DataSource与 capability replay/concurrent fail closed；runtime
+  冻结 semantic function的 transitive helper closure与 trigger `tgattr`，拒绝 startup前 definition
+  tamper、executor TEMP和 startup后 prefix TEMP/ACL drift，TX-B/TX-C各一次；PostgreSQL process
+  restart后 reconciliation保持 provider-session intent/cursor/attribution/terminal truth，且不声称
+  provider exactly-once；
+- [x] runtime OwnerTty identity必须与 exact frozen prefix direct-login identity完全一致，
+  admin/migrator/table owner不能仅凭同库 OID/server identity获得 authority；provider-session
+  cursor按数据库 SELECT row重建并与调用方 exact比对，V9复合外键绑定 canonical event；
+  provisioning/runtime audit拒绝 session-intent relation上的任何额外非 internal trigger；
+- [x] provisioning preflight/pure audit与 terminal runtime startup/每 TX共同固定全部35个 public
+  non-internal trigger的 shipping SHA-256 topology（relation/name/enabled/tgtype/columns/WHEN/args/
+  constraint/function identity）以及相同的16-helper signature/result/properties/search_path/body
+  SHA-256 closure；额外 terminal relation trigger与此前遗漏 helper body tamper均 fail closed；
+- [x] production provider exact response attribution：bounded content-decoded entity bytes
+  SHA-256、strict JSON envelope与完整 input/cached/output/reasoning/total token split先 durable，
+  再做model/limit/output semantic判定；missing/inconsistent usage fail closed；真实PostgreSQL
+  process restart、concurrent session隔离、attribution transaction fault与packaged hard-kill后
+  fresh JVM execution-slot replay均已验证，且明确不声称provider exactly-once；
+- [x] actual success structured-final → process-local opaque outcome → typed TX-B command focused
+  binding：outcome绑定 exact revision/manifest/Coordinator/egress/credential lease expiry与完整
+  attribution prefix；runtime在claim前按有序 attribution hash关闭 PostgreSQL NUMERIC scale drift，
+  校验全部 V9 relation exact keys，并通过 contract constructor重算 Candidate/WorkerResult nested
+  integrity，再绑定 terminal Run/binding/event、token/cost/model与payload hash；extra key、nested
+  evidence一致篡改、duplicate/trailing JSON都不烧毁 outcome。actual PUBLIC loopback outcome沿同一
+  owner/Coordinator/egress capability进入 exact PostgreSQL TX-B，restart后 seq15 reconciliation；
+  post-fix review继续把TX-B terminal child重建为完整 `AgentRun`、binding、event 15与sequence-15
+  `GraphAttemptSnapshot`，并把Candidate/WorkerResult/Trace/resource mirror/全部Run denormalized
+  relation exact绑定；event 15的`committed_at`由PostgreSQL生成，不再接受caller输入；
+  wrong model、usage超限、malformed final、expired/replayed/concurrent及 packaged outcome-mint
+  hard-kill均 fail closed；该项只关闭success→TX-B focused Acceptance，不表示 live；
+- [x] successful sequence 15 → strict parent aggregate review → process-local opaque typed TX-C
+  command focused binding：production App不再接受 raw `completeParentAndSeal(String)`；prepare在
+  Owner claim前冻结12个root key与全部relation row exact shape，typed重建Task/Result/Bundle/Trace/
+  ResourceBinding/parent terminal binding/event16/seal/event17；command绑定runtime owner、exact
+  terminal capability/revision/Coordinator/egress/manifest/cursor/head、两条 attribution、Candidate/
+  WorkerResult/child terminal与payload hash并one-shot。Owner claim与consume均自行read-back exact
+  durable seq15；seq14不能再仅凭内存state派生parent claim。forged/no-burn、wrong runtime、两个
+  commands并发、authority drift与PostgreSQL restart→seq17 reconciliation已Green。post-fix review
+  继续把完整 parent `AgentRun`、`ArtifactLineage`与 sequence 17 `GraphAttemptSnapshot`作为 Core
+  aggregate重建，并把全部 relation/mirror value exact绑定；event16/17的 `committed_at`由PostgreSQL
+  在同一TX-C内生成，不再接受caller输入。DB层复用37-point
+  process kill与TX-C two-JVM one-winner。该项仅为successful TX-C focused slice，不覆盖failure、
+  packaged production-composition hard-kill、adapter raw sink或跨JVM resume；
+- [x] adapter-owned canonical terminal transition：production App与public writer不再接收 raw
+  `String`/`JsonNode`/`Map`/`byte[]` payload，也不再暴露 mutable prefix Store；PostgreSQL adapter
+  以 typed `AgentRun`/Candidate/WorkerResult/ArtifactLineage和verified seq14/15 snapshot先重建
+  Core aggregate，再 mint private-constructor one-shot TX-B/TX-C transition。wrong typed truth在owner
+  claim前拒绝且不烧毁authority；child/parent并发各一个winner，PostgreSQL restart前后重建
+  seq15/17 exact truth；shipping raw executor overload保持private并只由test-only bridge验证negative；
+- [x] forward-only V10 exact provisioning pair与 attributed failure semantic authority：V9仅保留
+  historical migration，`graph_executor`对V9 function的`EXECUTE=0`；fresh V10 migration自行
+  `REVOKE EXECUTE FROM PUBLIC`，active child/parent pair固定 trusted search path、SECURITY DEFINER、
+  SHA-256 body fingerprint及全trigger/helper closure。独立 provisioning继续与Flyway分离，固定
+  terminal owner NOLOGIN、executor LOGIN NOINHERIT、generic prefix writer/restricted reader exact
+  ACL，并对unknown function、全部grantee及unsupported view/materialized-view/foreign relation
+  fail-fast。child failure只接受Core closed allowlist；parent failure只接受exact
+  `FAILED/HANDOFF_CHILD_FAILED/HANDOFF_REJECTED/CHILD_FAILED`映射。两个独立 PostgreSQL session
+  对同一canonical TX-B/TX-C payload各只有一个winner，wrong TX-C mapping整TX rollback；两次
+  PostgreSQL restart后保持seq14→15→17、无partial rows，并直接read-back durable session intent。
+  最终defensive recovery又用raw executor实际复现并关闭nested Result/Bundle failureReason与
+  successful nonnull attribution逃逸；SQLSTATE 22023绑定V10 semantic guard。directory与shipping
+  JAR negative同时冻结failure composer、runtime与writer的exact consumer/no-consumer closure；
+  post-fix review再发现adapter-package可绕过writer direct-consumer规则，最终Gate仅把四个public
+  failure writer method扩到全部first-party direct member references，并由adapter-package directory/JAR
+  negative与packaged process同时锁定；
+  独立ACL drift test也隔离了unknown terminal-owner function allowlist。
+  该项不证明跨JVM typed failure outcome resume或provider exactly-once；
+- [x] V10 defensive recovery最终root `clean verify`为11 modules、139 XML reports、801 tests、
+  0 failure/error/skipped；22-file ordered slice aggregate为
+  `aea21ca80cdfca3fe0708bf5ce9ed18e9b5331aeb48ab4467ee8d60b1098cb7e`，shipping graph-eval
+  JAR SHA-256为`9ee7fe7b02a0020b68e77d2d79f1428ccba6f6400516bf2f9cbc0fe1ce5eecd4`；
+- [x] 同一最终快照三路actual post-fix review均独立命中aggregate/JAR/139/801/0：
+  ACL/provisioning为`P0=0、P1=0、P2=0`，Acceptance/Gate为`P0=0、P1=0、P2=1`，typed
+  protocol/bytecode为`P0=0、P1=0、P2=2`，均可签收focused Engineering Green。scoped P2分别为
+  raw race诊断精度、non-app indirect reflection边界与failure claim-level cross-claim/concurrency
+  matrix；不得外推为overall `P1=0`，总控仍为`P1=3、P2=1`、Gate Red；
+- [x] forward-only V11 durable attributed failure provenance与cross-process claim fencing：
+  request-2 exact outcome判定后，attribution/event/head与closed failure sidecar在同一个PostgreSQL
+  transaction提交，rollback只能保留seq13/outcome0，commit只能形成seq14/outcome1。sidecar绑定
+  principal/attempt/manifest/revision、session intent/expiry、seq13 predecessor、seq14 cursor、ordered
+  attribution/request/response/model/failure及canonical provenance hash；fresh V11、populated V10→V11
+  history/row/`xmin` fidelity均Green；
+- [x] dedicated `emergeos_failure_resumer LOGIN NOINHERIT`只有V11 exact read/claim EXECUTE且relation
+  ACL为0；prefix writer只有record，executor仍只有V10 TX-B/TX-C pair。两个fresh packaged JVM对同一
+  version exact one winner；winner在claim commit后hard-kill，restart前too-early successor在lease内
+  被fence；PostgreSQL immediate restart后等待DB clock expiry，另一fresh JVM从version 2原子reclaim
+  到version 3。wrong manifest/
+  provenance/version、invalid lease、expired session、early/stale/replayed successor均fail closed；
+- [x] V11 resumer runtime在构造时双读冻结server/database/role identity与三个function body hash，
+  每次load/claim由Java复核frozen identity/body fingerprint，SECDEF函数在同一transaction复核
+  role/ACL/owner/properties/search_path/trigger topology；membership、relation ACL、extra EXECUTE、
+  owner、body五类post-provision drift均fail closed。最终Acceptance先用production writer生成真实
+  seq14/READY sidecar并证明baseline load；每类drift恢复后逐字段回到baseline，body canary可被raw
+  resumer读取但被frozen store按SHA拒绝。bytecode Gate同时冻结interface与concrete store dispatch，
+  adapter-package directory/shipping-JAR negative均Green；
+- [x] V11最终root `clean verify`为11 modules、141 TEST XML reports、807 tests、
+  0 failure/error/skipped；34-file ordered slice aggregate为
+  `18ae990f1fd73f391a0a044d98c62f6f6fef9e67fa6cccc6ab37d26c9beefc0c`，shipping graph-eval
+  app JAR SHA-256为`e5b8b27a0e93355ad8e894fa1742c38db7d1521fdcaa2b0fba91c18f074af051`；
+- [x] 同一V11最终快照三路actual post-fix review均独立命中aggregate/JAR/141/807/0：
+  Acceptance/process与ACL/provisioning均为`P0=0、P1=0、P2=0`，typed protocol/bytecode为
+  `P0=0、P1=0、P2=2`，可签收focused Engineering Green。scoped P2是non-app reflection/
+  MethodHandles及外部未扫描consumer的defense-in-depth边界，以及没有第二套provenance oracle/
+  六路runtime effect counter；不得外推overall Gate；
+- [x] 上一轮successful TX-B/TX-C与A/B/C根级 `clean verify`独占重建测试报告：
+  11 modules、137 XML reports、790 testcases、
+  0 failure/error/skipped；并发 focused build污染的首次结果已丢弃，最终快照全程没有第二个
+  Maven writer；
+- [x] 上一轮A/B/C第三版13-file frozen aggregate
+  `32596e034dc40694fa7d03a3788eb2adf7832163703e153c35f7b3e045572b9b`已完成三路
+  actual post-fix review：focused A、B/C均P0/P1/P2=0；不得外推，overall Authority/Live仍按
+  总控账本P1=3/P2=1、Gate Red；
+- [x] 本 adapter-owned transition slice在首次 post-fix review发现并修复 stale
+  `prepareChild` bytecode descriptor P2；修正后的第二次独占root `clean verify`为11 modules、
+  137 XML reports、792 testcases、0 failure/error/skipped。15-file ordered slice-delta aggregate
+  `dc25427dcd65c48ea7dfa78571e6a78172a2e52d4f99409fad48eef224f3efdb`；该hash不替代前序
+  V9/OwnerTty/Core evidence；三路第二次 actual post-fix review均独立命中该hash，capability、
+  typed aggregate/V9与Gate/evidence均为`P0=0、P1=0、P2=0`；overall仍按总控
+  `P1=3、P2=1`、Authority/Live Gate Red；
+- [x] forward-only V12 durable failure terminal resume：exact provenance、claim version、claimant、
+  fence、DB-clock lease与live head分别和failure child TX-B、parent+seal TX-C在同一个PostgreSQL
+  transaction内校验并推进。happy path为`READY/v1/head14 -> CLAIMED/v2 ->
+  CHILD_CONSUMED/v3/head15 -> PARENT_CLAIMED/v4 -> TERMINAL_CONSUMED/v5/head17`；raw V10
+  failure TX-B/TX-C、wrong/stale/replayed/expired claim及cross-database snapshot splice均fail closed，
+  V10 success path在latest V12仍保持exact one winner；
+- [x] V12 packaged process/fault evidence：fresh JVM分别完成child/parent claim与terminalization，
+  两个不同JVM每阶段race exact one winner；test-only DataSource在真实`Connection.commit()` delegate前
+  `halt(76/77)`，完整JSON/`xmin`回滚后fresh JVM重试，TX-B后PostgreSQL immediate restart再完成TX-C。
+  V11->V12合法READY/CLAIMED history/row/`xmin`保真，历史claimed/no-sidecar raw V10 head15/head17
+  migration均SQLSTATE 55000整transaction回滚；fresh/provisioned ACL、runtime function/trigger body、
+  bytecode direct/reflection与shipping JAR Gate均Green；
+- [x] V12最终独占root `clean verify`为11 modules、142 TEST XML reports、815 tests、
+  0 failure/error/skipped；26-file ordered closure aggregate为
+  `6f51c0fbe0f4ec82ef0691579b6658fd5059aaae9674567048e5428b1387922e`，shipping graph-eval
+  app JAR SHA-256为`9d2981ca40d6a0dc2dc9dfcaa7db1cbef5f8caed198f4ef49c50c1c32d31872d`；
+- [x] 同一V12最终快照三路actual post-fix review均独立命中aggregate/JAR/142/815/0：
+  ACL/provisioning/migration、typed protocol/bytecode与Acceptance/process均为
+  `P0=0、P1=0、P2=0`。child/parent race loser均按PID精确锁定`reason=FENCED`；completion API的
+  wrong provenance/version/claimant/fence/model与expired lease 11项typed negative加1项raw SQL
+  model canary均保持全库JSON/`xmin`不变。focused Engineering Gate可签收Green；不得外推overall
+  Authority/Live；
+- [ ] provider semantic attestation与shipping App live route；
+  - [x] V13 bounded provider validation attestation local-only Engineering slice：按
+    [RFC-0008](../rfcs/0008-bounded-provider-validation-attestation.md)与
+    [ADR-0012](../architecture/decisions/0012-db-authenticated-provider-validation-attestation.md)
+    完成test-only Ed25519、独立`emergeos_provider_attestor` JVM验签、DB one-shot challenge与
+    receipt/attribution/event/head/optional failure outcome同transaction。真实loopback reviewed
+    outcome先以exact manifest hash私有mint，再经production mapper、signature transcript与raw SQL
+    execution-binding DB fence推进TX-A；raw bypass、tamper/replay/expiry/cross-attempt/cross-DB、
+    stage/commit hard-kill、PostgreSQL restart与two-JVM race均fail closed；不保存raw response/private
+    key，不接真实provider，不启用shipping execute；
+  - [x] V13最终独占root `clean verify`为11 modules、144 `TEST-*.xml` reports、821 tests、
+    0 failure/error/skipped；contracts 8 schemas/70 fixtures、104 Markdown links与`git diff --check`
+    均Green。53-file ordered slice aggregate与shipping graph-eval app JAR SHA-256已按最终源码冻结在
+    同slice Build Note；
+    三路独立post-fix review均为P0=0/P1=0，focused Engineering Gate可签Green；overall
+    Authority/Live继续Red；
+  - [ ] production public-key verifier、anchor/key lifecycle与shipping App wiring。当前PostgreSQL 18
+    standard extension不提供detached Ed25519 verification；是否批准audited verifier、production key
+    custody及live wiring需要owner另行授权；
+  - [x] post-review hardening follow-up：durable validation row已增加
+    `execution_binding_hash IS NULL OR execution_binding_hash = manifest_hash`同表CHECK；禁用USER
+    trigger后的raw UPDATE仍精确`23514`且全库JSON/`xmin`不变。真实V13 FAILED/CONSUMED head14已通过
+    production V12 resume Store连续推进`READY/v1 -> CLAIMED/v2 -> CHILD_CONSUMED/v3/head15 ->
+    PARENT_CLAIMED/v4 -> TERMINAL_CONSUMED/v5/head17`，validation完整JSON/`xmin`不变，outcome在
+    CLAIMED/v2后保持完整JSON/`xmin`不变；post-fix review发现并关闭resume Store未锁terminal
+    `startedAt`的P1，child/parent wrong-start typed negative均在mutation前拒绝且全库digest不变；
+    Java/API review保留的failure terminal taxonomy P2也已以matching `SUCCEEDED` child与`BLOCKED`
+    parent Red关闭：typed boundary只接受exact `FAILED`，两项均以固定reason在mutation前拒绝，随后同一
+    claim仍合法推进head15/head17；
+  - [x] V13 local-only中文
+    [Build Note](../operations/build-notes/2026-08-11-s2-s4-pack010-bounded-provider-validation-attestation.md)；
+  - [x] DeepSeek V4 Flash Responses dormant compatibility probe：按官方Responses shape构造独立
+    `deepseek-v4-flash`单请求probe，固定no retry/no redirect、strict structured output、wire
+    `reasoning.effort=none`且final validator只接受zero observed reasoning items/tokens、usage arithmetic、
+    dated post-response list-price profile与raw/credential privacy；actual
+    shaded JAR包含production probe但不含test Main/Test，first-party shipping consumer为0。最终独占root
+    Gate为146 XML/831 tests/0，9-file aggregate与app JAR已冻结在
+    [DeepSeek compatibility Build Note](../operations/build-notes/2026-08-11-s2-s4-deepseek-v4-flash-responses-compatibility-probe.md)；
+  - [x] V14 exact provider profile assertion foundation：forward-only保留V13 canonical bytes与nano-USD
+    语义，新增独立provider/transport/parser/schema/model-resolution/pricing profile、pico-USD精确费率、
+    `emergeos_provider_attestor_v14`零relation ACL与只读SECDEF assertion。synthetic admin fixture的
+    wrong provider/profile/pricing/rate/cost在PostgreSQL内`55000`，missing/extra为`22023`、wrong role为
+    `42501`；valid `100/20/10` usage精确返回`14,056,000` pico-USD，全部assertion保持public-table
+    JSON/`xmin`、seq13/head13与V13 row不变，且V13 raw TX-A在assert前后都继续fenced。Java与shipping
+    JAR consumer为0。该子切片仅为`PROFILE_ASSERTION_ONLY`，opaque graph hashes只进入statement hash，
+    不被DB验证为graph truth；设计边界见
+    [RFC-0009](../rfcs/0009-exact-provider-profile-assertion-foundation.md)与
+    [ADR-0013](../architecture/decisions/0013-exact-provider-profile-assertion-foundation.md)，最终Receipt见
+    [V14 Build Note](../operations/build-notes/2026-08-11-s2-s4-pack010-v14-exact-provider-profile-assertion.md)；
+  - [x] V15 exact provider TX-A requirement guard：forward-only保留V8-V14 relation/canonical identity，
+    在exact seq13/head13登记`PICO_OVERLAY_V1` requirement，并由四个deferred constraint trigger阻止
+    已登记attempt继续写历史V8/V13 request-2 attribution/event/head。独立V15 role只有require
+    function EXECUTE且relation ACL为0；production Java V15 API/consumer增量为0。legacy typed TX-A与
+    valid signed V13 completion都在PostgreSQL提交边界以固定`55000`整transaction回滚，未登记V13
+    正向仍到CONSUMED/head14；两个独立`READ COMMITTED` backend又以`pg_blocking_pids`证明
+    marker-first与V13-first共享head锁线性化且各自exact one durable winner；V14→V15 populated
+    rows/`xmin`、旧function/trigger/history保真，packaged
+    unmarked historical crash/restart/race/resume regression继续Green。该子切片仅为
+    `REQUIREMENT_GUARD_ONLY`，设计边界见
+    [RFC-0010](../rfcs/0010-exact-provider-tx-a-requirement-guard.md)与
+    [ADR-0014](../architecture/decisions/0014-exact-provider-tx-a-requirement-guard.md)，最终Receipt见
+    [V15 Build Note](../operations/build-notes/2026-08-12-s2-s4-pack010-v15-exact-tx-a-requirement-guard.md)；
+    `exactPicoAttribution=NOT_IMPLEMENTED`、`TX-A=NOT_IMPLEMENTED`，不得外推为pre-egress budget、
+    DeepSeek live或商业计费证据。最终独占root `clean verify`为11 modules、147 XML、833 tests、
+    0 failure/error/skipped/flake；28-file ordered aggregate为
+    `61e0c1b4d8297052b678c432e173f3354bda1722ccb5f79a52a2c6238c642ac2`，shipping app JAR为
+    `cfd0a29e7b2c683d6461273c93ef6026b151b89985f3bac2cabaca2a733d58cd`；Java/Gate/artifact、
+    SQL/ACL/migration与Acceptance/evidence/docs三路post-fix review均为P0/P1/P2=0；
+  - [x] V16 exact-pico provider TX-A overlay focused local Gate：按
+    [RFC-0011](../rfcs/0011-exact-pico-provider-tx-a-overlay.md)与
+    [ADR-0015](../architecture/decisions/0015-exact-pico-provider-tx-a-overlay.md)，当前scope严格为
+    `RAW_JDBC_LOCAL_OVERLAY_TX_A`。raw JDBC在同一transaction完成DB-minted stage、test JVM
+    ephemeral Ed25519签名/本地验签与commit，候选结果只写独立V16 validation/attribution/event/head
+    closure；legacy V8 head保持seq13，V16 overlay head14不是legacy head14。positive commit从
+    post-canary baseline起、每条negative fence从immediate baseline起，V8/V13/V15 JSON/`xmin`及
+    focused全V1-V15 public-table image保持不变；fixture/status mutation单独记录。synthetic GPT profile只是
+    arithmetic precision canary，不是provider定价。PostgreSQL不验证Ed25519，V16 login credential、
+    attestor role与caller process在TCB；V16冻结时`productionV16Verifier=0`、`productionJavaApi=0`。
+    V17另立dormant public-key verifier primitive，但production stage/commit API、shipping consumer与
+    PostgreSQL-native验签仍为0。stage-only、
+    bounded tamper、profile/key revoke、challenge expiry、transaction-local SQL rollback与replay已Green；
+    root clean 148 XML/834 tests/0、artifact/JAR parity、zero-consumer Gate、hash与独立review均已冻结；
+    TX-B/TX-C、pre-egress为
+    `NOT_IMPLEMENTED`，process fault/race/restart/live/billing为`NOT_PROVEN`。最终回执见
+    [V16 Build Note](../operations/build-notes/2026-08-12-s2-s4-pack010-v16-exact-pico-provider-tx-a-overlay.md)；
+  - [x] V17 dormant V16 Ed25519 public verifier focused Gate：按
+    [RFC-0012](../rfcs/0012-dormant-v16-ed25519-public-verifier.md)与
+    [ADR-0016](../architecture/decisions/0016-dormant-v16-ed25519-public-verifier.md)，只新增production-source
+    public-key verifier primitive；raw V16 credential bypass仍在TCB，PostgreSQL-native验签、production
+    stage/commit API、shipping consumer、key custody与live均保持0/Red。compiled Acceptance、focused
+    Bytecode Gate、actual shaded-JAR、150 XML/839 tests/0 root clean、17-file aggregate与三路review均
+    已冻结；最终回执见
+    [V17 Build Note](../operations/build-notes/2026-08-12-s2-s4-pack010-v17-dormant-v16-ed25519-verifier.md)；
+  - [x] V18 dormant typed V16 stage-verify-commit attestor：按
+    [RFC-0013](../rfcs/0013-dormant-typed-v16-stage-verify-commit-attestor.md)与
+    [ADR-0017](../architecture/decisions/0017-dormant-typed-v16-stage-verify-commit-attestor.md)，在单一
+    `REQUIRES_NEW` transaction内完成frozen authority recheck、V16 stage、25/62 typed mapping、signer、
+    V17 verifier与V16 commit。wrong-key stage1/commit0、post-receipt stage1/commit1 outer rollback、signer
+    provenance、relation ACL与global relation/function/helper-grantee/body drift、prerequisite role membership、
+    index/rewrite rule/extra trigger、zero-inheritance/rewrite catalog closure、valid overlay14与typed replay均
+    focused Green；actual shaded JAR包含全部failure-path nested classes且App consumer/signer implementation为0。
+    root clean、artifact/hash与三路review已冻结；最终回执见
+    [V18 Build Note](../operations/build-notes/2026-08-12-s2-s4-pack010-v18-dormant-typed-v16-attestor.md)；
+  - [x] V19 fresh-JVM verified exact-pico overlay reader：按
+    [RFC-0014](../rfcs/0014-fresh-jvm-verified-exact-pico-overlay-reader.md)与
+    [ADR-0018](../architecture/decisions/0018-fresh-jvm-verified-exact-pico-overlay-reader.md)，新增专属
+    13表SELECT-only role与sealed `Missing / Required / Attributed / Invalid` production reader。
+    focused Acceptance已证明无marker、无V13的V15 marker、历史Ed25519 receipt，以及partial、跨表一致但
+    canonical stale和伪签名tamper；reader每次在单一RR/RO snapshot独立重算，legacy head保持seq13，
+    App consumer为0。actual shaded-JAR parity、158 XML/862 tests/0 root clean、28-file aggregate与三路
+    post-fix review均已冻结；最终回执见
+    [V19 Build Note](../operations/build-notes/2026-08-12-s2-s4-pack010-v19-fresh-jvm-exact-pico-overlay-reader.md)；
+  - [x] V20 PostgreSQL immediate-restart overlay readback：V19冻结后新增单一test-only Acceptance，
+    production/schema/provisioning与shipping capability payload delta均为0；README/docs README的V20导航
+    增量已单独记账，不伪称V19 frozen 28-path bytes未变。独立keepalive PostgreSQL 18.4 Testcontainer先通过
+    V13+V15+V18 typed path形成完整overlay，fresh packaged JVM A为`Attributed`；随后同container ID、
+    same `pg_control_system().system_identifier`与PGDATA上的`pg_ctl restart -m immediate -w`返回0，
+    旧sentinel connection失效、新physical connection恢复且postmaster start严格前进；fresh packaged JVM B
+    以不同OS PID再次为`Attributed`。restart前后及B读后，public table JSON/`xmin`、legacy seq13/no14、
+    V16四行与typed receipt十项bounded identity均不变，restart后没有migrate/provision/fixture writer。
+    focused `1/0`及root `clean verify`均Green；最终为`159 XML / 863 tests / 0`，29-file aggregate、
+    V19 normalized shipping payload parity与四个artifact hash均已冻结。证据只覆盖本机same-container
+    PostgreSQL process restart，不覆盖host/power/storage/HA、connection-loss/reconcile/race、App/Live或current
+    authorization；详细回执见
+    [V20 Build Note](../operations/build-notes/2026-08-12-s2-s4-pack010-v20-postgres-immediate-restart-overlay-readback.md)；
+  - [ ] DeepSeek live PASS与durable multi-provider TX-A：本轮唯一真实请求在intermediate bytes上
+    fail closed为`RESPONSE_METADATA_MISMATCH`，没有retry/redirect或第二请求，具体不兼容字段、billing与
+    provider retention均未知。下一次请求必须使用owner经隐藏stdin重新提供的rotated credential；未来
+    版本仍需exact pico-priced graph attribution、challenge/transcript/signature/commit与pre-egress budget
+    authority，不能把V14 profile assertion或本地compatibility Green写成attestation/live PASS；
+- [x] 本 offline terminal/Harness engineering slice的中文
+  [Build Note](../operations/build-notes/2026-08-01-s2-s4-pack010-terminal-graph-harness-report.md)；
+- [x] owner TTY / predecessor authority子切片的中文
+  [Build Note](../operations/build-notes/2026-08-02-s2-s4-pack010-owner-tty-predecessor-authority.md)；
+- [x] V9 terminal authority / packaged successor子切片的中文
+  [Build Note](../operations/build-notes/2026-08-02-s2-s4-pack010-v9-terminal-authority.md)；
+- [x] dormant provider capability / loopback ordering子切片的中文
+  [Build Note](../operations/build-notes/2026-08-02-s2-s4-pack010-dormant-provider-capabilities.md)；
+- [x] production capability handoff / role provisioning子切片的中文
+  [Build Note](../operations/build-notes/2026-08-02-s2-s4-pack010-capability-handoff-provisioning.md)；
+- [x] exact provider response attribution子切片的中文
+  [Build Note](../operations/build-notes/2026-08-02-s2-s4-pack010-exact-provider-attribution.md)；
+- [x] terminal outcome binding子切片的中文
+  [Build Note](../operations/build-notes/2026-08-02-s2-s4-pack010-terminal-outcome-binding.md)；
+- [x] successful typed TX-C capability子切片的中文
+  [Build Note](../operations/build-notes/2026-08-02-s2-s4-pack010-typed-tx-c.md)；
+- [x] adapter-owned canonical terminal transition子切片的中文
+  [Build Note](../operations/build-notes/2026-08-02-s2-s4-pack010-canonical-terminal-transitions.md)；
+- [x] V10 attributed failure authority / exact provisioning pair子切片的中文
+  [Build Note](../operations/build-notes/2026-08-09-s2-s4-pack010-v10-attributed-failure-authority.md)；
+- [x] durable attributed failure outcome / resume fencing子切片的中文
+  [Build Note](../operations/build-notes/2026-08-09-s2-s4-pack010-durable-attributed-failure-resume.md)；
+- [ ] owner逐次授权的真实 r1/r2/r3。该项不因工程完成而自动勾选。

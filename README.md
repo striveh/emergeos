@@ -130,6 +130,135 @@ shipping class Gate对全部 App编译输出使用 package-independent exact all
 [RFC-0006](./docs/rfcs/0006-postgresql-canonical-one-shot-graph-attempt.md)、
 [ADR-0010](./docs/architecture/decisions/0010-postgresql-canonical-graph-attempt.md) 与
 [Pack009 Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-pack009-durable-graph-crash.md)。
+Pack010 以 additive PostgreSQL V8把每次 graph扩展到 exact 两次 provider
+request attribution、child/parent terminal truth、Artifact lineage与 sequence-17 seal，
+并用 restricted repeatable-read reader从三个独立 offline synthetic repetition投影
+complete-only `HarnessEvaluationReport`。37 个 kill boundary、两个并发 JVM的 CAS
+one-winner、tamper/generic Store negative与 fresh reader均已有可执行证据；shipping App
+仍只有 zero-effect preflight，`--execute`继续 disabled。新增 production owner-TTY facade、
+private local permit object one-winner、本地真实 PTY negative matrix、前驱 repetition原子
+claim；forward-only V9又把 generic writer与 `graph_executor`隔离在 raw GUC/DML、
+ACL/membership/owner/trigger drift之外，只有两个 exact SECDEF semantic transaction可完成
+TX-B/TX-C。successor另有 fat-JAR-first production bytecode + test-only shell的
+`AFTER_HEAD_UPDATE` hard-kill rollback/two-JVM one-winner evidence；这些
+synthetic harness证据不等同于 owner逐次批准，也不包含真实 key/provider/model/token/cost。
+V8 custom GUC仍只是 legacy compatibility guard，V9 independent guard不信任它。production
+artifact现已包含 Main不可达的 exact credential broker/session composer；descriptor-exact
+directory/shaded-JAR Gate冻结其唯一 effect consumer、transport policy与 reviewed bootstrap，
+本机 loopback又证明 intent persistence failure时 HTTP为0、attribution fail-closed后 replay
+不会增加 request/effect。owner-approved cursor现在可通过同进程、不可重建的线性 capability
+派生 exact Coordinator/egress/terminal typestate，独立 role/ACL provisioning artifact也已具备
+同 transaction bootstrap + 全 grantee pure audit、幂等 read-back与 drift fail-fast；两者都不表示
+跨 JVM resume。sequence-7 egress又新增 exact durable provider-session intent；packaged TTY/JVM
+已证明 owner/attempt/revision/coordinator/egress/first-request/expiry绑定、claim/consume并发唯一胜者、
+expiry/replay，以及 commit前/后 hard-kill + restart fail-closed。broker bytecode要求该 intent先于
+credential/client/model/session/HTTP effect，shipping Main仍不可达。dormant V9 runtime writer
+composition不再暴露 generic writer，并已用 exact owner terminal claim + fixed prefix/executor
+roles证明 attribution-before-terminal、cross-attempt/two-database owner/runtime splice、
+claim-to-semantic expiry与 alternating-identity fail closed，并拒绝 startup前 semantic/trigger及
+transitive helper closure drift、`tgattr`列级 trigger drift和 startup后的 prefix TEMP/ACL drift；
+expiry与 semantic call在同一 SQL statement复核；TX-B/TX-C各一次及 PostgreSQL process restart后
+session-intent/cursor/attribution/terminal reconciliation；
+credential lease现在保留 durable intent/owner/expiry，并在 key/client/model/session每个 effect
+boundary前复核本地 Clock与 DB time；OwnerTty Coordinator只能使用 authority-bound Store，
+且 runtime要求 OwnerTty identity与 exact prefix direct-login identity一致，admin/migrator不能
+凭同库 identity进入。provider-session cursor从数据库 row重建并受 canonical event复合外键约束，
+session-intent relation出现额外非 internal trigger会在 provisioning/runtime audit中 fail closed；
+session compose后仍由同一 lease在 `next`与 exact pre-HTTP observer双重复核 expiry；全部35个
+public non-internal trigger由 shipping SHA-256 topology固定，preflight/pure audit与 terminal
+runtime startup/每 TX还共享16-helper signature/properties/search_path/body SHA-256 closure；
+它在 bytecode中仍对 Main不可达，
+	也不声称 provider exactly-once。production provider完整 response attribution现已在exact
+   content-decoded bytes hash、完整token split、durable-before-semantic ordering、PostgreSQL restart
+	与fresh packaged JVM no-replay matrix上focused Green；actual success structured-final又已绑定为
+	带 exact lease/Coordinator/egress/manifest/attribution/expiry的process-local opaque outcome，并只能
+	one-shot派生 typed TX-B command。runtime在claim前要求全部 V9 row exact keys，并以 contract
+	constructor重算 Candidate/WorkerResult integrity，再重建完整child AgentRun/binding/event 15/
+	sequence-15 snapshot并exact绑定Trace/resource mirror/Run relation；event audit timestamp由PostgreSQL
+	生成。forged nested evidence、extra key、duplicate/
+	trailing JSON均不烧毁 outcome。actual PUBLIC loopback outcome已在同一 capability链进入 exact
+	PostgreSQL TX-B并通过 restart reconciliation；wrong model、usage超限、malformed final、expiry、
+	replay/concurrency与 outcome-mint hard-kill均 fail closed。successful sequence 15现在又只能先经
+	strict parent aggregate review派生 private-constructor、one-shot typed TX-C command；Owner facade
+	自行read-back并绑定 exact durable seq15，forged/missing/nested/seal/cross-run/duplicate/trailing均在
+	claim前拒绝；完整 parent AgentRun/ArtifactLineage/sequence-17 snapshot与全部 relation mirror value
+	必须通过 Core aggregate invariant，event audit timestamp由PostgreSQL在TX-C内生成。两个 commands并发只有一个seq17 winner，PostgreSQL restart后 reconciliation保持
+	一致。production App与public writer现已移除raw terminal payload ABI；PostgreSQL adapter从typed
+	AgentRun/Candidate/WorkerResult/ArtifactLineage与verified seq14/15 snapshot生成private-constructor
+	one-shot canonical TX-B/TX-C transition，wrong typed truth在owner claim前fail closed，并已覆盖child/
+	parent并发一个winner与PostgreSQL restart reconciliation；forward-only V10进一步把 active
+	`graph_executor` surface收敛为 exact child/parent semantic pair：V9只保留历史定义且 executor
+	`EXECUTE=0`，fresh migration自行撤销 PUBLIC EXECUTE，独立 provisioning以 SHA-256、全 grantee
+	ACL与trigger/helper closure fail-fast。failure child只接受 Core closed allowlist，failed parent只接受
+	exact `FAILED/HANDOFF_CHILD_FAILED/HANDOFF_REJECTED/CHILD_FAILED`映射；两个独立 PostgreSQL
+	session在 TX-B/TX-C各只有一个 winner，restart后保持 seq14→15→17且无 partial truth。该证据仍是
+	PUBLIC synthetic、dormant composition，不是live authority。forward-only V11又把request-2 typed
+	failure verdict与sequence-14 attribution在同一个PostgreSQL transaction内落为durable provenance，
+	并以dedicated NOINHERIT resumer、state version、DB-clock lease、session expiry和exact head实现
+	two-JVM one-winner、hard-kill、PostgreSQL restart与lease-expiry reclaim。forward-only V12再把
+	exact provenance/version/claimant/fence/lease/head与failure TX-B/TX-C terminal truth分别放进同一个
+	PostgreSQL transaction，fresh JVM completion、commit前hard-kill全库回滚、PostgreSQL restart与
+	child/parent two-JVM race均focused Green，并以durable receipt拒绝raw V10 failure bypass。该证据仍是
+	PUBLIC synthetic Engineering slice。forward-only V13进一步以DB-minted one-shot challenge、
+	test-only Ed25519、dedicated attestor role/JVM与bounded transcript，把真实loopback reviewed outcome、
+	exact manifest execution binding、request-2 attribution/event/head及closed failure outcome原子绑定；
+	raw bypass、tamper/replay/expiry/cross-attempt/cross-DB、commit前hard-kill、restart与two-JVM race均
+	fail closed，且不保存raw provider bytes或private key。该local-only semantic attestation slice已
+	focused Green；PostgreSQL-native验签、production key custody、shipping live route与真实r1/r2/r3
+	仍未完成。V14随后只建立exact-pico profile assertion，V15只在legacy seq13登记requirement并
+	fence历史TX-A。当前V16 focused local Gate以`RAW_JDBC_LOCAL_OVERLAY_TX_A`在独立relations中形成
+	exact-pico attribution/event/overlay head14；从每次authority call的immediate baseline起，
+	V8/V13/V15 JSON/`xmin`与legacy head13不变；
+	overlay head14不是legacy head14。PostgreSQL不验证Ed25519，只有test JVM使用ephemeral key完成本地
+	签名/验签；这是V16冻结时的历史边界。V17随后只增加可打包但未接线的production
+	Ed25519 public-key verifier primitive；V16 login credential、attestor role与caller process仍在
+	TCB，V18再增加一个packaged但App未接线的typed stage→verify→commit adapter；public Java raw
+	stage/commit method、shipping signer、App consumer与PostgreSQL-native验签仍为0。
+	synthetic GPT profile只验证pico-USD精度，
+	不是provider定价。V16、V17、V18与V19 focused local Engineering Gate均已Green；V19新增专属13表SELECT
+	只读角色与fresh-JVM四态reader，并在单一RR/RO snapshot独立重算V13-V16 canonical与Ed25519。
+	V20另以test-only独立keepalive Testcontainer证明同container/system identifier/PGDATA上的PostgreSQL
+	immediate restart后，另一fresh packaged JVM仍重验同一`Attributed` receipt；production delta为0。
+	legacy head13与App consumer保持不变，overall Authority/Live仍Red；
+	TX-B/TX-C与pre-egress
+	未实现，host/power/storage/HA、connection-loss/reconcile/race、
+	live与billing均未证明。
+设计和边界见
+[RFC-0007](./docs/rfcs/0007-attributed-terminal-graph-and-shared-candidate-harness.md)、
+[ADR-0011](./docs/architecture/decisions/0011-attributed-terminal-graph-and-live-harness-pilot.md) 与
+[RFC-0008](./docs/rfcs/0008-bounded-provider-validation-attestation.md)、
+[ADR-0012](./docs/architecture/decisions/0012-db-authenticated-provider-validation-attestation.md)、
+[RFC-0009](./docs/rfcs/0009-exact-provider-profile-assertion-foundation.md)、
+[ADR-0013](./docs/architecture/decisions/0013-exact-provider-profile-assertion-foundation.md)、
+[RFC-0010](./docs/rfcs/0010-exact-provider-tx-a-requirement-guard.md)、
+[ADR-0014](./docs/architecture/decisions/0014-exact-provider-tx-a-requirement-guard.md)、
+[RFC-0011](./docs/rfcs/0011-exact-pico-provider-tx-a-overlay.md)、
+[ADR-0015](./docs/architecture/decisions/0015-exact-pico-provider-tx-a-overlay.md)、
+[RFC-0012](./docs/rfcs/0012-dormant-v16-ed25519-public-verifier.md)、
+[ADR-0016](./docs/architecture/decisions/0016-dormant-v16-ed25519-public-verifier.md)、
+[RFC-0013](./docs/rfcs/0013-dormant-typed-v16-stage-verify-commit-attestor.md)、
+[ADR-0017](./docs/architecture/decisions/0017-dormant-typed-v16-stage-verify-commit-attestor.md)、
+[RFC-0014](./docs/rfcs/0014-fresh-jvm-verified-exact-pico-overlay-reader.md)、
+[ADR-0018](./docs/architecture/decisions/0018-fresh-jvm-verified-exact-pico-overlay-reader.md) 与
+[Pack010 offline Build Note](./docs/operations/build-notes/2026-08-01-s2-s4-pack010-terminal-graph-harness-report.md)、
+[Pack010 Authority Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-owner-tty-predecessor-authority.md)、
+[Pack010 V9 Authority Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-v9-terminal-authority.md)、
+[Pack010 Dormant Provider Capability Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-dormant-provider-capabilities.md)、
+[Pack010 Capability Handoff / Provisioning Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-capability-handoff-provisioning.md)、
+[Pack010 Exact Provider Attribution Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-exact-provider-attribution.md)、
+[Pack010 typed TX-C Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-typed-tx-c.md)、
+[Pack010 Terminal Outcome Binding Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-terminal-outcome-binding.md)、
+[Pack010 V13 Provider Validation Build Note](./docs/operations/build-notes/2026-08-11-s2-s4-pack010-bounded-provider-validation-attestation.md)、
+[Pack010 V14 Provider Profile Assertion Build Note](./docs/operations/build-notes/2026-08-11-s2-s4-pack010-v14-exact-provider-profile-assertion.md)、
+[Pack010 V15 Exact TX-A Requirement Guard Build Note](./docs/operations/build-notes/2026-08-12-s2-s4-pack010-v15-exact-tx-a-requirement-guard.md)、
+[Pack010 V16 Exact-pico Provider TX-A Overlay Build Note](./docs/operations/build-notes/2026-08-12-s2-s4-pack010-v16-exact-pico-provider-tx-a-overlay.md)、
+[Pack010 V17 Dormant V16 Ed25519 Verifier Build Note](./docs/operations/build-notes/2026-08-12-s2-s4-pack010-v17-dormant-v16-ed25519-verifier.md)、
+[Pack010 V18 Dormant Typed V16 Attestor Build Note](./docs/operations/build-notes/2026-08-12-s2-s4-pack010-v18-dormant-typed-v16-attestor.md)、
+[Pack010 V19 Fresh-JVM Exact-pico Overlay Reader Build Note](./docs/operations/build-notes/2026-08-12-s2-s4-pack010-v19-fresh-jvm-exact-pico-overlay-reader.md)、
+[Pack010 V20 PostgreSQL Immediate-restart Overlay Readback Build Note](./docs/operations/build-notes/2026-08-12-s2-s4-pack010-v20-postgres-immediate-restart-overlay-readback.md)、
+[Pack010 Canonical Terminal Transitions Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-canonical-terminal-transitions.md)。
+[Pack010 V10 Attributed Failure Authority Build Note](./docs/operations/build-notes/2026-08-09-s2-s4-pack010-v10-attributed-failure-authority.md)。
+[Pack010 Durable Attributed Failure Resume Build Note](./docs/operations/build-notes/2026-08-09-s2-s4-pack010-durable-attributed-failure-resume.md)。
 Temporal、生产认证、加密存储和平台连接器仍未接入，不能把这条工程路径理解为生产自治能力。
 
 API 默认只监听 `127.0.0.1`，并在未认证阶段拒绝非 loopback 绑定。所有请求都被当作服务端配置
@@ -173,7 +302,27 @@ AgentRun/Trace/binding truth 上冻结 exact-one-child、same-owner、terminal�
 与 single-consume 约束；V1–V5 历史 JSON 与 hash 不被改写。
 Pack009 的 additive V7再增加五张 graph attempt truth tables，并为
 `agent_runs` 增加 all-or-none graph selector；V1–V6 historical rows保持 selector
-全 NULL，不猜测或回填。当前 schema version 是 V7。
+全 NULL，不猜测或回填。Pack010 的 additive V8再增加 request attribution与 terminal
+binding truth，并以 forward-only migration保持 V1–V7 historical bytes不被猜测或改写。
+forward-only V9新增 durable provider-session intent，并把 caller-minted custom GUC permit
+替换为 exact schema-qualified SECURITY DEFINER semantic authority；production role/ACL bootstrap
+仍独立于 Flyway。forward-only V10收窄 failure terminal semantic protocol并撤销 executor对V9
+function的执行权；V9只作为历史 migration保留。forward-only V11新增durable typed failure
+provenance与dedicated cross-process claim fence；forward-only V12再把该 fence 与 failure
+TX-B/TX-C terminal truth 原子绑定并拒绝 raw V10 failure bypass；forward-only V13新增
+DB-authenticated bounded provider-validation attestation与一次性challenge/receipt，仍明确把
+attestor JVM/DB identity纳入TCB且不启用shipping live route。V14仅新增
+exact provider/pico-USD profile assertion authority，不提供attestation、TX-A或live route。
+V15再增加seq13 exact-pico TX-A requirement marker与deferred database guard：已登记attempt不能继续
+写入历史V8/V13 request-2 TX-A，而未登记attempt保持V13行为不变。V15仍不提供exact-pico
+attribution、overlay head、TX-A或shipping/live route。当前 schema version 是 V16；它只以独立
+V16 relations增加raw-JDBC local exact-pico attribution/event/head overlay，legacy V8 head继续停在
+seq13，旧`GraphAttemptSnapshot`语义不变。PostgreSQL不验证Ed25519；V17冻结时只新增dormant
+public-key verifier primitive，production stage/commit Java API、shipping consumer与live route均为0。
+	V18另增packaged typed `complete` adapter，但App consumer与signer implementation为0，external
+	configuration/runtime invocation未证明。V19另增独立四态overlay reader与专属只读role；V20只新增
+	test-only same-container PostgreSQL immediate-restart readback；V16-V20 focused local Engineering evidence均已Green；
+	overall Authority/Live仍Red。
 
 当前普通 API 仍只装配 deterministic Fake；Pack 007 Agent 路径是：
 
@@ -412,5 +561,5 @@ offline-harness-runner → core → contracts
 EmergeOS 使用 [Apache License 2.0](./LICENSE)。外部贡献采用
 [Developer Certificate of Origin 1.1](./DCO)，每个贡献 commit 需要
 `Signed-off-by`。决策与边界见
-[ADR-0012](./docs/architecture/decisions/0012-open-source-license-and-contributions.md)；
+[ADR-0012](./docs/architecture/decisions/0019-open-source-license-and-contributions.md)；
 项目名称与品牌使用见 [TRADEMARKS.md](./TRADEMARKS.md)。

@@ -75,12 +75,67 @@ Gate：
 
 状态：**S1、S2 工程完成；S3 real model protocol adapter、isolated synthetic
 Eval Runner、本地 attempt durability 与 terminal record create-only repair
-工程切片已通过。Live-provider smoke 尚未执行。S4 已完成 deterministic
+工程切片已通过。曾执行一次 bounded intermediate DeepSeek request，但在
+`RESPONSE_METADATA_MISMATCH` 处 fail closed；当时 artifact hash 未冻结，current final bytes
+仍没有 live PASS，provider compatibility、retention 与 billing 均未知。S4 已完成 deterministic
 Verifier comparison、canonical durable report，以及 Pack 005 Tool arguments、
 Pack 006 post-dispatch deadline 和 Pack 007 typed read-only Worker 三个有限故障/
-runtime 工程切片。Pack 007 只覆盖 single/synchronous/`depth=1`、one Worker、
-read-only Fake 路径；完整 fault suite、stochastic Harness、通用 multi-agent 与
-真实 Seed Gate 尚未完成。**
+runtime 工程切片。Pack009已把 one-shot graph与 provider-accepted crash truth落到
+PostgreSQL V7；Pack010 offline slice已把 attributed terminal graph、sequence-17 seal、
+三份 fresh repetition与 complete-only Harness Report落到 PostgreSQL V8；本地
+owner-TTY facade、local permit object one-winner与 r1→r2→r3 predecessor atomic claim
+子切片也已完成；forward-only V9 runtime role/ACL + exact TX-B/TX-C semantic function与
+fat-JAR-first/test-shell successor hard-kill/two-JVM也已 focused Green。
+shipping artifact内的 dormant exact credential broker/session composer，以及
+intent persistence failure→HTTP 0、attribution fail-closed→无 replay增量的本机 loopback
+sentinel也已 focused Green；owner-approved同进程线性 capability handoff与独立、默认拒绝的
+role/ACL provisioning bootstrap也已取得 focused evidence；dormant V9 fixed-role writer
+composition又绑定 exact owner terminal capability。sequence-7 durable provider-session intent
+已在 credential/client/model/session/HTTP effect之前原子落库，并覆盖 exact binding、并发
+one-shot、expiry/replay及 commit前/后 hard-kill + restart；complete attribution仍必须先于
+terminal transaction。runtime拒绝 cross-attempt/two-database splice、alternating identity、
+transitive helper/trigger `tgattr` drift与 prefix TEMP/ACL drift，expiry与 semantic call合并为
+单条 SQL；TX-B/TX-C各一次及 PostgreSQL process restart reconciliation；dedicated DB pure audit
+也已扩为全 grantee allowlist、exact helper topology与
+真实 audit-failure atomic rollback。最新 Acceptance又把 credential lease的 durable
+intent/owner/expiry带到 key/client/model/session每个 effect boundary、把 Coordinator固定到
+authority-bound Store，并要求 OwnerTty与 exact prefix direct-login identity相同；数据库返回的
+session cursor受 canonical event复合外键约束，额外非 internal session-intent trigger fail closed。
+后续 actual review又补上 compose后 `next`/exact pre-HTTP双重 expiry复核，以及全部35个 public
+non-internal trigger的 shipping SHA-256 topology；provisioning与 terminal runtime同时固定相同的
+16-helper signature/properties/search_path/body SHA-256 closure。production provider response
+attribution又完成exact content-decoded bytes hash、完整token split的durable-before-semantic
+ordering、PostgreSQL restart与fresh packaged JVM no-replay matrix。actual success structured-final
+也已成为绑定 exact lease/Coordinator/egress/manifest/attribution/expiry的process-local opaque
+outcome，并只能 one-shot派生 typed TX-B command；wrong/malformed/forged/expired/replayed/
+concurrent/hard-kill均 fail closed。V9 exact row keys与 Candidate/WorkerResult nested integrity、
+完整child AgentRun/binding/event 15/sequence-15 snapshot及Trace/resource/Run relation在
+claim前关闭，extra/duplicate/trailing/tampered payload不烧毁 outcome；actual PUBLIC loopback
+outcome已沿同一 owner/Coordinator/egress capability进入 PostgreSQL TX-B并通过 restart
+reconciliation。successful sequence 15又只能经 strict parent aggregate review派生 process-local
+opaque typed TX-C command；Owner facade自行read-back durable seq15，forged/no-burn、wrong runtime、
+完整 parent AgentRun/ArtifactLineage/sequence-17 snapshot及全部 relation mirror value必须通过 Core
+aggregate invariant，event audit timestamp由PostgreSQL在TX-C内生成；两个 commands并发、
+PostgreSQL restart→seq17 reconciliation均已 focused Green。production App/public writer又已移除raw
+terminal payload ABI，PostgreSQL adapter以typed terminal truth与verified seq14/15 snapshot mint
+private-constructor one-shot TX-B/TX-C transition；wrong typed truth no-burn、child/parent并发一个winner
+与PostgreSQL restart reconciliation均已Green。forward-only V10又把 active executor surface固定为
+exact child/parent semantic pair并撤销V9 executor EXECUTE；fresh migration PUBLIC revoke、独立
+provisioning SHA-256/ACL/trigger/helper read-back、V8→V9→V10 fidelity，以及两个独立数据库session
+的 TX-B/TX-C one-winner + seq14→15→17 restart reconciliation均已Green。failure protocol现在只接受
+Core closed allowlist和exact parent mapping；forward-only V11又把typed failure verdict与request-2
+attribution原子落为durable provenance，并通过dedicated resumer、state version、DB-clock lease与
+exact head完成two-JVM one-winner、hard-kill、PostgreSQL restart和lease-expiry reclaim。forward-only
+V12已把该claim与failure TX-B/TX-C原子绑定，并以fresh JVM completion、commit前hard-kill回滚、
+PostgreSQL restart、child/parent two-JVM race及raw V10 bypass fence关闭跨JVM failure terminal resume
+缺口。V13 local-only bounded semantic attestation已把真实loopback reviewed outcome、exact manifest
+execution binding、DB challenge、typed signature receipt与TX-A原子提交串成同一Acceptance，并以
+raw/tamper/replay/expiry/cross-attempt/cross-DB/fault/race fail-closed证明不依赖Java-only precheck；
+V14 `PROFILE_ASSERTION_ONLY`以pico-USD精确费率冻结只读provider profile assertion，但不提交graph truth；
+V15 `REQUIREMENT_GUARD_ONLY`再于seq13登记one-way marker并由deferred PostgreSQL guard阻止已登记attempt
+回退到历史nano-USD TX-A，`exactPicoAttribution=NOT_IMPLEMENTED`、`TX-A=NOT_IMPLEMENTED`；
+PostgreSQL-native验签、production key custody、shipping execute/live r1/r2/r3、完整 stochastic Harness、
+通用multi-agent 与真实 Seed Gate仍未完成。**
 这条技术主线来自项目所有者 2026-07-30 的 Roadmap
 顺序例外；它不代表 Stage 1 的学习、市场或真实 Connector Gate 已完成。
 
@@ -119,6 +174,39 @@ S4 post-dispatch deadline 回执：
 
 S4 typed read-only Worker 回执：
 [Typed Read-only Worker Handoff Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-typed-read-only-worker-handoff.md)。
+
+S4 Pack009 durable graph crash 回执：
+[Pack009 Durable Graph Crash Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-pack009-durable-graph-crash.md)。
+
+S4 Pack010 offline terminal graph / Harness 回执：
+[Pack010 Terminal Graph / Harness Report Build Note](./docs/operations/build-notes/2026-08-01-s2-s4-pack010-terminal-graph-harness-report.md)。
+
+S4 Pack010 owner TTY / predecessor authority子切片回执：
+[Pack010 Owner TTY / Predecessor Authority Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-owner-tty-predecessor-authority.md)。
+
+S4 Pack010 V9 terminal authority / packaged successor子切片回执：
+[Pack010 V9 Terminal Authority Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-v9-terminal-authority.md)。
+
+S4 Pack010 dormant provider capability / loopback ordering子切片回执：
+[Pack010 Dormant Provider Capability Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-dormant-provider-capabilities.md)。
+
+S4 Pack010 production capability handoff / role provisioning / runtime composition子切片回执：
+[Pack010 Capability Handoff / Provisioning Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-capability-handoff-provisioning.md)。
+
+S4 Pack010 exact provider response attribution子切片回执：
+[Pack010 Exact Provider Attribution Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-exact-provider-attribution.md)。
+
+S4 Pack010 terminal outcome binding子切片回执：
+[Pack010 Terminal Outcome Binding Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-terminal-outcome-binding.md)。
+
+S4 Pack010 adapter-owned canonical terminal transition子切片回执：
+[Pack010 Canonical Terminal Transitions Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-canonical-terminal-transitions.md)。
+
+S4 Pack010 V10 attributed failure authority子切片回执：
+[Pack010 V10 Attributed Failure Authority Build Note](./docs/operations/build-notes/2026-08-09-s2-s4-pack010-v10-attributed-failure-authority.md)。
+
+S4 Pack010 durable attributed failure outcome / resume fencing子切片回执：
+[Pack010 Durable Attributed Failure Resume Build Note](./docs/operations/build-notes/2026-08-09-s2-s4-pack010-durable-attributed-failure-resume.md)。
 
 产品/工程：
 
