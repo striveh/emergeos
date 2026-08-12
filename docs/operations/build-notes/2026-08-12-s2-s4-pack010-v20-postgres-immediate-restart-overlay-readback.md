@@ -115,7 +115,8 @@ ordered aggregate为`b64ad3fc35eff9a2acd9efbe4ad41abbf07469c87c637463d311b4310f4
 精确聚合为`160 XML / 866 tests / 0 failures / 0 errors / 0 skipped / 0 flakes`；
 V20 restart IT为`1/0`，V19 Acceptance为`3/0`，provider bytecode Gate为`14/0`，architecture为
 `5/0`，V19 shipping-JAR IT为`1/0`。8个JSON Schema 2020-12 contract与70个fixture通过，
-129个Markdown文件的链接检查及`git diff --check`均Green。
+128个tracked Markdown文件的链接检查及`git diff --check`均Green；本机另有1个out-of-scope、untracked
+`CLAUDE.md`，未纳入本回执、测试聚合或提交。
 
 最终whole-artifact SHA-256：
 
