@@ -47,13 +47,14 @@ legacySequence14=0
 overlayRows=4
 shippingLiveRoute=DISABLED
 rootClean=GREEN_160_XML_866_TESTS_0
+remoteLinuxCi=RERUN_PENDING_AFTER_SESSION_INTENT_EXPIRY_FIX
 v20SourceSha256=160a9c26a29ebaa94a78116d282f419539a721ae05a355e77df7b89a2108a547
 v20TestClassAggregate=b64ad3fc35eff9a2acd9efbe4ad41abbf07469c87c637463d311b4310f4caf2b
 v19ShippingPayloadParity=5cb31fde30537fef35f2732d0bf57b87356693cf2e540b319906353f14c413fa
-coreJar=b44f450e40a8cd62cc5396841163d1432c0cc346daf6ac2b67f3e5626d1be920
-postgresJar=1432ca43d59da2a674bb6fd884268ab662986abf19af52917d193886021c461d
-graphEvalJar=8f022279b541ad2baff1ed4f4100b01db49aa72d030305241d24e85be734ad8f
-shippingAppJar=6fe73ada8dd572fac913e1267bdf963e673d1ca246e010b53423930bab9614cb
+coreJar=aa30e8c38e2fe463bc097b2e3aca147978df6eecf33d40aed846e02ce76eefe0
+postgresJar=d26ef652d64576c035318cb2c165d99e1b4af7c2a4499b82f7c35a80e1f55b78
+graphEvalJar=e7214b3717f179d34a058cb25c1a058c3757b31514701459e1dbd1f8798854fd
+shippingAppJar=acfa33159d673066b102bb7ce59ef227f6a5e2879d5a3b3ed3d8054fffe0b9e2
 ```
 
 ## Acceptance Red → Green
@@ -121,10 +122,10 @@ V20 restart IT为`1/0`，V19 Acceptance为`3/0`，provider bytecode Gate为`14/0
 最终whole-artifact SHA-256：
 
 ```text
-core=b44f450e40a8cd62cc5396841163d1432c0cc346daf6ac2b67f3e5626d1be920
-postgres=1432ca43d59da2a674bb6fd884268ab662986abf19af52917d193886021c461d
-graphEval=8f022279b541ad2baff1ed4f4100b01db49aa72d030305241d24e85be734ad8f
-shippingApp=6fe73ada8dd572fac913e1267bdf963e673d1ca246e010b53423930bab9614cb
+core=aa30e8c38e2fe463bc097b2e3aca147978df6eecf33d40aed846e02ce76eefe0
+postgres=d26ef652d64576c035318cb2c165d99e1b4af7c2a4499b82f7c35a80e1f55b78
+graphEval=e7214b3717f179d34a058cb25c1a058c3757b31514701459e1dbd1f8798854fd
+shippingApp=acfa33159d673066b102bb7ce59ef227f6a5e2879d5a3b3ed3d8054fffe0b9e2
 ```
 
 whole-JAR值因本次clean重新生成archive而变化；项目没有冻结reproducible ZIP timestamp，因此不把
@@ -157,6 +158,13 @@ post-rebase pre-portability与当前bytes，不互相覆盖，也不伪称zero-d
   `MICROS`，而专测challenge expiry的窗口保持不变。两个post-approval expiry场景的test-only TTL从
   250ms提高到3000ms，仍等待`TTL + 150ms`并要求精确`owner capability expired`、durable sequence与
   replay fence，不放宽production expiry语义；
+- 第一轮timestamp修复后的Linux CI已经越过上述精度拒绝，但进一步暴露
+  `session-intent-expired`仍使用1秒test-only TTL：慢runner可能在provider session intent落库前先过期，
+  使泛化expiry message通过而durable row为0。该场景现与其他post-approval expiry测试统一为3秒，仍等待
+  `TTL + 150ms`，并新增`PROVIDER_SESSION_INTENT_DURABLE`必须严格早于
+  `REJECTED owner capability expired`的顺序断言；row=1、seq7、restart replay fence均未放宽。修复后本地
+  focused连续3次`1/0`、完整Store suite `61/0`及本次root clean均Green；新的Linux CI在本回执冻结时仍待重跑，
+  因此不把本地Green写成remote CI Green；
 - 同构的dormant production缺口在`Pack010ProviderCredentialBroker`一个durable sink与
   `Pack010ProviderSessionComposer`六个durable sinks精确canonicalize；`CredentialLease.requireFresh`
   继续使用raw clock，避免改变expiry判断。Composer由nanosecond unit与真实PostgreSQL/restart行为覆盖；
@@ -172,7 +180,7 @@ post-rebase pre-portability与当前bytes，不互相覆盖，也不伪称zero-d
 - 当前delta为4个production source与7个test source；schema/provisioning、App route、provider network、
   billing与Live均没有变化。下面Files节按固定词典序列出11个post-V20 code/test路径；逐路径执行
   `shasum -a 256 <path>`，将11行完整标准输出逐字拼接后再次SHA-256，得到
-  `c3295526654482408930715231408352547af4a7910c31baf05eb6e0b3aaf73e`。Build Note与living ExecPlan
+  `5a03d6d099ece85a2766dbf311b2c672f464175d94aeaacd5ed8f75cb67758fa`。Build Note与living ExecPlan
   排除以避免自引用；同算法对offline三文件subset得到
   `fc552583b8207750f04704c8805f622badec6c256f870591df4c2cce19b79e74`。
 

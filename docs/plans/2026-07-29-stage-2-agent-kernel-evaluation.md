@@ -1809,7 +1809,10 @@ Pack010 progress：
     post-V20 addendum同时记录：Linux real-TTY时间精度Red已在7个production durable sinks及3个test-harness
     callsites修复，expiry比较仍用raw clock；offline cooperative writer的safe partial claim现在只会
     `COMMIT_INCOMPLETE`，稳定读取的malformed/unsafe metadata仍INVALID；孤立claim在读中发生identity/size
-    变化只会保守UNKNOWN且不能获得publish authority。当前只扩大本地Engineering证据，
+    变化只会保守UNKNOWN且不能获得publish authority。timestamp修复后的首轮Linux CI又暴露
+    `session-intent-expired`的1秒test-only窗口会在durable intent落库前先过期；该场景现使用3秒、仍等待
+    `TTL + 150ms`，并强制`PROVIDER_SESSION_INTENT_DURABLE`先于精确expiry rejection。focused连续3次、
+    Store suite `61/0`与root clean均Green；新的Linux CI仍待重跑，未被本地回执冒充Green。当前只扩大本地Engineering证据，
     没有App wiring、provider egress或Authority/Live上调；
   - [ ] DeepSeek live PASS与durable multi-provider TX-A：本轮唯一真实请求在intermediate bytes上
     fail closed为`RESPONSE_METADATA_MISMATCH`，没有retry/redirect或第二请求，具体不兼容字段、billing与

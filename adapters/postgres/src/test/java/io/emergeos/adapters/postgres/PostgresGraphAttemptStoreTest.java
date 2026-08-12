@@ -3796,7 +3796,7 @@ class PostgresGraphAttemptStoreTest {
           authorityCatalog("case-" + mode, "owner-" + mode);
       GraphAttemptManifest manifest = catalog.getFirst();
       long ttlMs =
-          mode.equals("session-intent-expired") ? 1_000 : 30_000;
+          mode.equals("session-intent-expired") ? 3_000 : 30_000;
       ProcessResult result =
           runOwnerAuthorityProcess(
               catalog,
@@ -3809,6 +3809,13 @@ class PostgresGraphAttemptStoreTest {
         assertEquals(3, result.exitCode(), result.output());
         assertTrue(
             result.output().contains("owner capability expired"));
+        assertTrue(
+            result.output().contains("PROVIDER_SESSION_INTENT_DURABLE"),
+            result.output());
+        assertTrue(
+            result.output().indexOf("PROVIDER_SESSION_INTENT_DURABLE")
+                < result.output().indexOf("REJECTED owner capability expired"),
+            result.output());
       } else if (mode.equals("kill-during-session-intent")) {
         assertEquals(93, result.exitCode(), result.output());
       } else {
