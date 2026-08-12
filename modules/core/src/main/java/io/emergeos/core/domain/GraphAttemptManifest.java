@@ -45,6 +45,8 @@ public record GraphAttemptManifest(
 
   private static final String MANIFEST_DOMAIN =
       "emergeos.graph-attempt-manifest.v1";
+  public static final String TERMINAL_PROTOCOL_VERSION =
+      "postgres-graph-terminal-v1";
 
   public GraphAttemptManifest {
     if (!"1.0".equals(schemaVersion)) {
@@ -88,6 +90,11 @@ public record GraphAttemptManifest(
     ContractValueDomains.requireUsd(reservationUsd, "reservationUsd");
     ContractValueDomains.requireExecutionLimit(
         maximumProviderRequests, "maximumProviderRequests");
+    if (TERMINAL_PROTOCOL_VERSION.equals(graphProtocolVersion)
+        && maximumProviderRequests != 2) {
+      throw new IllegalArgumentException(
+          "terminal graph protocol requires exactly two provider requests");
+    }
     parentActor =
         GraphAttemptDomains.safeName(parentActor, "parentActor");
     childActor =

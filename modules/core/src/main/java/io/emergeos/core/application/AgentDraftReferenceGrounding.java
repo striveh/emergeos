@@ -2,6 +2,7 @@ package io.emergeos.core.application;
 
 import io.emergeos.core.domain.AgentDraftProposal;
 import io.emergeos.core.domain.ArtifactLineageEntry;
+import io.emergeos.core.domain.ReferenceGroundingPolicy;
 import java.util.List;
 import java.util.Objects;
 
@@ -24,23 +25,15 @@ public final class AgentDraftReferenceGrounding {
     if (proposal == null || !isValidArtifactContent(proposal.content())) {
       return rejected(Failure.INVALID_STRUCTURED_FINAL);
     }
-    if (candidate.obtainedEvidenceRefs().isEmpty()) {
-      return rejected(Failure.MISSING_REQUIRED_EVIDENCE);
-    }
-    if (!candidate
-        .obtainedEvidenceRefs()
-        .equals(List.of(candidate.requiredEvidenceRef()))) {
-      return rejected(Failure.UNSAFE_EVIDENCE_BINDING);
-    }
-    if (!proposal
-        .evidenceRefs()
-        .equals(List.of(candidate.requiredEvidenceRef()))) {
-      return rejected(Failure.INVALID_EVIDENCE_CLAIM);
-    }
-    if (!candidate.requiredEvidenceAvailable()) {
-      return rejected(Failure.REQUIRED_EVIDENCE_NOT_FOUND);
-    }
-    return new Verification(null);
+    ReferenceGroundingPolicy.Failure failure =
+        ReferenceGroundingPolicy.failure(
+            proposal.evidenceRefs(),
+            candidate.obtainedEvidenceRefs(),
+            candidate.requiredEvidenceRef(),
+            candidate.requiredEvidenceAvailable());
+    return failure == null
+        ? new Verification(null)
+        : rejected(Failure.valueOf(failure.name()));
   }
 
   public record Candidate(

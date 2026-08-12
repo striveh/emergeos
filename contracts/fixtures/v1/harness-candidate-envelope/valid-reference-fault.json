@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "candidateRef": "harness-candidate://child-run",
+  "attemptId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "executionSlotId": "pack010-r1",
+  "repetition": 1,
+  "childRunId": "child-run",
+  "childTaskId": "child-task",
+  "sourceRequestOrdinal": 2,
+  "sourceResponseHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "traceRootHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+  "content": "结构合法，但引用错误。🧭",
+  "contentHash": "cf8722d2e90092e1279176c5b59e9b710f41ba44f449859a69dbcda29fa40bba",
+  "evidenceRefs": [
+    "capture://other"
+  ],
+  "obtainedEvidenceRefs": [
+    "capture://capture-1"
+  ],
+  "requiredEvidenceRef": "capture://capture-1",
+  "requiredEvidenceAvailable": true,
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "integrityHash": "781484bd4dfa074e035313f18b70816cf4dc14684c7b987f154c2a2098d56e1f"
+}

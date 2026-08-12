@@ -7,15 +7,15 @@ import io.emergeos.core.domain.GraphAttemptPhase;
 import io.emergeos.core.domain.GraphAttemptSnapshot;
 import io.emergeos.core.domain.GraphAttemptVerification;
 import io.emergeos.core.domain.GraphBillingStatus;
-import io.emergeos.core.port.GraphAttemptStore;
+import io.emergeos.core.port.GraphAttemptReader;
 import java.util.Objects;
 
 /** Production read-only interpretation of the frozen Pack009 graph prefix. */
 final class Pack009GraphVerifier {
 
-  private final GraphAttemptStore store;
+  private final GraphAttemptReader store;
 
-  Pack009GraphVerifier(GraphAttemptStore store) {
+  Pack009GraphVerifier(GraphAttemptReader store) {
     this.store = Objects.requireNonNull(store, "store");
   }
 

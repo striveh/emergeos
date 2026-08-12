@@ -6,10 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.emergeos.contracts.DataClass;
+import io.emergeos.contracts.HarnessCandidateEnvelope;
 import io.emergeos.contracts.HarnessExperiment;
 import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.TaskEnvelope;
+import io.emergeos.contracts.WorkerResultEnvelope;
 import io.emergeos.core.domain.AgentRun;
+import io.emergeos.core.domain.ArtifactLineage;
 import io.emergeos.core.domain.GraphAttemptConflictException;
 import io.emergeos.core.domain.GraphAttemptCursor;
 import io.emergeos.core.domain.GraphAttemptEvent;
@@ -19,11 +22,13 @@ import io.emergeos.core.domain.GraphAttemptPhase;
 import io.emergeos.core.domain.GraphAttemptSnapshot;
 import io.emergeos.core.domain.GraphAttemptVerification;
 import io.emergeos.core.domain.GraphOperatorApproval;
+import io.emergeos.core.domain.GraphProviderAttribution;
 import io.emergeos.core.domain.GraphProviderIntent;
 import io.emergeos.core.domain.GraphRunRole;
 import io.emergeos.core.domain.GraphRunSelection;
 import io.emergeos.core.domain.WorkerHandoffRequest;
 import io.emergeos.core.port.AgentWorkerRuntime;
+import io.emergeos.core.port.AgentRunContext;
 import io.emergeos.core.port.CancellationSignal;
 import io.emergeos.core.port.GraphAttemptStore;
 import java.io.Serializable;
@@ -84,6 +89,32 @@ class GraphAttemptCoordinatorTest {
     assertOpaque(GraphAttemptCoordinator.ChildStarted.class);
     assertOpaque(
         GraphAttemptCoordinator.EgressAuthority.class);
+  }
+
+  @Test
+  void publicAdoptionRejectsGenericApprovalOriginBeforeStoreRead() {
+    Fixture fixture = fixture();
+    RecordingStore store = new RecordingStore();
+    GraphAttemptCursor marked =
+        ((GraphAttemptStore.CreateResult.Created)
+                store.create(fixture.manifest(), NOW))
+            .cursor();
+    GraphAttemptCursor approved =
+        store.approve(
+            fixture.manifest(),
+            marked,
+            GraphOperatorApproval.ownerTty(fixture.manifest()),
+            NOW.plusMillis(1));
+    store.calls.clear();
+    GraphAttemptCoordinator coordinator =
+        new GraphAttemptCoordinator(store);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            coordinator.adoptOwnerApproved(
+                fixture.manifest(), approved, new Object()));
+    assertTrue(store.calls.isEmpty());
   }
 
   @Test
@@ -253,6 +284,73 @@ class GraphAttemptCoordinatorTest {
                 NOW));
   }
 
+  @Test
+  void providerAttributionMustMatchTheExactPendingOrdinal() {
+    Fixture fixture = fixture();
+    RecordingStore store = new RecordingStore();
+    GraphAttemptCoordinator coordinator =
+        new GraphAttemptCoordinator(store);
+    GraphAttemptCoordinator.EgressAuthority egress =
+        readyEgress(coordinator, fixture);
+    GraphProviderIntent first =
+        intent(fixture, 1, "request-one");
+    coordinator.providerIntent(egress, first, NOW.plusMillis(9));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            coordinator.providerAttributed(
+                egress,
+                attribution(
+                    fixture,
+                    2,
+                    IntegrityHashes.utf8ContentHash("request-two")),
+                NOW.plusMillis(10)));
+    coordinator.providerAttributed(
+        egress,
+        attribution(fixture, 1, first.requestHash()),
+        NOW.plusMillis(10));
+    assertThrows(
+        IllegalStateException.class,
+        () -> coordinator.requireProviderAttributed(
+            egress, fixture.manifest()));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            coordinator.providerIntent(
+                egress,
+                intent(fixture, 3, "request-three"),
+                NOW.plusMillis(11)));
+    GraphProviderIntent second =
+        intent(fixture, 2, "request-two");
+    coordinator.providerIntent(
+        egress, second, NOW.plusMillis(11));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            coordinator.providerAttributed(
+                egress,
+                attribution(fixture, 1, first.requestHash()),
+                NOW.plusMillis(12)));
+    coordinator.providerAttributed(
+        egress,
+        attribution(fixture, 2, second.requestHash()),
+        NOW.plusMillis(12));
+    coordinator.requireProviderAttributed(
+        egress, fixture.manifest());
+
+    assertEquals(
+        List.of(1, 2),
+        store.events.stream()
+            .filter(
+                event ->
+                    event.type()
+                        == GraphAttemptEventType.PROVIDER_ATTRIBUTED)
+            .map(GraphAttemptEvent::requestOrdinal)
+            .toList());
+  }
+
   private static GraphAttemptCoordinator.InteractiveConsole
       exactConsole() {
     return new GraphAttemptCoordinator.InteractiveConsole() {
@@ -270,6 +368,58 @@ class GraphAttemptCoordinatorTest {
 
   private static Clock fixedClock() {
     return Clock.fixed(NOW, ZoneOffset.UTC);
+  }
+
+  private static GraphAttemptCoordinator.EgressAuthority readyEgress(
+      GraphAttemptCoordinator coordinator, Fixture fixture) {
+    GraphAttemptCoordinator.Authorized approved =
+        coordinator.approve(
+            fixture.manifest(), exactConsole(), fixedClock());
+    GraphAttemptCoordinator.ParentStarted parent =
+        coordinator.startParent(
+            coordinator.authorizeParent(
+                approved, fixture.parent(), NOW.plusMillis(1)),
+            NOW.plusMillis(2));
+    GraphAttemptCoordinator.ChildStarted child =
+        coordinator.startChild(
+            coordinator.authorizeChild(
+                parent, fixture.child(), NOW.plusMillis(3)),
+            NOW.plusMillis(4));
+    GraphAttemptCoordinator.EgressAuthority egress =
+        coordinator.consumeChildEgress(
+            child, NOW.plusMillis(5));
+    coordinator.credentialReadStarted(
+        egress, NOW.plusMillis(6));
+    coordinator.clientCreated(egress, NOW.plusMillis(7));
+    coordinator.modelCreated(egress, NOW.plusMillis(8));
+    return egress;
+  }
+
+  private static GraphProviderIntent intent(
+      Fixture fixture, int ordinal, String request) {
+    return new GraphProviderIntent(
+        ordinal,
+        IntegrityHashes.utf8ContentHash(request),
+        fixture.profile().modelRequested());
+  }
+
+  private static GraphProviderAttribution attribution(
+      Fixture fixture, int ordinal, String requestHash) {
+    PricingProfile pricing = fixture.profile().pricing();
+    return GraphProviderAttribution.create(
+        ordinal,
+        requestHash,
+        IntegrityHashes.utf8ContentHash("response-" + ordinal),
+        fixture.manifest().childActor(),
+        pricing.modelRequested(),
+        pricing.modelRequested(),
+        pricing.graphSnapshot(),
+        1,
+        0,
+        1,
+        0,
+        2,
+        pricing.actualCostUsd(1, 0, 1));
   }
 
   private static void assertOpaque(Class<?> type) {
@@ -583,9 +733,64 @@ class GraphAttemptCoordinatorTest {
     }
 
     @Override
+    public GraphAttemptCursor providerAttributed(
+        GraphAttemptManifest manifest,
+        GraphAttemptCursor expected,
+        GraphProviderAttribution attribution,
+        Instant occurredAt) {
+      calls.add("providerAttributed");
+      GraphAttemptEvent event =
+          GraphAttemptEvent.providerAttributed(
+              expected,
+              manifest.childSelection(),
+              attribution,
+              occurredAt);
+      events.add(event);
+      cursor = event.advance(expected);
+      return cursor;
+    }
+
+    @Override
+    public GraphAttemptCursor completeChild(
+        GraphAttemptManifest manifest,
+        GraphAttemptCursor expected,
+        AgentRunContext parent,
+        AgentRun terminalChild,
+        HarnessCandidateEnvelope candidate,
+        WorkerResultEnvelope workerResult,
+        Instant occurredAt) {
+      throw new UnsupportedOperationException(
+          "terminal child is outside this coordinator test fake");
+    }
+
+    @Override
+    public GraphAttemptCursor completeParentAndSeal(
+        GraphAttemptManifest manifest,
+        GraphAttemptCursor expected,
+        AgentRun terminalParent,
+        ArtifactLineage artifact,
+        Instant occurredAt) {
+      throw new UnsupportedOperationException(
+          "terminal parent is outside this coordinator test fake");
+    }
+
+    @Override
     public GraphAttemptVerification findVerified(
         GraphAttemptManifest expected) {
-      return new GraphAttemptVerification.Missing();
+      calls.add("findVerified");
+      if (!claimed || cursor == null || events.isEmpty()) {
+        return new GraphAttemptVerification.Missing();
+      }
+      return new GraphAttemptVerification.Valid(
+          new GraphAttemptSnapshot(
+              expected,
+              cursor,
+              events,
+              null,
+              null,
+              false,
+              io.emergeos.core.domain.GraphAttemptOutcome.INCOMPLETE,
+              GraphAttemptSnapshot.deriveBilling(events)));
     }
 
     private GraphAttemptCursor advanceSelection(

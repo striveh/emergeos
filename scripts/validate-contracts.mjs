@@ -33,6 +33,13 @@ const frozenEvalEnvironments = new Map([
       toolRegistryVersion: "agent-tools-v2",
       rawSha256: "d6c3cb929a4aa5f9be75dc7f385f1c0afe589277e2622501f684ee8ee5df8899"
     }
+  ],
+  [
+    "evals/environments/openai-responses-pack010-offline-synthetic-v1.json",
+    {
+      toolRegistryVersion: "agent-tools-v2",
+      rawSha256: "affe0b8b1a14bf6c7b2dce039067318871275f4db85eec182790ff8082c769f0"
+    }
   ]
 ]);
 
@@ -816,6 +823,141 @@ function verifyWorkerResultBoundaryRegression() {
 
 verifyWorkerResultBoundaryRegression();
 
+function harnessCandidateIntegrityHash(instance) {
+  const preimage = JSON.parse(JSON.stringify(instance));
+  delete preimage.integrityHash;
+  return domainHash(
+    "emergeos.harness-candidate-envelope.v1",
+    canonicalEncode(preimage)
+  );
+}
+
+function verifyCanonicalEvidenceRefs(refs, relative) {
+  if (!Array.isArray(refs) || refs.length > 128) {
+    throw new Error(`${relative}: exceeds the Candidate evidence limit`);
+  }
+  for (let index = 1; index < refs.length; index += 1) {
+    if (compareCodePoints(refs[index - 1], refs[index]) >= 0) {
+      throw new Error(
+        `${relative}: must be unique and canonically ordered`
+      );
+    }
+  }
+}
+
+function verifyHarnessCandidate(instance, relative) {
+  const expectedRef =
+    `harness-candidate://${instance.childRunId}`;
+  if (instance.candidateRef !== expectedRef) {
+    throw new Error(
+      `${relative}: candidateRef does not resolve to childRunId`
+    );
+  }
+  if (
+    instance.sourceRequestOrdinal !== 2
+    || typeof instance.sourceResponseHash !== "string"
+    || !/^[a-f0-9]{64}$/.test(instance.sourceResponseHash)
+  ) {
+    throw new Error(
+      `${relative}: source provider response binding is invalid`
+    );
+  }
+  if (instance.content.length > 65_536) {
+    throw new Error(
+      `${relative}: content exceeds 65536 UTF-16 code units`
+    );
+  }
+  const expectedContentHash = crypto
+    .createHash("sha256")
+    .update(Buffer.from(instance.content, "utf8"))
+    .digest("hex");
+  if (instance.contentHash !== expectedContentHash) {
+    throw new Error(
+      `${relative}: contentHash does not match UTF-8 content`
+    );
+  }
+  verifyCanonicalEvidenceRefs(
+    instance.evidenceRefs,
+    `${relative}.evidenceRefs`
+  );
+  verifyCanonicalEvidenceRefs(
+    instance.obtainedEvidenceRefs,
+    `${relative}.obtainedEvidenceRefs`
+  );
+  if (instance.integrityProfile !== INTEGRITY_PROFILE) {
+    throw new Error(`${relative}: unsupported integrityProfile`);
+  }
+  const expectedIntegrityHash =
+    harnessCandidateIntegrityHash(instance);
+  if (instance.integrityHash !== expectedIntegrityHash) {
+    throw new Error(
+      `${relative}: integrityHash mismatch (expected ${expectedIntegrityHash})`
+    );
+  }
+}
+
+function verifyHarnessCandidateBoundaryRegression() {
+  const candidate = (childRunId, content) => {
+    const value = {
+      schemaVersion: "1.0",
+      candidateRef: `harness-candidate://${childRunId}`,
+      attemptId: "a".repeat(64),
+      executionSlotId: "pack010-r1",
+      repetition: 1,
+      childRunId,
+      childTaskId: `${childRunId}-task`,
+      sourceRequestOrdinal: 2,
+      sourceResponseHash: "c".repeat(64),
+      traceRootHash: "b".repeat(64),
+      outputSchema:
+        "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+      content,
+      contentHash: crypto
+        .createHash("sha256")
+        .update(Buffer.from(content, "utf8"))
+        .digest("hex"),
+      evidenceRefs: ["capture://pack010-capture"],
+      obtainedEvidenceRefs: ["capture://pack010-capture"],
+      requiredEvidenceRef: "capture://pack010-capture",
+      requiredEvidenceAvailable: true,
+      integrityProfile: INTEGRITY_PROFILE,
+      integrityHash: null
+    };
+    value.integrityHash = harnessCandidateIntegrityHash(value);
+    return value;
+  };
+  for (const [name, content] of [
+    ["exact-bmp", "文".repeat(65_536)],
+    ["exact-astral", "😀".repeat(32_768)]
+  ]) {
+    verifyHarnessCandidate(
+      candidate(`candidate-${name}`, content),
+      `Harness Candidate UTF-16 boundary ${name}`
+    );
+  }
+  for (const [name, content] of [
+    ["over-bmp", "文".repeat(65_537)],
+    ["over-astral", "😀".repeat(32_769)]
+  ]) {
+    let rejected = false;
+    try {
+      verifyHarnessCandidate(
+        candidate(`candidate-${name}`, content),
+        `Harness Candidate UTF-16 boundary ${name}`
+      );
+    } catch {
+      rejected = true;
+    }
+    if (!rejected) {
+      throw new Error(
+        `Harness Candidate UTF-16 boundary ${name} was accepted`
+      );
+    }
+  }
+}
+
+verifyHarnessCandidateBoundaryRegression();
+
 function verifyTask(instance, relative) {
   if (!isUsdDomain(instance.budgetUsd)) {
     throw new Error(`${relative}: budgetUsd is outside the shared six-decimal USD domain`);
@@ -1187,14 +1329,537 @@ function verifyBundle(instance, relative) {
   }
 }
 
+function harnessEvaluationReportId(instance) {
+  const preimage = JSON.parse(JSON.stringify(instance));
+  delete preimage.reportId;
+  delete preimage.integrityHash;
+  normalizeReportLegacyTasks(preimage);
+  return `harness-evaluation-report-${domainHash(
+    "emergeos.harness-evaluation-report-id.v1",
+    canonicalEncode(preimage)
+  )}`;
+}
+
+function harnessEvaluationReportIntegrityHash(instance) {
+  const preimage = JSON.parse(JSON.stringify(instance));
+  delete preimage.integrityHash;
+  normalizeReportLegacyTasks(preimage);
+  return domainHash(
+    "emergeos.harness-evaluation-report.v1",
+    canonicalEncode(preimage)
+  );
+}
+
+function normalizeReportLegacyTasks(value) {
+  if (Array.isArray(value)) {
+    value.forEach(normalizeReportLegacyTasks);
+    return;
+  }
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+  if (
+    value.schemaVersion === "1.0"
+    && Object.hasOwn(value, "requiredTools")
+    && Object.hasOwn(value, "modelProvider")
+  ) {
+    delete value.modelProvider;
+    delete value.modelRequested;
+    delete value.pricingProfile;
+  }
+  Object.values(value).forEach(normalizeReportLegacyTasks);
+}
+
+function safeCountAdd(left, right, label) {
+  const result = left + right;
+  if (!Number.isSafeInteger(result) || result < 0) {
+    throw new Error(`${label} exceeds the safe integer domain`);
+  }
+  return result;
+}
+
+function usdMicros(value, label) {
+  if (!isUsdDomain(value)) {
+    throw new Error(`${label} is outside the six-decimal USD domain`);
+  }
+  return BigInt(Math.round(value * 1_000_000));
+}
+
+function instantMicros(value, label) {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?Z$/
+    .exec(value);
+  if (match === null) {
+    throw new Error(`${label} is not a microsecond-aligned UTC timestamp`);
+  }
+  const epochMs = Date.parse(`${match[1]}Z`);
+  if (!Number.isFinite(epochMs)) {
+    throw new Error(`${label} is not a valid timestamp`);
+  }
+  const fraction = (match[2] ?? "").padEnd(6, "0");
+  return BigInt(epochMs) * 1_000n + BigInt(fraction || "0");
+}
+
+function verifyReportAttribution(attribution, relative) {
+  if (
+    attribution.modelRequested !== attribution.pricingModelRequested
+    || attribution.uncachedInputNanoUsdPerToken <= 0
+    || attribution.cachedInputNanoUsdPerToken < 0
+    || attribution.cachedInputNanoUsdPerToken
+      > attribution.uncachedInputNanoUsdPerToken
+    || attribution.outputNanoUsdPerToken <= 0
+    || attribution.cachedInputTokens > attribution.inputTokens
+    || attribution.reasoningOutputTokens > attribution.outputTokens
+    || attribution.totalTokens
+      !== attribution.inputTokens + attribution.outputTokens
+  ) {
+    throw new Error(`${relative}: provider attribution is inconsistent`);
+  }
+  const uncached = BigInt(
+    attribution.inputTokens - attribution.cachedInputTokens
+  );
+  const nanoUsd =
+    uncached * BigInt(attribution.uncachedInputNanoUsdPerToken)
+    + BigInt(attribution.cachedInputTokens)
+      * BigInt(attribution.cachedInputNanoUsdPerToken)
+    + BigInt(attribution.outputTokens)
+      * BigInt(attribution.outputNanoUsdPerToken);
+  const expectedMicros = (nanoUsd + 500n) / 1_000n;
+  if (
+    usdMicros(attribution.observedCostUsd, `${relative}.observedCostUsd`)
+      !== expectedMicros
+  ) {
+    throw new Error(`${relative}: provider cost witness is inconsistent`);
+  }
+}
+
+function verifyReportContentContract(instance, relative) {
+  const metadata = {...instance};
+  delete metadata.content;
+  verifySafeContractTextTree(metadata, relative);
+  requireSafeText(instance.content, `${relative}.content`, 65_536);
+}
+
+function reportBinding(bundle, role, relative) {
+  const matching = bundle.resourceBindings
+    .filter((binding) => binding.role === role);
+  if (matching.length > 1) {
+    throw new Error(`${relative}: duplicate ${role} binding`);
+  }
+  return matching.length === 0 ? null : matching[0];
+}
+
+function sameProviderProfile(left, right) {
+  return left.providerActor === right.providerActor
+    && left.modelRequested === right.modelRequested
+    && left.modelResolved === right.modelResolved
+    && left.pricingProfileId === right.pricingProfileId
+    && left.pricingProvider === right.pricingProvider
+    && left.pricingModelRequested === right.pricingModelRequested
+    && left.uncachedInputNanoUsdPerToken
+      === right.uncachedInputNanoUsdPerToken
+    && left.cachedInputNanoUsdPerToken
+      === right.cachedInputNanoUsdPerToken
+    && left.outputNanoUsdPerToken === right.outputNanoUsdPerToken
+    && left.pricingProfileFingerprint
+      === right.pricingProfileFingerprint;
+}
+
+function verifyReportEvaluation(
+  evaluation,
+  repetition,
+  armId,
+  evaluatorVersion,
+  relative
+) {
+  if (
+    evaluation.repetition !== repetition.repetition
+    || evaluation.armId !== armId
+    || evaluation.evaluatorVersion !== evaluatorVersion
+    || evaluation.candidateRef !== repetition.candidate.candidateRef
+    || evaluation.candidateIntegrityHash
+      !== repetition.candidate.integrityHash
+  ) {
+    throw new Error(
+      `${relative}: evaluation does not bind its exact shared Candidate`
+    );
+  }
+  if (
+    (evaluation.status === "ACCEPTED" && evaluation.failureCode !== null)
+    || (evaluation.status === "REJECTED" && evaluation.failureCode === null)
+  ) {
+    throw new Error(`${relative}: evaluation status/failureCode mismatch`);
+  }
+}
+
+function verifyReportOutcome(repetition, h1, relative) {
+  const child = repetition.childRun.bundle;
+  const parent = repetition.parentRun.bundle;
+  const workerBinding = reportBinding(child, "WORKER_RESULT", relative);
+  const artifactBinding = reportBinding(parent, "ARTIFACT", relative);
+  if (h1.status === "ACCEPTED") {
+    const worker = repetition.workerResult;
+    const artifact = repetition.artifactBinding;
+    if (
+      repetition.terminalSeal.graphOutcome !== "SUCCEEDED"
+      || child.outcome !== "SUCCEEDED"
+      || parent.outcome !== "SUCCEEDED"
+      || worker === null
+      || artifact === null
+      || workerBinding === null
+      || artifactBinding === null
+      || worker.childRunId !== child.runId
+      || worker.childTaskId !== child.taskId
+      || worker.outputSchema !== repetition.candidate.outputSchema
+      || worker.content !== repetition.candidate.content
+      || worker.contentHash !== repetition.candidate.contentHash
+      || !equalJson(worker.evidenceRefs, repetition.candidate.evidenceRefs)
+      || workerBinding.ref !== worker.workerResultRef
+      || workerBinding.contentHash !== worker.integrityHash
+      || !equalJson(artifactBinding, artifact)
+      || artifact.contentHash !== repetition.candidate.contentHash
+      || !equalJson(parent.result.artifactRefs, [artifact.ref])
+    ) {
+      throw new Error(
+        `${relative}: accepted H1 does not match successful terminal graph truth`
+      );
+    }
+    return;
+  }
+  if (
+    repetition.terminalSeal.graphOutcome !== "FAILED"
+    || child.outcome !== "FAILED"
+    || parent.outcome !== "FAILED"
+    || child.failureAttribution !== h1.failureCode
+    || parent.failureAttribution !== "HANDOFF_CHILD_FAILED"
+    || repetition.workerResult !== null
+    || repetition.artifactBinding !== null
+    || workerBinding !== null
+    || artifactBinding !== null
+  ) {
+    throw new Error(
+      `${relative}: rejected H1 does not match failed terminal graph truth`
+    );
+  }
+}
+
+function verifyReportRepetition(
+  repetition,
+  h0,
+  h1,
+  environmentRawSha256,
+  relative
+) {
+  const candidate = repetition.candidate;
+  const childRun = repetition.childRun;
+  const parentRun = repetition.parentRun;
+  const child = childRun.bundle;
+  const parent = parentRun.bundle;
+  const seal = repetition.terminalSeal;
+  const attributions = repetition.providerAttributions;
+
+  verifySafeContractTextTree(child, `${relative}.childRun.bundle`);
+  verifySafeContractTextTree(parent, `${relative}.parentRun.bundle`);
+  verifyBundle(child, `${relative}.childRun.bundle`);
+  verifyBundle(parent, `${relative}.parentRun.bundle`);
+  verifyReportContentContract(candidate, `${relative}.candidate`);
+  verifyHarnessCandidate(candidate, `${relative}.candidate`);
+  if (repetition.workerResult !== null) {
+    verifyReportContentContract(
+      repetition.workerResult,
+      `${relative}.workerResult`
+    );
+    verifyWorkerResult(
+      repetition.workerResult,
+      `${relative}.workerResult`
+    );
+  }
+  attributions.forEach((attribution, index) =>
+    verifyReportAttribution(
+      attribution,
+      `${relative}.providerAttributions[${index}]`
+    ));
+  if (
+    attributions.length !== 2
+    || attributions[0].requestOrdinal !== 1
+    || attributions[1].requestOrdinal !== 2
+    || attributions[0].attributionHash === attributions[1].attributionHash
+  ) {
+    throw new Error(`${relative}: provider attribution order mismatch`);
+  }
+  if (
+    repetition.attemptId !== repetition.manifestHash
+    || repetition.attemptId !== candidate.attemptId
+    || repetition.executionSlotId !== candidate.executionSlotId
+    || repetition.repetition !== candidate.repetition
+    || candidate.childRunId !== child.runId
+    || candidate.childTaskId !== child.taskId
+    || candidate.sourceRequestOrdinal !== 2
+    || candidate.sourceResponseHash !== attributions[1].responseHash
+    || candidate.traceRootHash !== child.traceRootHash
+    || candidate.outputSchema !== child.task.outputSchema
+    || !equalJson(candidate.obtainedEvidenceRefs, child.result.evidenceRefs)
+    || candidate.requiredEvidenceAvailable
+      !== child.result.evidenceRefs.includes(candidate.requiredEvidenceRef)
+  ) {
+    throw new Error(`${relative}: Candidate/terminal child mismatch`);
+  }
+  const environmentRef = `environment://sha256:${environmentRawSha256}`;
+  if (
+    child.environmentSnapshotRef !== environmentRef
+    || parent.environmentSnapshotRef !== environmentRef
+    || child.task.environmentSnapshotRef !== environmentRef
+    || parent.task.environmentSnapshotRef !== environmentRef
+  ) {
+    throw new Error(`${relative}: environment binding mismatch`);
+  }
+
+  const attributedCost = attributions.reduce(
+    (sum, attribution) =>
+      sum + usdMicros(attribution.observedCostUsd, relative),
+    0n
+  );
+  const attributedTokens = attributions.reduce(
+    (sum, attribution) =>
+      safeCountAdd(sum, attribution.totalTokens, relative),
+    0
+  );
+  if (
+    usdMicros(child.costUsd, `${relative}.child.costUsd`)
+      !== attributedCost
+    || usdMicros(parent.costUsd, `${relative}.parent.costUsd`)
+      !== attributedCost
+    || child.tokenCount !== attributedTokens
+    || parent.tokenCount !== attributedTokens
+    || attributions[1].modelResolved !== child.modelResolved
+  ) {
+    throw new Error(`${relative}: provider/child/parent usage mismatch`);
+  }
+  const childRef = `agent-run://${child.runId}`;
+  const handoff = reportBinding(parent, "HANDOFF", relative);
+  if (
+    !equalJson(parent.handoffRefs, [childRef])
+    || handoff === null
+    || handoff.ordinal !== 0
+    || handoff.ref !== childRef
+    || handoff.contentHash !== child.integrityHash
+  ) {
+    throw new Error(`${relative}: parent Handoff mismatch`);
+  }
+
+  if (
+    seal.attemptId !== repetition.attemptId
+    || seal.manifestHash !== repetition.manifestHash
+    || !equalJson(
+      seal.providerAttributionHashes,
+      attributions.map((attribution) => attribution.attributionHash)
+    )
+    || seal.candidateRef !== candidate.candidateRef
+    || seal.candidateIntegrityHash !== candidate.integrityHash
+    || seal.childTerminalHash !== childRun.terminalHash
+    || seal.parentTerminalHash !== parentRun.terminalHash
+    || seal.preSealHeadHash === seal.finalHeadHash
+    || instantMicros(seal.sealedAt, `${relative}.sealedAt`)
+      < instantMicros(childRun.completedAt, `${relative}.child.completedAt`)
+    || instantMicros(seal.sealedAt, `${relative}.sealedAt`)
+      < instantMicros(parentRun.completedAt, `${relative}.parent.completedAt`)
+    || instantMicros(parentRun.completedAt, `${relative}.parent.completedAt`)
+      < instantMicros(childRun.completedAt, `${relative}.child.completedAt`)
+    || instantMicros(childRun.completedAt, `${relative}.child.completedAt`)
+      < instantMicros(childRun.startedAt, `${relative}.child.startedAt`)
+    || instantMicros(parentRun.completedAt, `${relative}.parent.completedAt`)
+      < instantMicros(parentRun.startedAt, `${relative}.parent.startedAt`)
+  ) {
+    throw new Error(`${relative}: terminal seal/Run witness mismatch`);
+  }
+
+  verifyReportEvaluation(
+    h0,
+    repetition,
+    "h0-schema-only",
+    "schema-only-eval-v1",
+    relative
+  );
+  verifyReportEvaluation(
+    h1,
+    repetition,
+    "h1-reference-grounding",
+    "agent-draft-verifier-v1",
+    relative
+  );
+  if (h0.status !== "ACCEPTED" || h0.failureCode !== null) {
+    throw new Error(`${relative}: H0 must accept the shared Candidate`);
+  }
+  const required = [candidate.requiredEvidenceRef];
+  let expectedH1Failure = null;
+  if (candidate.obtainedEvidenceRefs.length === 0) {
+    expectedH1Failure = "MISSING_REQUIRED_EVIDENCE";
+  } else if (!equalJson(candidate.obtainedEvidenceRefs, required)) {
+    expectedH1Failure = "UNSAFE_EVIDENCE_BINDING";
+  } else if (!equalJson(candidate.evidenceRefs, required)) {
+    expectedH1Failure = "INVALID_EVIDENCE_CLAIM";
+  } else if (!candidate.requiredEvidenceAvailable) {
+    expectedH1Failure = "REQUIRED_EVIDENCE_NOT_FOUND";
+  }
+  if (
+    expectedH1Failure === null
+      ? h1.status !== "ACCEPTED" || h1.failureCode !== null
+      : h1.status !== "REJECTED"
+        || h1.failureCode !== expectedH1Failure
+  ) {
+    throw new Error(`${relative}: H1/Candidate mismatch`);
+  }
+  verifyReportOutcome(repetition, h1, relative);
+}
+
+function verifyHarnessEvaluationReport(instance, relative) {
+  const expectedArms = [
+    {armId: "h0-schema-only", evaluatorVersion: "schema-only-eval-v1"},
+    {
+      armId: "h1-reference-grounding",
+      evaluatorVersion: "agent-draft-verifier-v1"
+    }
+  ];
+  if (
+    !equalJson(instance.evaluatorArms, expectedArms)
+    || instance.repetitions.length !== 3
+    || instance.evaluations.length !== 6
+  ) {
+    throw new Error(`${relative}: complete Harness matrix mismatch`);
+  }
+  const exactEffects = {
+    sharedCandidateInputs: 3,
+    evaluations: 6,
+    modelInvocations: 0,
+    toolExecutions: 0,
+    networkCalls: 0,
+    credentialReads: 0,
+    connectorCalls: 0,
+    productTruthWrites: 0,
+    externalSideEffects: 0,
+    realUserDataReads: 0
+  };
+  if (
+    Object.keys(instance.evaluatorEffects).length
+      !== Object.keys(exactEffects).length
+    || !Object.entries(exactEffects).every(
+      ([name, expected]) => instance.evaluatorEffects[name] === expected
+    )
+  ) {
+    throw new Error(`${relative}: evaluator effects are not exactly zero`);
+  }
+  const slots = new Set();
+  const attempts = new Set();
+  const candidateRefs = new Set();
+  const runIds = new Set();
+  let baselineAttribution = null;
+  let experimentArm = null;
+  let providerRequests = 0;
+  let inputTokens = 0;
+  let cachedInputTokens = 0;
+  let outputTokens = 0;
+  let reasoningOutputTokens = 0;
+  let totalTokens = 0;
+  let observedCostMicros = 0n;
+  instance.repetitions.forEach((repetition, index) => {
+    const expectedRepetition = index + 1;
+    if (repetition.repetition !== expectedRepetition) {
+      throw new Error(`${relative}: repetitions are not ordered 1, 2, 3`);
+    }
+    slots.add(repetition.executionSlotId);
+    attempts.add(repetition.attemptId);
+    candidateRefs.add(repetition.candidate.candidateRef);
+    runIds.add(repetition.parentRun.bundle.runId);
+    runIds.add(repetition.childRun.bundle.runId);
+    verifyReportRepetition(
+      repetition,
+      instance.evaluations[index * 2],
+      instance.evaluations[index * 2 + 1],
+      instance.environmentRawSha256,
+      `${relative}.repetitions[${index}]`
+    );
+    const childExperiment = repetition.childRun.bundle.experiment;
+    const parentExperiment = repetition.parentRun.bundle.experiment;
+    if (
+      childExperiment === null
+      || !equalJson(childExperiment, parentExperiment)
+      || childExperiment.repetition !== expectedRepetition
+    ) {
+      throw new Error(`${relative}: Harness experiment mismatch`);
+    }
+    if (experimentArm === null) {
+      experimentArm = childExperiment.arm;
+    } else if (experimentArm !== childExperiment.arm) {
+      throw new Error(`${relative}: Harness experiment arm drift`);
+    }
+    for (const attribution of repetition.providerAttributions) {
+      if (baselineAttribution === null) {
+        baselineAttribution = attribution;
+      } else if (!sameProviderProfile(baselineAttribution, attribution)) {
+        throw new Error(`${relative}: provider/model/pricing drift`);
+      }
+      providerRequests = safeCountAdd(providerRequests, 1, relative);
+      inputTokens = safeCountAdd(inputTokens, attribution.inputTokens, relative);
+      cachedInputTokens = safeCountAdd(
+        cachedInputTokens,
+        attribution.cachedInputTokens,
+        relative
+      );
+      outputTokens = safeCountAdd(outputTokens, attribution.outputTokens, relative);
+      reasoningOutputTokens = safeCountAdd(
+        reasoningOutputTokens,
+        attribution.reasoningOutputTokens,
+        relative
+      );
+      totalTokens = safeCountAdd(totalTokens, attribution.totalTokens, relative);
+      observedCostMicros += usdMicros(attribution.observedCostUsd, relative);
+    }
+  });
+  if (
+    slots.size !== 3
+    || attempts.size !== 3
+    || candidateRefs.size !== 3
+    || runIds.size !== 6
+  ) {
+    throw new Error(`${relative}: duplicate slot, attempt, Candidate or Run`);
+  }
+  const usage = instance.usageAggregate;
+  if (
+    usage.providerRequests !== providerRequests
+    || usage.inputTokens !== inputTokens
+    || usage.cachedInputTokens !== cachedInputTokens
+    || usage.outputTokens !== outputTokens
+    || usage.reasoningOutputTokens !== reasoningOutputTokens
+    || usage.totalTokens !== totalTokens
+    || usdMicros(usage.observedCostUsd, `${relative}.usageAggregate`)
+      !== observedCostMicros
+  ) {
+    throw new Error(
+      `${relative}: usageAggregate does not equal provider attribution truth`
+    );
+  }
+  const expectedReportId = harnessEvaluationReportId(instance);
+  if (instance.reportId !== expectedReportId) {
+    throw new Error(`${relative}: reportId mismatch (expected ${expectedReportId})`);
+  }
+  const expectedIntegrityHash = harnessEvaluationReportIntegrityHash(instance);
+  if (instance.integrityHash !== expectedIntegrityHash) {
+    throw new Error(
+      `${relative}: integrityHash mismatch (expected ${expectedIntegrityHash})`
+    );
+  }
+}
+
 function verifySemantic(contractName, instance, relative) {
   verifyUnicodeScalarTree(instance, relative);
-  if (contractName === "worker-result-envelope") {
+  if (
+    contractName === "worker-result-envelope"
+    || contractName === "harness-candidate-envelope"
+  ) {
     const metadata = {...instance};
     delete metadata.content;
     verifySafeContractTextTree(metadata, relative);
     requireSafeText(instance.content, `${relative}.content`, 65_536);
-  } else {
+  } else if (contractName !== "harness-evaluation-report") {
     verifySafeContractTextTree(instance, relative);
   }
   if (contractName === "agent-trace-envelope") {
@@ -1206,11 +1871,17 @@ function verifySemantic(contractName, instance, relative) {
   if (contractName === "worker-result-envelope") {
     verifyWorkerResult(instance, relative);
   }
+  if (contractName === "harness-candidate-envelope") {
+    verifyHarnessCandidate(instance, relative);
+  }
   if (contractName === "task-envelope") {
     verifyTask(instance, relative);
   }
   if (contractName === "harness-run-bundle") {
     verifyBundle(instance, relative);
+  }
+  if (contractName === "harness-evaluation-report") {
+    verifyHarnessEvaluationReport(instance, relative);
   }
 }
 
@@ -1386,6 +2057,95 @@ for (const { file, schema } of schemas) {
       throw new Error(
         `${path.relative(repoRoot, fixture)} must fail only the Worker Result integrityHash check`
       );
+    }
+    if (contractName === "harness-candidate-envelope") {
+      const candidateNegativeExpectations = new Map([
+        [
+          "invalid-content-tamper-correct-integrity.json",
+          "contentHash does not match UTF-8 content"
+        ],
+        [
+          "invalid-candidate-ref-correct-integrity.json",
+          "candidateRef does not resolve to childRunId"
+        ],
+        [
+          "invalid-evidence-order-correct-integrity.json",
+          "must be unique and canonically ordered"
+        ],
+        ["invalid-integrity-hash.json", "integrityHash mismatch"]
+      ]);
+      const expectedError = candidateNegativeExpectations.get(
+        path.basename(fixture)
+      );
+      if (
+        expectedError !== undefined
+        && (
+          !schemaValid
+          || semanticError === null
+          || !semanticError.message.includes(expectedError)
+          || (
+            path.basename(fixture) !== "invalid-integrity-hash.json"
+            && instance.integrityHash
+              !== harnessCandidateIntegrityHash(instance)
+          )
+          || (
+            path.basename(fixture) === "invalid-integrity-hash.json"
+            && instance.integrityHash
+              === harnessCandidateIntegrityHash(instance)
+          )
+        )
+      ) {
+        throw new Error(
+          `${path.relative(repoRoot, fixture)} must fail only the frozen Harness Candidate ${expectedError} check`
+        );
+      }
+      if (
+        path.basename(fixture)
+          === "invalid-source-request-ordinal-correct-integrity.json"
+        && (
+          schemaValid
+          || instance.integrityHash
+            !== harnessCandidateIntegrityHash(instance)
+        )
+      ) {
+        throw new Error(
+          `${path.relative(repoRoot, fixture)} must fail only the sourceRequestOrdinal const while carrying a correct outer integrityHash`
+        );
+      }
+    }
+    if (contractName === "harness-evaluation-report") {
+      const reportNegativeExpectations = new Map([
+        [
+          "invalid-candidate-alias-correct-integrity.json",
+          "evaluation does not bind its exact shared Candidate"
+        ],
+        [
+          "invalid-usage-aggregate-correct-integrity.json",
+          "usageAggregate does not equal provider attribution truth"
+        ],
+        [
+          "invalid-h1-outcome-correct-integrity.json",
+          "accepted H1 does not match successful terminal graph truth"
+        ]
+      ]);
+      const expectedError = reportNegativeExpectations.get(
+        path.basename(fixture)
+      );
+      if (
+        expectedError !== undefined
+        && (
+          !schemaValid
+          || semanticError === null
+          || !semanticError.message.includes(expectedError)
+          || instance.reportId !== harnessEvaluationReportId(instance)
+          || instance.integrityHash
+            !== harnessEvaluationReportIntegrityHash(instance)
+        )
+      ) {
+        throw new Error(
+          `${path.relative(repoRoot, fixture)} must carry correct Report identity/integrity and fail only ${expectedError}`
+        );
+      }
     }
     if (
       contractName === "agent-trace-envelope"
@@ -2434,6 +3194,158 @@ for (const vector of workerResultHashGolden.vectors) {
 }
 process.stdout.write(
   `Validated ${workerResultHashGolden.vectors.length} cross-language Worker Result hash golden vector.\n`
+);
+
+const harnessCandidateHashGoldenFile =
+  path.join(
+    goldenDir,
+    "harness-candidate-envelope-integrity-hashes.json"
+  );
+const harnessCandidateHashGolden =
+  readJson(harnessCandidateHashGoldenFile);
+assertExactObjectKeys(
+  harnessCandidateHashGolden,
+  ["profile", "domain", "vectors"],
+  path.relative(repoRoot, harnessCandidateHashGoldenFile)
+);
+if (
+  harnessCandidateHashGolden.profile !== INTEGRITY_PROFILE
+  || harnessCandidateHashGolden.domain
+    !== "emergeos.harness-candidate-envelope.v1"
+  || !Array.isArray(harnessCandidateHashGolden.vectors)
+  || harnessCandidateHashGolden.vectors.length === 0
+) {
+  throw new Error(
+    `${path.relative(repoRoot, harnessCandidateHashGoldenFile)} has an unsupported or empty profile`
+  );
+}
+const validateHarnessCandidateGolden = ajv.getSchema(
+  "urn:emergeos:schema:v1:harness-candidate-envelope"
+);
+if (!validateHarnessCandidateGolden) {
+  throw new Error(
+    "Harness Candidate golden validator is unavailable"
+  );
+}
+for (const vector of harnessCandidateHashGolden.vectors) {
+  assertExactObjectKeys(
+    vector,
+    ["name", "contentHash", "integrityHash", "candidate"],
+    `${path.relative(repoRoot, harnessCandidateHashGoldenFile)} vector`
+  );
+  if (
+    typeof vector.name !== "string"
+    || !/^[a-f0-9]{64}$/.test(vector.contentHash)
+    || !/^[a-f0-9]{64}$/.test(vector.integrityHash)
+    || vector.candidate === null
+    || typeof vector.candidate !== "object"
+    || Array.isArray(vector.candidate)
+  ) {
+    throw new Error(
+      `${path.relative(repoRoot, harnessCandidateHashGoldenFile)} contains an invalid Harness Candidate hash vector`
+    );
+  }
+  const envelope = {
+    ...JSON.parse(JSON.stringify(vector.candidate)),
+    integrityHash: vector.integrityHash
+  };
+  if (!validateHarnessCandidateGolden(envelope)) {
+    throw new Error(
+      `${vector.name}: Harness Candidate golden violates schema:\n${ajv.errorsText(validateHarnessCandidateGolden.errors, { separator: "\n" })}`
+    );
+  }
+  verifySemantic(
+    "harness-candidate-envelope",
+    envelope,
+    `${vector.name}.candidate`
+  );
+  if (envelope.contentHash !== vector.contentHash) {
+    throw new Error(
+      `${vector.name}: Harness Candidate contentHash golden mismatch`
+    );
+  }
+}
+process.stdout.write(
+  `Validated ${harnessCandidateHashGolden.vectors.length} cross-language Harness Candidate hash golden vector.\n`
+);
+
+const harnessEvaluationReportGoldenFile =
+  path.join(
+    goldenDir,
+    "harness-evaluation-report-integrity-hashes.json"
+  );
+const harnessEvaluationReportGolden =
+  readJson(harnessEvaluationReportGoldenFile);
+assertExactObjectKeys(
+  harnessEvaluationReportGolden,
+  ["profile", "domain", "reportIdDomain", "vectors"],
+  path.relative(repoRoot, harnessEvaluationReportGoldenFile)
+);
+if (
+  harnessEvaluationReportGolden.profile !== INTEGRITY_PROFILE
+  || harnessEvaluationReportGolden.domain
+    !== "emergeos.harness-evaluation-report.v1"
+  || harnessEvaluationReportGolden.reportIdDomain
+    !== "emergeos.harness-evaluation-report-id.v1"
+  || !Array.isArray(harnessEvaluationReportGolden.vectors)
+  || harnessEvaluationReportGolden.vectors.length === 0
+) {
+  throw new Error(
+    `${path.relative(repoRoot, harnessEvaluationReportGoldenFile)} has an unsupported or empty profile`
+  );
+}
+const validateHarnessEvaluationReportGolden = ajv.getSchema(
+  "urn:emergeos:schema:v1:harness-evaluation-report"
+);
+if (!validateHarnessEvaluationReportGolden) {
+  throw new Error(
+    "Harness Evaluation Report golden validator is unavailable"
+  );
+}
+for (const vector of harnessEvaluationReportGolden.vectors) {
+  assertExactObjectKeys(
+    vector,
+    ["name", "report", "reportId", "integrityHash"],
+    `${path.relative(repoRoot, harnessEvaluationReportGoldenFile)} vector`
+  );
+  if (
+    typeof vector.name !== "string"
+    || typeof vector.reportId !== "string"
+    || !/^harness-evaluation-report-[a-f0-9]{64}$/
+      .test(vector.reportId)
+    || !/^[a-f0-9]{64}$/.test(vector.integrityHash)
+    || vector.report === null
+    || typeof vector.report !== "object"
+    || Array.isArray(vector.report)
+  ) {
+    throw new Error(
+      `${path.relative(repoRoot, harnessEvaluationReportGoldenFile)} contains an invalid Report vector`
+    );
+  }
+  if (!validateHarnessEvaluationReportGolden(vector.report)) {
+    throw new Error(
+      `${vector.name}: Harness Evaluation Report golden violates schema:\n${ajv.errorsText(validateHarnessEvaluationReportGolden.errors, { separator: "\n" })}`
+    );
+  }
+  verifySemantic(
+    "harness-evaluation-report",
+    vector.report,
+    `${vector.name}.report`
+  );
+  if (
+    vector.report.reportId !== vector.reportId
+    || vector.report.integrityHash !== vector.integrityHash
+    || vector.reportId !== harnessEvaluationReportId(vector.report)
+    || vector.integrityHash
+      !== harnessEvaluationReportIntegrityHash(vector.report)
+  ) {
+    throw new Error(
+      `${vector.name}: Harness Evaluation Report golden identity/hash mismatch`
+    );
+  }
+}
+process.stdout.write(
+  `Validated ${harnessEvaluationReportGolden.vectors.length} cross-language Harness Evaluation Report hash golden vector.\n`
 );
 
 const taskPackFiles = jsonFiles(taskPackDir);
@@ -4075,6 +4987,178 @@ if (readOnlyWorkerHandoffPackCount !== 1) {
 
 process.stdout.write(`Validated ${taskPackFiles.length} synthetic evaluation task packs with unique task IDs.\n`);
 
+function verifyPack010Environment(environment, relative) {
+  const rfcReference =
+    "docs/rfcs/0007-attributed-terminal-graph-and-shared-candidate-harness.md";
+  assertExactObjectKeys(
+    environment,
+    [
+      "schemaVersion",
+      "reviewedAt",
+      "javaRelease",
+      "openaiJavaVersion",
+      "protocolVersion",
+      "harnessVersion",
+      "toolRegistryVersion",
+      "tools",
+      "providerApi",
+      "model",
+      "requestPolicy",
+      "pricing",
+      "inputTokenUpperBound",
+      "promptCachePolicy",
+      "evaluatorPolicy",
+      "operatorGate"
+    ],
+    relative
+  );
+  assertExactObjectKeys(
+    environment.model,
+    ["requested", "pricingFamily", "maxInputTokens", "maxOutputTokens", "reference"],
+    `${relative}: model`
+  );
+  assertExactObjectKeys(
+    environment.requestPolicy,
+    [
+      "store",
+      "parallelToolCalls",
+      "serviceTier",
+      "maxRetries",
+      "productionBaseUrl",
+      "productionBaseUrlOverrideAllowed",
+      "ambientProxyAllowed",
+      "sdkLogLevel",
+      "maximumProviderRequests",
+      "maximumInputTokensPerRequest",
+      "maximumOutputTokensPerRequest",
+      "networkAllowed",
+      "realModelAllowed",
+      "credentialReadsAllowed"
+    ],
+    `${relative}: requestPolicy`
+  );
+  assertExactObjectKeys(
+    environment.pricing,
+    [
+      "kind",
+      "currency",
+      "unit",
+      "uncachedInput",
+      "cachedInput",
+      "output",
+      "fullRunReservationUsd",
+      "reference"
+    ],
+    `${relative}: pricing`
+  );
+  assertExactObjectKeys(
+    environment.inputTokenUpperBound,
+    ["method", "tokens", "reference"],
+    `${relative}: inputTokenUpperBound`
+  );
+  assertExactObjectKeys(
+    environment.promptCachePolicy,
+    ["mode", "cacheWriteFeeIncluded", "reference"],
+    `${relative}: promptCachePolicy`
+  );
+  assertExactObjectKeys(
+    environment.evaluatorPolicy,
+    [
+      "arms",
+      "sharedCandidateInputs",
+      "evaluations",
+      "networkCalls",
+      "credentialReads",
+      "connectorCalls",
+      "productTruthWrites",
+      "externalSideEffects",
+      "realUserDataReads"
+    ],
+    `${relative}: evaluatorPolicy`
+  );
+  assertExactObjectKeys(
+    environment.operatorGate,
+    [
+      "postgresqlCanonicalGraphAttemptRequired",
+      "stableExecutionSlotRequired",
+      "realTtyChallengeRequired",
+      "credentialReadAfterDurableChildConsume",
+      "durableGraphJournalRequired",
+      "terminalGraphSealRequired",
+      "sequentialOwnerApprovalRequired",
+      "shippingExecuteRouteEnabled"
+    ],
+    `${relative}: operatorGate`
+  );
+  const zeroEvaluatorEffects = [
+    "networkCalls",
+    "credentialReads",
+    "connectorCalls",
+    "productTruthWrites",
+    "externalSideEffects",
+    "realUserDataReads"
+  ].every((field) => environment.evaluatorPolicy[field] === 0);
+  if (
+    environment.schemaVersion !== "0.2"
+    || environment.reviewedAt !== "2026-08-01"
+    || environment.javaRelease !== 21
+    || environment.openaiJavaVersion !== "4.43.0"
+    || environment.protocolVersion !== "openai-responses-v1-openai-java-4.43.0"
+    || environment.harnessVersion !== "framework-free-agent-kernel-v2"
+    || environment.toolRegistryVersion !== "agent-tools-v2"
+    || JSON.stringify(environment.tools) !== JSON.stringify(["capture.read"])
+    || environment.providerApi !== "responses"
+    || environment.model.requested !== "gpt-5.6-terra"
+    || environment.model.pricingFamily !== "gpt-5.6-terra"
+    || environment.model.maxInputTokens !== 272_000
+    || environment.model.maxOutputTokens !== 128_000
+    || environment.model.reference !== rfcReference
+    || environment.requestPolicy.store !== false
+    || environment.requestPolicy.parallelToolCalls !== false
+    || environment.requestPolicy.serviceTier !== "offline"
+    || environment.requestPolicy.maxRetries !== 0
+    || environment.requestPolicy.productionBaseUrl !== null
+    || environment.requestPolicy.productionBaseUrlOverrideAllowed !== false
+    || environment.requestPolicy.ambientProxyAllowed !== false
+    || environment.requestPolicy.sdkLogLevel !== "OFF"
+    || environment.requestPolicy.maximumProviderRequests !== 2
+    || environment.requestPolicy.maximumInputTokensPerRequest !== 272_000
+    || environment.requestPolicy.maximumOutputTokensPerRequest !== 1_000
+    || environment.requestPolicy.networkAllowed !== false
+    || environment.requestPolicy.realModelAllowed !== false
+    || environment.requestPolicy.credentialReadsAllowed !== false
+    || environment.pricing.kind !== "SYNTHETIC_NON_BILLING"
+    || environment.pricing.currency !== "USD"
+    || environment.pricing.unit !== "NANO_USD_PER_TOKEN"
+    || environment.pricing.uncachedInput !== 1_000
+    || environment.pricing.cachedInput !== 1_000
+    || environment.pricing.output !== 1_000
+    || environment.pricing.fullRunReservationUsd !== "0.546000"
+    || environment.pricing.reference !== rfcReference
+    || environment.inputTokenUpperBound.method !== "REVIEWED_SYNTHETIC_BOUND"
+    || environment.inputTokenUpperBound.tokens !== 272_000
+    || environment.inputTokenUpperBound.reference !== rfcReference
+    || environment.promptCachePolicy.mode !== "DISABLED_OFFLINE_PREFLIGHT"
+    || environment.promptCachePolicy.cacheWriteFeeIncluded !== false
+    || environment.promptCachePolicy.reference !== rfcReference
+    || JSON.stringify(environment.evaluatorPolicy.arms)
+      !== JSON.stringify(["h0-schema-only", "h1-reference-grounding"])
+    || environment.evaluatorPolicy.sharedCandidateInputs !== 3
+    || environment.evaluatorPolicy.evaluations !== 6
+    || !zeroEvaluatorEffects
+    || environment.operatorGate.postgresqlCanonicalGraphAttemptRequired !== true
+    || environment.operatorGate.stableExecutionSlotRequired !== true
+    || environment.operatorGate.realTtyChallengeRequired !== true
+    || environment.operatorGate.credentialReadAfterDurableChildConsume !== true
+    || environment.operatorGate.durableGraphJournalRequired !== true
+    || environment.operatorGate.terminalGraphSealRequired !== true
+    || environment.operatorGate.sequentialOwnerApprovalRequired !== true
+    || environment.operatorGate.shippingExecuteRouteEnabled !== false
+  ) {
+    throw new Error(`${relative}: unsafe Pack010 offline evaluation environment`);
+  }
+}
+
 const evalEnvironmentFiles = jsonFiles(evalEnvironmentDir);
 if (evalEnvironmentFiles.length === 0) {
   throw new Error("No synthetic evaluation environment manifests found");
@@ -4111,6 +5195,13 @@ for (const file of evalEnvironmentFiles) {
   }
   evalEnvironmentsByRelative.set(relative, environment);
   verifyUnicodeScalarTree(environment, relative);
+  if (
+    relative
+      === "evals/environments/openai-responses-pack010-offline-synthetic-v1.json"
+  ) {
+    verifyPack010Environment(environment, relative);
+    continue;
+  }
   assertExactObjectKeys(
     environment,
     [

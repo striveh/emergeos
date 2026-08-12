@@ -3,6 +3,7 @@ package io.emergeos.core.application;
 import io.emergeos.contracts.ContractText;
 import io.emergeos.contracts.ContractValueDomains;
 import io.emergeos.core.domain.ContentHashes;
+import io.emergeos.core.domain.GraphPricingSnapshot;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
@@ -53,22 +54,9 @@ public record PricingProfile(
 
   public BigDecimal actualCostUsd(
       long inputTokens, long cachedInputTokens, long outputTokens) {
-    ContractValueDomains.requireSafeCount(inputTokens, "inputTokens");
-    ContractValueDomains.requireSafeCount(cachedInputTokens, "cachedInputTokens");
-    ContractValueDomains.requireSafeCount(outputTokens, "outputTokens");
-    if (cachedInputTokens > inputTokens) {
-      throw new IllegalArgumentException(
-          "cachedInputTokens cannot exceed inputTokens");
-    }
-    long uncachedInputTokens = inputTokens - cachedInputTokens;
-    long totalNanoUsd =
-        addExact(
-            multiplyExact(
-                uncachedInputTokens, uncachedInputNanoUsdPerToken),
-            multiplyExact(
-                cachedInputTokens, cachedInputNanoUsdPerToken),
-            multiplyExact(outputTokens, outputNanoUsdPerToken));
-    return toContractUsd(totalNanoUsd, RoundingMode.HALF_UP);
+    return graphSnapshot()
+        .actualCostUsd(
+            inputTokens, cachedInputTokens, outputTokens);
   }
 
   public BigDecimal reserveCostUsd(
@@ -98,21 +86,17 @@ public record PricingProfile(
    * when every list-price rate is unchanged.
    */
   public String fingerprint() {
-    String material =
-        String.join(
-            "\n",
-            "pricing-profile-fingerprint-v1",
-            "id=" + id,
-            "provider=" + provider,
-            "modelRequested=" + modelRequested,
-            "uncachedInputNanoUsdPerToken="
-                + uncachedInputNanoUsdPerToken,
-            "cachedInputNanoUsdPerToken="
-                + cachedInputNanoUsdPerToken,
-            "outputNanoUsdPerToken=" + outputNanoUsdPerToken,
-            "actualRounding=PER_CALL_HALF_UP_TO_MICRO_USD",
-            "reservationRounding=PER_CALL_CEILING_TO_MICRO_USD");
-    return ContentHashes.sha256(material);
+    return graphSnapshot().fingerprint();
+  }
+
+  public GraphPricingSnapshot graphSnapshot() {
+    return GraphPricingSnapshot.create(
+        id,
+        provider,
+        modelRequested,
+        uncachedInputNanoUsdPerToken,
+        cachedInputNanoUsdPerToken,
+        outputNanoUsdPerToken);
   }
 
   private static long addExact(long... values) {

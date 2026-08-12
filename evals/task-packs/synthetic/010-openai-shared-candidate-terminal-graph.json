@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "0.9",
+  "taskId": "synthetic-openai-shared-candidate-terminal-graph-010",
+  "title": "Pack010 shared-candidate terminal graph 的三次离线 catalog baseline",
+  "principalRef": "synthetic-graph-eval-owner",
+  "seed": {
+    "sourceType": "TEXT",
+    "sourceRef": "synthetic://eval/openai-shared-candidate-terminal-graph-010",
+    "dataClass": "PUBLIC",
+    "content": "虚构产品 Lumen Seed 会把公开测试素材整理成一张可追溯的创作卡片；本段不对应任何真实人物、账号或业务。"
+  },
+  "requiredConstraints": [
+    "r1、r2、r3 必须共享同一 Pack、environment、Capture、prompt、pricing、Conductor 和 evaluator surface",
+    "每次 repetition 必须使用独立 execution slot、attempt、parent/child Run、parent/child Task 与 Artifact identity",
+    "每次 graph 的协议上限固定为两次 Responses request：capture.read 后 structured final",
+    "本 checked-in catalog 仅用于 offline preflight，不授权网络、credential、真实模型或 Connector"
+  ],
+  "forbiddenActions": [
+    "读取 API key、ambient proxy、真实用户数据、真实账号或 Connector",
+    "从 CLI 覆盖 model、slot、repetition、Pack、environment、pricing、prompt 或 Task identity",
+    "为 H0 与 H1 分别请求模型、重新执行 Tool 或修改 shared Candidate",
+    "把 preflight Green、synthetic pricing 或 catalog identity 宣称为 live execution receipt"
+  ],
+  "acceptanceChecks": [
+    "strict preflight 在任何 DataSource、credential、client、model、Run、graph store 与 network construction 前核验 raw SHA 和 compiled identity",
+    "三个 ordered manifest 精确绑定 pack010-r1、pack010-r2、pack010-r3 与 repetition 1、2、3",
+    "六个 Run ID、六个 Task ID、三个 attempt ID 与三个 repetition-bound profile fingerprint 全部唯一",
+    "asset drift、symlink、oversize、duplicate key、trailing token、unknown field 与 semantic drift 全部 fail closed"
+  ],
+  "humanReviewQuestions": [
+    "是否确认该 Pack 只冻结未来 pilot identity，当前不会调用 gpt-5.6-terra？",
+    "是否确认真实 r1、r2、r3 仍需独立 owner real-TTY approval 与 predecessor verification？",
+    "是否确认三次 repetition 只证明 protocol complete，不构成模型优劣或统计显著性结论？"
+  ],
+  "risk": "EXTERNAL",
+  "expectedArtifactKind": "ARTICLE_DRAFT",
+  "faultPlan": [
+    "任一 asset byte 或 compiled identity drift 必须在 effect construction 前失败",
+    "r2/r3 slot、repetition、Run、Task 或 profile alias 必须被 catalog/preflight 拒绝",
+    "networkAllowed、realModelAllowed、credentialReadsAllowed 或 shipping execute 任一被打开时必须失败"
+  ],
+  "harnessPilot": {
+    "graphProtocolVersion": "postgres-graph-terminal-v1",
+    "experimentArm": "shared-candidate-verifier-pilot",
+    "generationRepetitions": 3,
+    "provider": "openai.responses",
+    "modelRequested": "gpt-5.6-terra",
+    "parentActor": "SCRIPTED_FAKE",
+    "childActor": "OPENAI_RESPONSES",
+    "workerName": "article-draft.read-v1",
+    "requiredTools": [
+      "capture.read"
+    ],
+    "maximumProviderRequests": 2,
+    "requestPlan": [
+      "capture.read",
+      "structured-final"
+    ],
+    "evaluatorArms": [
+      "h0-schema-only",
+      "h1-reference-grounding"
+    ],
+    "sharedCandidateRequired": true,
+    "completeOnlyReport": true,
+    "captureId": "capture-openai-worker-010",
+    "captureClientNonce": "openai-worker-010-seed",
+    "intent": "将完全虚构的公开测试素材整理为一篇不超过 120 字、且引用 exact Capture 的中文短文。",
+    "repetitions": [
+      {
+        "repetition": 1,
+        "caseId": "openai-shared-candidate-terminal-010-r1",
+        "executionSlotId": "pack010-r1",
+        "startedAt": "2026-08-01T08:00:00Z",
+        "parentRunId": "run-openai-worker-parent-010-r1",
+        "childRunId": "run-openai-worker-child-010-r1",
+        "parentTaskId": "task-openai-worker-parent-010-r1",
+        "childTaskId": "task-openai-worker-child-010-r1",
+        "artifactId": "art-openai-worker-010-r1"
+      },
+      {
+        "repetition": 2,
+        "caseId": "openai-shared-candidate-terminal-010-r2",
+        "executionSlotId": "pack010-r2",
+        "startedAt": "2026-08-01T08:05:00Z",
+        "parentRunId": "run-openai-worker-parent-010-r2",
+        "childRunId": "run-openai-worker-child-010-r2",
+        "parentTaskId": "task-openai-worker-parent-010-r2",
+        "childTaskId": "task-openai-worker-child-010-r2",
+        "artifactId": "art-openai-worker-010-r2"
+      },
+      {
+        "repetition": 3,
+        "caseId": "openai-shared-candidate-terminal-010-r3",
+        "executionSlotId": "pack010-r3",
+        "startedAt": "2026-08-01T08:10:00Z",
+        "parentRunId": "run-openai-worker-parent-010-r3",
+        "childRunId": "run-openai-worker-child-010-r3",
+        "parentTaskId": "task-openai-worker-parent-010-r3",
+        "childTaskId": "task-openai-worker-child-010-r3",
+        "artifactId": "art-openai-worker-010-r3"
+      }
+    ],
+    "provenance": {
+      "kind": "LITERAL_CHECKED_IN_SYNTHETIC",
+      "containsRealUserData": false,
+      "containsRealAccount": false,
+      "networkAllowed": false,
+      "realModelAllowed": false,
+      "credentialReadsAllowed": false,
+      "connectorAllowed": false
+    }
+  }
+}
