@@ -6,6 +6,7 @@
     <title>快速捕获 · EmergeOS</title>
     <link rel="stylesheet" href="/capture/quick-capture.css">
     <script src="/capture/quick-capture.js" defer></script>
+    <script src="/capture/approval-card.js" defer></script>
   </head>
   <body>
     <main class="capture-shell">
@@ -136,6 +137,50 @@
             <button id="outcome-save" class="secondary-action" type="button" hidden>
               保存本地修订
             </button>
+            <section
+              id="approval-card"
+              class="approval-card"
+              aria-labelledby="approval-card-title"
+              data-state="INACTIVE"
+              hidden
+            >
+              <p class="approval-card-label">精确批准 · Local Draftbox</p>
+              <h3 id="approval-card-title">批准写入本地草稿箱的计划</h3>
+              <dl class="approval-card-facts">
+                <div>
+                  <dt>目标</dt>
+                  <dd id="approval-target">Local Draftbox</dd>
+                </div>
+                <div>
+                  <dt>风险</dt>
+                  <dd id="approval-risk">REVERSIBLE · 可撤销</dd>
+                </div>
+                <div>
+                  <dt>Artifact</dt>
+                  <dd id="approval-artifact">尚无可信版本</dd>
+                </div>
+              </dl>
+              <p id="approval-boundary" class="approval-boundary">
+                批准只记录授权，尚未执行，不产生Receipt。当前为本机单用户原型，未验证真实身份。
+              </p>
+              <div class="approval-actions">
+                <button id="approval-submit" type="button">记录本次批准</button>
+                <button id="approval-retry" class="secondary-action" type="button" hidden>
+                  明确重试同一批准
+                </button>
+              </div>
+              <p
+                id="approval-status"
+                class="approval-status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                data-state="READY"
+                tabindex="-1"
+              >
+                等待你核对目标、风险和精确 Artifact 版本。
+              </p>
+            </section>
             <section
               id="outcome-conflict"
               class="outcome-conflict"
