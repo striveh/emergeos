@@ -18,9 +18,10 @@
       <form
         id="quick-capture-form"
         class="capture-card"
-        action="/capture"
+        action="/api/v1/captures"
         method="post"
         autocomplete="off"
+        aria-describedby="capture-status"
       >
         <div class="field-stack">
           <label for="capture-content">你看见或想到什么？</label>
@@ -72,10 +73,27 @@
         </div>
 
         <div class="capture-actions">
-          <button type="submit">暂存这条想法</button>
-          <p id="capture-status" class="status" role="status" aria-live="polite">
-            当前切片仅提供本地界面，尚未启用提交。
-          </p>
+          <div class="action-buttons">
+            <button id="capture-submit" type="submit">保存这条想法</button>
+            <button id="capture-abandon-retry" class="secondary-action" type="button" hidden>
+              放弃重试，继续编辑
+            </button>
+            <button id="capture-new-entry" class="secondary-action" type="button" hidden>
+              开始新条目
+            </button>
+          </div>
+          <div
+            id="capture-status"
+            class="status"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            tabindex="-1"
+            data-state="READY"
+          >
+            <strong class="status-code">READY</strong>
+            <span class="status-message">内容只会提交到当前 EmergeOS 实例。</span>
+          </div>
         </div>
       </form>
     </main>
