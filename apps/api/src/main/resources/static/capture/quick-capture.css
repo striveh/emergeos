@@ -252,6 +252,94 @@ button:disabled {
   background: #fff1ef;
 }
 
+.outcome-canvas {
+  padding: 1rem 1.1rem;
+  border: 1px solid rgb(84 122 101 / 35%);
+  border-radius: 1rem;
+  color: #2c4638;
+  background: #f1f7f2;
+}
+
+.outcome-canvas:focus-visible {
+  outline: 0.2rem solid rgb(46 114 81 / 28%);
+  outline-offset: 0.18rem;
+}
+
+.outcome-canvas-label {
+  margin: 0 0 0.45rem;
+  color: #4b6959;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+}
+
+.outcome-canvas h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.3rem;
+  font-weight: 500;
+}
+
+.outcome-canvas-message,
+#outcome-canvas-message {
+  margin: 0.65rem 0 0;
+  color: #506258;
+  line-height: 1.6;
+}
+
+.outcome-canvas-content {
+  min-height: 10rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #afbeb5;
+  border-radius: 0.85rem;
+  color: #1d3026;
+  background: #fff;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.outcome-canvas-content[contenteditable="true"]:focus-visible {
+  border-color: #2e7251;
+  outline: 0;
+  box-shadow: 0 0 0 0.22rem rgb(56 134 94 / 18%);
+}
+
+.outcome-meta {
+  margin: 0.7rem 0 0;
+  color: #637168;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+#outcome-save {
+  margin-top: 0.8rem;
+}
+
+.outcome-conflict {
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border: 1px solid rgb(166 73 63 / 42%);
+  border-radius: 0.8rem;
+  background: #fff5f2;
+}
+
+.outcome-conflict h3 {
+  margin: 0;
+  color: #74342e;
+  font-size: 1rem;
+}
+
+.outcome-conflict-content {
+  margin-top: 0.65rem;
+  padding: 0.8rem;
+  border-radius: 0.65rem;
+  color: #4a3834;
+  background: #fff;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 [hidden] {
   display: none;
 }

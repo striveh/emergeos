@@ -81,6 +81,16 @@
             <button id="capture-new-entry" class="secondary-action" type="button" hidden>
               开始新条目
             </button>
+            <button
+              id="capture-emerge"
+              class="secondary-action"
+              type="button"
+              aria-controls="outcome-canvas"
+              aria-expanded="false"
+              hidden
+            >
+              让它显现
+            </button>
           </div>
           <div
             id="capture-status"
@@ -94,6 +104,49 @@
             <strong class="status-code">READY</strong>
             <span class="status-message">内容只会提交到当前 EmergeOS 实例。</span>
           </div>
+          <aside
+            id="outcome-canvas"
+            class="outcome-canvas"
+            aria-labelledby="outcome-canvas-title"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            data-state="CAPTURED"
+            tabindex="-1"
+            hidden
+          >
+            <p id="outcome-canvas-boundary" class="outcome-canvas-label">
+              本地演示生成（Fake，无外部模型）
+            </p>
+            <h2 id="outcome-canvas-title">Outcome Canvas 尚未生成</h2>
+            <p id="outcome-canvas-message">
+              这个入口只表明已保存的 Capture 可以进入后续本地演示；当前没有调用模型、
+              没有创建 Agent Draft，也没有执行任何行动。
+            </p>
+            <div
+              id="outcome-canvas-content"
+              class="outcome-canvas-content"
+              role="textbox"
+              aria-label="本地 Outcome Canvas 草稿"
+              aria-multiline="true"
+              contenteditable="false"
+              hidden
+            ></div>
+            <p id="outcome-meta" class="outcome-meta" hidden></p>
+            <button id="outcome-save" class="secondary-action" type="button" hidden>
+              保存本地修订
+            </button>
+            <section
+              id="outcome-conflict"
+              class="outcome-conflict"
+              aria-labelledby="outcome-conflict-title"
+              hidden
+            >
+              <h3 id="outcome-conflict-title">服务端已有另一版本</h3>
+              <p id="outcome-conflict-meta" class="outcome-meta"></p>
+              <div id="outcome-conflict-content" class="outcome-conflict-content"></div>
+            </section>
+          </aside>
         </div>
       </form>
     </main>
