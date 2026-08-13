@@ -9,6 +9,8 @@ public interface ActionAttemptStore {
 
   PlanResult planOrFind(ActionAttempt proposed);
 
+  PlanResult planApprovalOrFind(ActionAttempt proposed);
+
   ClaimResult claimDispatch(ActionAttempt expected, Instant now);
 
   ClaimResult claimReconciliation(ActionAttempt expected, Instant now);
@@ -21,9 +23,11 @@ public interface ActionAttemptStore {
 
   sealed interface PlanResult {
 
-    record Accepted(ActionAttempt attempt) implements PlanResult {}
+    record Accepted(ActionAttempt attempt, boolean created) implements PlanResult {}
 
     record Conflict() implements PlanResult {}
+
+    record Stale() implements PlanResult {}
   }
 
   sealed interface ClaimResult {

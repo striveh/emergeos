@@ -47,20 +47,12 @@ public final class RecoverableActionService {
 
   public ActionAttempt approve(ApproveLocalActionCommand command) {
     Objects.requireNonNull(command, "command");
-    ArtifactLineage artifact =
-        artifacts
-            .findOwned(authority.principalId(), command.artifactId())
-            .orElseThrow(() -> new NoSuchElementException("Artifact not found"));
+    ArtifactLineage artifact = requireOwnedArtifact(command.artifactId());
     if (!artifact.current().contentHash().equals(command.approvedArtifactHash())) {
       throw new IllegalStateException("approved Artifact is not the current version");
     }
     Instant now = canonicalTime(clock.instant());
-    ActionAttempt proposed = planned(command, artifact, now);
-    ActionAttemptStore.PlanResult planned = attempts.planOrFind(proposed);
-    if (planned instanceof ActionAttemptStore.PlanResult.Conflict) {
-      throw new ActionIdempotencyConflictException();
-    }
-    ActionAttempt canonical = ((ActionAttemptStore.PlanResult.Accepted) planned).attempt();
+    ActionAttempt canonical = persistPlan(artifact, command.idempotencyKey(), now).attempt();
     if (canonical.status() != ActionAttemptStatus.PLANNED) {
       return canonical;
     }
@@ -70,6 +62,28 @@ public final class RecoverableActionService {
       return invoke(claimed.attempt(), ProviderActionRequest.ProviderOperation.EXECUTE);
     }
     return observedOrThrow(claim);
+  }
+
+  public PlannedApproval planApproval(PlanLocalApprovalCommand command) {
+    Objects.requireNonNull(command, "command");
+    requireOwnedArtifact(command.artifactId());
+    ActionAttempt proposed =
+        planned(
+            command.artifactId(),
+            command.approvedArtifactVersion(),
+            command.approvedArtifactHash(),
+            command.approvalNonce(),
+            canonicalTime(clock.instant()));
+    ActionAttemptStore.PlanResult result = attempts.planApprovalOrFind(proposed);
+    if (result instanceof ActionAttemptStore.PlanResult.Conflict) {
+      throw new ActionIdempotencyConflictException();
+    }
+    if (result instanceof ActionAttemptStore.PlanResult.Stale) {
+      throw new ApprovalStaleException();
+    }
+    ActionAttemptStore.PlanResult.Accepted accepted =
+        (ActionAttemptStore.PlanResult.Accepted) result;
+    return new PlannedApproval(accepted.attempt(), accepted.created());
   }
 
   public ActionAttempt reconcile(String attemptId) {
@@ -133,8 +147,34 @@ public final class RecoverableActionService {
     return attempts.markUnknown(claimed, now);
   }
 
+  private ArtifactLineage requireOwnedArtifact(String artifactId) {
+    return artifacts
+        .findOwned(authority.principalId(), artifactId)
+        .orElseThrow(() -> new NoSuchElementException("Artifact not found"));
+  }
+
+  private ActionAttemptStore.PlanResult.Accepted persistPlan(
+      ArtifactLineage artifact, String idempotencyKey, Instant now) {
+    ActionAttemptStore.PlanResult result =
+        attempts.planOrFind(
+            planned(
+                artifact.artifactId(),
+                artifact.current().version(),
+                artifact.current().contentHash(),
+                idempotencyKey,
+                now));
+    if (result instanceof ActionAttemptStore.PlanResult.Conflict) {
+      throw new ActionIdempotencyConflictException();
+    }
+    return (ActionAttemptStore.PlanResult.Accepted) result;
+  }
+
   private ActionAttempt planned(
-      ApproveLocalActionCommand command, ArtifactLineage artifact, Instant now) {
+      String artifactId,
+      int artifactVersion,
+      String artifactHash,
+      String idempotencyKey,
+      Instant now) {
     Instant expiresAt =
         canonicalTime(now.plus(authority.capabilityTtl()));
     if (!expiresAt.isAfter(now)) {
@@ -147,12 +187,12 @@ public final class RecoverableActionService {
             authority.principalId(),
             authority.actionType(),
             authority.targetRef(),
-            artifact.artifactId(),
-            artifact.current().version(),
-            artifact.current().contentHash(),
+            artifactId,
+            artifactVersion,
+            artifactHash,
             authority.risk(),
             authority.policyVersion(),
-            command.idempotencyKey(),
+            idempotencyKey,
             expiresAt);
     ApprovalDecision approval =
         new ApprovalDecision(
@@ -185,6 +225,13 @@ public final class RecoverableActionService {
         0,
         List.of(new ActionTransition(1, null, ActionAttemptStatus.PLANNED, now)),
         null);
+  }
+
+  public record PlannedApproval(ActionAttempt attempt, boolean created) {
+
+    public PlannedApproval {
+      Objects.requireNonNull(attempt, "attempt");
+    }
   }
 
   private void assertAuthority(ActionAttempt attempt, Instant now) {
