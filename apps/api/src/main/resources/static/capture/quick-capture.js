@@ -6,6 +6,8 @@
     "用本地 ScriptedFakeModel 将这条已保存 Capture 整理成一个可编辑演示草稿；不调用外部模型，不执行行动";
   const FAKE_BOUNDARY = "本地演示生成（Fake，无外部模型）";
   const MAX_OUTCOME_RESPONSE_BYTES = 262144;
+  const TRUSTED_ARTIFACT_EVENT = "emergeos:trusted-artifact";
+  const ARTIFACT_INVALIDATED_EVENT = "emergeos:artifact-invalidated";
 
   const form = document.querySelector("#quick-capture-form");
   const linkField = document.querySelector("#link-source-field");
@@ -54,6 +56,46 @@
   let revisionSaving = false;
   let revisionEpoch = 0;
   let revisionController = null;
+
+  const dispatchArtifactInvalidated = () => {
+    const CustomEventConstructor = globalThis.CustomEvent;
+    if (
+      typeof CustomEventConstructor !== "function" ||
+      typeof document.dispatchEvent !== "function"
+    ) {
+      return;
+    }
+    try {
+      document.dispatchEvent(new CustomEventConstructor(ARTIFACT_INVALIDATED_EVENT));
+    } catch (_failure) {
+      // Approval is an optional downstream surface; Capture/Artifact truth must
+      // not be weakened when the browser cannot deliver a UI-only event.
+    }
+  };
+
+  const dispatchTrustedArtifact = (artifact) => {
+    const CustomEventConstructor = globalThis.CustomEvent;
+    if (
+      typeof CustomEventConstructor !== "function" ||
+      typeof document.dispatchEvent !== "function" ||
+      !artifact
+    ) {
+      return;
+    }
+    const detail = Object.freeze({
+      artifactId: artifact.artifactId,
+      artifactVersion: artifact.currentVersion,
+      artifactHash: artifact.currentHash,
+    });
+    try {
+      document.dispatchEvent(
+        new CustomEventConstructor(TRUSTED_ARTIFACT_EVENT, { detail }),
+      );
+    } catch (_failure) {
+      // The authoritative Artifact remains in the existing local state; this
+      // event only exposes a minimal, already-validated snapshot to the card.
+    }
+  };
 
   const setOutcomeGenerationLocked = (locked) => {
     content.disabled = locked;
@@ -105,6 +147,7 @@
   };
 
   const resetOutcomeCanvas = () => {
+    dispatchArtifactInvalidated();
     outcomeGenerationEpoch += 1;
     outcomeGenerationController?.abort?.();
     outcomeGenerationController = null;
@@ -159,6 +202,7 @@
   };
 
   const offerOutcomeCanvas = (receipt, expectedPayload) => {
+    dispatchArtifactInvalidated();
     outcomeCapture = Object.freeze({
       captureId: receipt.captureId,
       capturedAt: receipt.capturedAt,
@@ -245,6 +289,7 @@
     ) {
       return;
     }
+    dispatchArtifactInvalidated();
     if (outcomeCanvasContent?.dataset) {
       outcomeCanvasContent.dataset.state = "DIRTY";
     }
@@ -884,9 +929,11 @@
         ? `PUT 回执未确认，但只读核对已证明 Artifact v${lineage.currentVersion} 精确提交；没有重复写入。`
         : `Artifact v${lineage.currentVersion} 已通过完整版本链、内容、hash 与 base 链接校验。`,
     );
+    dispatchTrustedArtifact(outcomeArtifact);
   };
 
   const allowExplicitRevisionRetry = () => {
+    dispatchArtifactInvalidated();
     revisionSaving = false;
     if (outcomeCanvasContent) {
       outcomeCanvasContent.setAttribute?.("contenteditable", "true");
@@ -907,6 +954,7 @@
   };
 
   const showRevisionConflict = (head, reportedVersion = null) => {
+    dispatchArtifactInvalidated();
     revisionSaving = false;
     if (outcomeCanvasContent) {
       outcomeCanvasContent.setAttribute?.("contenteditable", "true");
@@ -939,6 +987,7 @@
   const showRevisionUnknown = (
     message = "PUT 与只读核对都没有形成可信回执；页面不会自动重试，本地内容仍保留。",
   ) => {
+    dispatchArtifactInvalidated();
     revisionSaving = false;
     if (outcomeCanvasContent) {
       outcomeCanvasContent.setAttribute?.("contenteditable", "true");
@@ -1348,6 +1397,7 @@
         "Outcome Canvas 本地草稿已就绪",
         "已核对 Capture 与 Artifact v1 的持久绑定；内容来自 ScriptedFakeModel，可在本页本地编辑，但尚未保存修订。",
       );
+      dispatchTrustedArtifact(outcomeArtifact);
       outcomeCanvasTrigger.textContent = "本地草稿已生成";
       outcomeCanvasContent?.focus?.();
     } catch (_failure) {
@@ -1402,6 +1452,7 @@
       !putController.signal.aborted;
 
     revisionSaving = true;
+    dispatchArtifactInvalidated();
     outcomeCanvasContent.setAttribute?.("contenteditable", "false");
     if (outcomeCanvasContent.dataset) {
       outcomeCanvasContent.dataset.state = "REVISION_SAVING";

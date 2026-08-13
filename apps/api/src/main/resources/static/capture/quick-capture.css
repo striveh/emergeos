@@ -316,6 +316,99 @@ button:disabled {
   margin-top: 0.8rem;
 }
 
+.approval-card {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid rgb(46 114 81 / 32%);
+  border-radius: 0.9rem;
+  background: #fff;
+}
+
+.approval-card-label {
+  margin: 0 0 0.35rem;
+  color: #4b6959;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+}
+
+.approval-card h3 {
+  margin: 0;
+  color: #243d30;
+  font-size: 1.05rem;
+}
+
+.approval-card-facts {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.85rem 0;
+}
+
+.approval-card-facts div {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  gap: 0.65rem;
+}
+
+.approval-card-facts dt {
+  color: #69786f;
+  font-size: 0.78rem;
+}
+
+.approval-card-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: #2d4538;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.approval-boundary,
+.approval-status {
+  margin: 0.75rem 0 0;
+  color: #586a60;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.approval-status {
+  padding: 0.7rem 0.8rem;
+  border-left: 0.22rem solid #8b9b91;
+  border-radius: 0.45rem;
+  background: #f4f6f3;
+}
+
+.approval-status:focus-visible {
+  outline: 0.2rem solid rgb(46 114 81 / 28%);
+  outline-offset: 0.18rem;
+}
+
+.approval-card[data-state="PLANNED"] .approval-status {
+  border-left-color: #25734d;
+  color: #27583e;
+  background: #edf7f0;
+}
+
+.approval-card[data-state="UNKNOWN"] .approval-status {
+  border-left-color: #b27821;
+  color: #6d4d1d;
+  background: #fff7e8;
+}
+
+.approval-card[data-state="STALE"] .approval-status,
+.approval-card[data-state="INVALIDATED"] .approval-status {
+  border-left-color: #a6493f;
+  color: #74342e;
+  background: #fff1ef;
+}
+
 .outcome-conflict {
   margin-top: 1rem;
   padding: 0.9rem;
