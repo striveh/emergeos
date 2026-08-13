@@ -66,14 +66,26 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
 
   @Override
   public PlanResult planOrFind(ActionAttempt proposed) {
+    requireNewPlan(proposed);
+    return Objects.requireNonNull(
+        transactions.execute(status -> planOrFindInTransaction(proposed)),
+        "ActionAttempt plan transaction result");
+  }
+
+  @Override
+  public PlanResult planApprovalOrFind(ActionAttempt proposed) {
+    requireNewPlan(proposed);
+    return Objects.requireNonNull(
+        transactions.execute(status -> planApprovalOrFindInTransaction(proposed)),
+        "Action approval plan transaction result");
+  }
+
+  private static void requireNewPlan(ActionAttempt proposed) {
     Objects.requireNonNull(proposed, "proposed");
     if (proposed.status() != ActionAttemptStatus.PLANNED
         || proposed.transitions().size() != 1) {
       throw new IllegalArgumentException("a proposed ActionAttempt must be newly PLANNED");
     }
-    return Objects.requireNonNull(
-        transactions.execute(status -> planOrFindInTransaction(proposed)),
-        "ActionAttempt plan transaction result");
   }
 
   private PlanResult planOrFindInTransaction(ActionAttempt proposed) {
@@ -85,23 +97,7 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
           proposed.transitions().getFirst(),
           0);
     }
-    Optional<AttemptIdentity> winner =
-        jdbc.sql(
-                """
-                SELECT
-                    principal_id, attempt_id, connector, account_ref, idempotency_key,
-                    action_type, target_ref, artifact_id, artifact_version, artifact_hash,
-                    risk, policy_version, capability_audience, capability_max_calls
-                FROM action_attempts
-                WHERE connector = :connector
-                  AND account_ref = :accountRef
-                  AND idempotency_key = :idempotencyKey
-                """)
-            .param("connector", proposed.connector())
-            .param("accountRef", proposed.accountRef())
-            .param("idempotencyKey", proposed.plan().idempotencyKey())
-            .query(PostgresActionAttemptStore::mapIdentity)
-            .optional();
+    Optional<AttemptIdentity> winner = findWinner(proposed);
     if (winner.isEmpty()) {
       throw new ActionAttemptIntegrityException(
           "ActionAttempt insert did not yield a unique-key winner");
@@ -111,7 +107,82 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
       return new PlanResult.Conflict();
     }
     return new PlanResult.Accepted(
-        requireOwned(identity.principalId(), identity.attemptId()));
+        requireOwned(identity.principalId(), identity.attemptId()), inserted == 1);
+  }
+
+  private PlanResult planApprovalOrFindInTransaction(ActionAttempt proposed) {
+    Optional<AttemptIdentity> existing = findWinner(proposed);
+    if (existing.isPresent()) {
+      return canonicalWinner(proposed, existing.orElseThrow(), false);
+    }
+
+    Optional<ArtifactHead> lockedHead =
+        jdbc.sql(
+                """
+                SELECT current_version, current_hash
+                FROM artifacts
+                WHERE principal_id = :principalId
+                  AND artifact_id = :artifactId
+                FOR UPDATE
+                """)
+            .param("principalId", proposed.plan().principalId())
+            .param("artifactId", proposed.plan().artifactId())
+            .query(PostgresActionAttemptStore::mapArtifactHead)
+            .optional();
+
+    existing = findWinner(proposed);
+    if (existing.isPresent()) {
+      return canonicalWinner(proposed, existing.orElseThrow(), false);
+    }
+    if (lockedHead.isEmpty()
+        || lockedHead.orElseThrow().version() != proposed.plan().artifactVersion()
+        || !lockedHead.orElseThrow().hash().equals(proposed.plan().artifactHash())) {
+      return new PlanResult.Stale();
+    }
+
+    int inserted = insertAttempt(proposed);
+    if (inserted == 1) {
+      insertTransition(
+          proposed.plan().principalId(),
+          proposed.attemptId(),
+          proposed.transitions().getFirst(),
+          0);
+    }
+    AttemptIdentity winner =
+        findWinner(proposed)
+            .orElseThrow(
+                () ->
+                    new ActionAttemptIntegrityException(
+                        "Action approval insert did not yield a unique-key winner"));
+    return canonicalWinner(proposed, winner, inserted == 1);
+  }
+
+  private Optional<AttemptIdentity> findWinner(ActionAttempt proposed) {
+    return jdbc.sql(
+            """
+            SELECT
+                principal_id, attempt_id, connector, account_ref, idempotency_key,
+                action_type, target_ref, artifact_id, artifact_version, artifact_hash,
+                risk, policy_version, capability_audience, capability_max_calls
+            FROM action_attempts
+            WHERE connector = :connector
+              AND account_ref = :accountRef
+              AND idempotency_key = :idempotencyKey
+            """)
+        .param("connector", proposed.connector())
+        .param("accountRef", proposed.accountRef())
+        .param("idempotencyKey", proposed.plan().idempotencyKey())
+        .query(PostgresActionAttemptStore::mapIdentity)
+        .optional();
+  }
+
+  private PlanResult canonicalWinner(
+      ActionAttempt proposed, AttemptIdentity winner, boolean created) {
+    if (!winner.sameSemanticRequest(proposed)) {
+      return new PlanResult.Conflict();
+    }
+    return new PlanResult.Accepted(
+        requireOwned(winner.principalId(), winner.attemptId()), created);
   }
 
   @Override
@@ -561,6 +632,12 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
         resultSet.getInt("capability_max_calls"));
   }
 
+  private static ArtifactHead mapArtifactHead(ResultSet resultSet, int rowNumber)
+      throws SQLException {
+    return new ArtifactHead(
+        resultSet.getInt("current_version"), resultSet.getString("current_hash"));
+  }
+
   private static AttemptReadRow mapAttemptReadRow(ResultSet resultSet, int rowNumber)
       throws SQLException {
     String receiptOutcome = resultSet.getString("receipt_outcome");
@@ -684,6 +761,8 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
 
   private record AttemptReadRow(
       AttemptRow attempt, ActionTransition transition) {}
+
+  private record ArtifactHead(int version, String hash) {}
 
   private static final class ActionAttemptIntegrityException extends RuntimeException {
 

@@ -1,7 +1,10 @@
 package io.emergeos.core.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.domain.ActionAttempt;
@@ -34,6 +37,42 @@ class RecoverableActionServiceTest {
   private static final String CONNECTOR = "simulated.local-draft";
   private static final String AUDIENCE = "adapter:simulated-provider";
   private static final String ACCOUNT = "simulated-account:action-owner";
+
+  @Test
+  void exactApprovalPlansOnceWithoutClaimingOrInvokingProvider() {
+    ArtifactLineage artifact = artifact();
+    InMemoryAttemptStore attempts = new InMemoryAttemptStore();
+    RecordingProvider provider = new RecordingProvider(attempts);
+    RecoverableActionService service = service(attempts, provider, artifact);
+    PlanLocalApprovalCommand command =
+        new PlanLocalApprovalCommand(
+            artifact.artifactId(),
+            artifact.current().version(),
+            artifact.current().contentHash(),
+            "exact-approval-nonce");
+
+    RecoverableActionService.PlannedApproval created = service.planApproval(command);
+    RecoverableActionService.PlannedApproval replayed = service.planApproval(command);
+
+    assertTrue(created.created());
+    assertFalse(replayed.created());
+    assertEquals(created.attempt(), replayed.attempt());
+    assertEquals(ActionAttemptStatus.PLANNED, created.attempt().status());
+    assertEquals(0, created.attempt().capabilityUsedCalls());
+    assertEquals(1, created.attempt().transitions().size());
+    assertNull(created.attempt().receipt());
+    assertTrue(provider.requests.isEmpty());
+    assertThrows(
+        ApprovalStaleException.class,
+        () ->
+            service.planApproval(
+                new PlanLocalApprovalCommand(
+                    artifact.artifactId(),
+                    artifact.current().version() + 1,
+                    artifact.current().contentHash(),
+                    "stale-approval-nonce")));
+    assertEquals(created.attempt(), attempts.current);
+  }
 
   @Test
   void persistsAndClaimsBeforeProviderThenReconcilesOneDefiniteReceipt() {
@@ -141,6 +180,7 @@ class RecoverableActionServiceTest {
 
   private static RecoverableActionService service(
       InMemoryAttemptStore attempts, ActionProvider provider, ArtifactLineage artifact) {
+    attempts.artifact = artifact;
     return new RecoverableActionService(
         attempts,
         new OwnedArtifactStore(artifact),
@@ -220,20 +260,52 @@ class RecoverableActionServiceTest {
 
     @Override
     public PlanResult planOrFind(ActionAttempt proposed) {
-      if (current == null) {
-        current = proposed;
-        return new PlanResult.Accepted(current);
-      }
-      boolean sameRequest =
-          current.plan().principalId().equals(proposed.plan().principalId())
-              && current.connector().equals(proposed.connector())
-              && current.accountRef().equals(proposed.accountRef())
-              && current.plan().artifactId().equals(proposed.plan().artifactId())
-              && current.plan().artifactVersion() == proposed.plan().artifactVersion()
-              && current.plan().artifactHash().equals(proposed.plan().artifactHash())
-              && current.plan().idempotencyKey().equals(proposed.plan().idempotencyKey());
-      return sameRequest ? new PlanResult.Accepted(current) : new PlanResult.Conflict();
+      return plan(proposed, false);
     }
+
+    @Override
+    public PlanResult planApprovalOrFind(ActionAttempt proposed) {
+      return plan(proposed, true);
+    }
+
+    private PlanResult plan(ActionAttempt proposed, boolean requireCurrentArtifact) {
+      if (current == null) {
+        if (requireCurrentArtifact
+            && (artifact == null
+                || !artifact.artifactId().equals(proposed.plan().artifactId())
+                || artifact.current().version() != proposed.plan().artifactVersion()
+                || !artifact.current().contentHash().equals(proposed.plan().artifactHash()))) {
+          return new PlanResult.Stale();
+        }
+        current = proposed;
+        return new PlanResult.Accepted(current, true);
+      }
+      boolean sameUniqueKey =
+          current.connector().equals(proposed.connector())
+              && current.accountRef().equals(proposed.accountRef())
+              && current.plan().idempotencyKey().equals(proposed.plan().idempotencyKey());
+      if (sameUniqueKey) {
+        boolean sameRequest =
+            current.plan().principalId().equals(proposed.plan().principalId())
+                && current.plan().artifactId().equals(proposed.plan().artifactId())
+                && current.plan().artifactVersion() == proposed.plan().artifactVersion()
+                && current.plan().artifactHash().equals(proposed.plan().artifactHash());
+        return sameRequest
+            ? new PlanResult.Accepted(current, false)
+            : new PlanResult.Conflict();
+      }
+      if (requireCurrentArtifact
+          && (artifact == null
+              || !artifact.artifactId().equals(proposed.plan().artifactId())
+              || artifact.current().version() != proposed.plan().artifactVersion()
+              || !artifact.current().contentHash().equals(proposed.plan().artifactHash()))) {
+        return new PlanResult.Stale();
+      }
+      current = proposed;
+      return new PlanResult.Accepted(current, true);
+    }
+
+    private ArtifactLineage artifact;
 
     @Override
     public ClaimResult claimDispatch(ActionAttempt expected, Instant now) {

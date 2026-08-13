@@ -1,8 +1,10 @@
 package io.emergeos.adapters.postgres;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.RiskLevel;
@@ -30,6 +32,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -198,6 +201,136 @@ class PostgresActionAttemptStoreTest {
     assertEquals(
         unknown,
         secondStore().findOwned(OWNER, unknown.attemptId()).orElseThrow());
+  }
+
+  @Test
+  void exactApprovalPlansAgainstLockedHeadAndReplaysAfterHeadAdvances() {
+    ArtifactLineage artifact = ownArtifact(OWNER, "artifact-exact-approval");
+    ActionAttempt proposed =
+        planned(
+            "attempt-exact-approval",
+            "plan-exact-approval",
+            "capability-exact-approval",
+            "approval-exact-approval",
+            artifact,
+            "exact-approval-key",
+            CONNECTOR,
+            AUDIENCE,
+            ACCOUNT,
+            NOW);
+
+    ActionAttemptStore.PlanResult.Accepted created =
+        assertInstanceOf(
+            ActionAttemptStore.PlanResult.Accepted.class,
+            store().planApprovalOrFind(proposed));
+    assertTrue(created.created());
+    reviseArtifact(artifact);
+
+    ActionAttempt replayProposal =
+        planned(
+            "attempt-exact-approval-replay",
+            "plan-exact-approval-replay",
+            "capability-exact-approval-replay",
+            "approval-exact-approval-replay",
+            artifact,
+            "exact-approval-key",
+            CONNECTOR,
+            AUDIENCE,
+            ACCOUNT,
+            NOW.plusMillis(100));
+    ActionAttemptStore.PlanResult.Accepted replayed =
+        assertInstanceOf(
+            ActionAttemptStore.PlanResult.Accepted.class,
+            secondStore().planApprovalOrFind(replayProposal));
+    assertFalse(replayed.created());
+    assertEquals(created.attempt(), replayed.attempt());
+
+    ActionAttempt staleNewNonce =
+        planned(
+            "attempt-stale-approval",
+            "plan-stale-approval",
+            "capability-stale-approval",
+            "approval-stale-approval",
+            artifact,
+            "stale-approval-key",
+            CONNECTOR,
+            AUDIENCE,
+            ACCOUNT,
+            NOW.plusMillis(200));
+    assertInstanceOf(
+        ActionAttemptStore.PlanResult.Stale.class,
+        store().planApprovalOrFind(staleNewNonce));
+    assertEquals(1, attemptCount("exact-approval-key"));
+    assertEquals(0, attemptCount("stale-approval-key"));
+  }
+
+  @Test
+  void committedRevisionWinsBlockedApprovalWithoutLeavingAStaleAttempt() throws Exception {
+    ArtifactLineage artifact = ownArtifact(OWNER, "artifact-revision-first");
+    ActionAttempt proposed =
+        planned(
+            "attempt-revision-first",
+            "plan-revision-first",
+            "capability-revision-first",
+            "approval-revision-first",
+            artifact,
+            "revision-first-key",
+            CONNECTOR,
+            AUDIENCE,
+            ACCOUNT,
+            NOW);
+    String revisedContent = "synthetic revision committed before exact approval";
+    String revisedHash = ContentHashes.sha256(revisedContent);
+
+    try (var revisionConnection = dataSource.getConnection();
+        var executor = Executors.newSingleThreadExecutor()) {
+      revisionConnection.setAutoCommit(false);
+      try {
+        try (var update =
+            revisionConnection.prepareStatement(
+                """
+                UPDATE artifacts
+                SET current_version = 2, current_hash = ?
+                WHERE principal_id = ? AND artifact_id = ?
+                  AND current_version = 1 AND current_hash = ?
+                """)) {
+          update.setString(1, revisedHash);
+          update.setString(2, artifact.principalId());
+          update.setString(3, artifact.artifactId());
+          update.setString(4, artifact.current().contentHash());
+          assertEquals(1, update.executeUpdate());
+        }
+        try (var insert =
+            revisionConnection.prepareStatement(
+                """
+                INSERT INTO artifact_versions (
+                    principal_id, artifact_id, version, content, content_hash,
+                    base_version, base_hash, created_at
+                ) VALUES (?, ?, 2, ?, ?, 1, ?, ?)
+                """)) {
+          insert.setString(1, artifact.principalId());
+          insert.setString(2, artifact.artifactId());
+          insert.setString(3, revisedContent);
+          insert.setString(4, revisedHash);
+          insert.setString(5, artifact.current().contentHash());
+          insert.setTimestamp(6, java.sql.Timestamp.from(NOW.plusMillis(500)));
+          assertEquals(1, insert.executeUpdate());
+        }
+
+        var approval = executor.submit(() -> secondStore().planApprovalOrFind(proposed));
+        awaitBlockedApprovalHeadLock();
+        assertFalse(approval.isDone());
+        revisionConnection.commit();
+
+        assertInstanceOf(
+            ActionAttemptStore.PlanResult.Stale.class,
+            approval.get(5, TimeUnit.SECONDS));
+      } catch (Exception | Error failure) {
+        revisionConnection.rollback();
+        throw failure;
+      }
+    }
+    assertEquals(0, attemptCount("revision-first-key"));
   }
 
   @Test
@@ -805,6 +938,30 @@ class PostgresActionAttemptStoreTest {
         .param("attemptId", attemptId)
         .query(Integer.class)
         .single();
+  }
+
+  private static void awaitBlockedApprovalHeadLock() throws Exception {
+    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+    while (System.nanoTime() < deadline) {
+      int blocked =
+          jdbc.sql(
+                  """
+                  SELECT count(*)
+                  FROM pg_stat_activity
+                  WHERE datname = current_database()
+                    AND pid <> pg_backend_pid()
+                    AND wait_event_type = 'Lock'
+                    AND query LIKE '%FROM artifacts%'
+                    AND query LIKE '%FOR UPDATE%'
+                  """)
+              .query(Integer.class)
+              .single();
+      if (blocked > 0) {
+        return;
+      }
+      Thread.sleep(10);
+    }
+    throw new AssertionError("exact approval did not block on the Artifact head row");
   }
 
   private static void installFailingReceiptTrigger() {
