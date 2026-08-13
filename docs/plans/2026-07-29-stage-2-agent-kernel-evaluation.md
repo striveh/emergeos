@@ -17,20 +17,24 @@ PostgreSQL V7 canonical graph attempt、provider-accepted writer强杀、两个 
 verifier、least-authority + 完整 writer replay与 executable architecture Gate；
 同一 loopback provider最终 request count为 `1`，billing truth保持 `UNKNOWN`。
 Pack009 shipping execute/DB verify仍禁用，也没有 real TTY/key/provider result。
-Pack010当前已推进到V20 test-only PostgreSQL immediate-restart overlay readback focused Gate：V16独立exact-pico
+Pack010当前已推进到V21 test-only in-flight overlay-read connection-loss focused/root Gate：V16独立exact-pico
 overlay head14不改写legacy head13；V16冻结时production verifier/API为0，V17新增未接线的
 production-source verifier primitive，V18新增单一typed `complete` adapter，V19再新增专属13表SELECT-only
 role与四态reader，在单一RR/RO snapshot独立重算V13-V16 canonical closure和Ed25519。public Java raw
 stage/commit method、App consumer与shipping signer仍为0，configuration/runtime仍未证明，Authority/Live继续Red。
 V20冻结时只以test-only独立keepalive Testcontainer证明同container/system identifier/PGDATA上的PostgreSQL
 immediate process restart后，另一fresh packaged JVM可重验同一`Attributed` receipt；当时production delta为0。
+V21再用test-admin精确绑定并终止正在等待最终overlay-head relation lock的V19 reader backend；fault child
+只输出固定integrity fail-closed receipt且不输出四态verdict，数据库image不变，显式fresh packaged JVM可重验
+`Attributed`。V21仍是两个test-only source，production/schema/provisioning/shipping capability delta为0。
 其后Linux CI真实TTY启用所暴露的PostgreSQL microsecond portability缺口已在两个dormant production
 consumer的7个durable sinks与3个TTY test-harness callsites精确canonicalize，raw expiry clock保持不变；
 第二轮Linux CI又暴露test-only provider-session expiry fixture的host nanosecond输入，bridge现于事务前fail fast，
 16个positive callers与默认synthetic binding显式对齐PostgreSQL `MICROS`，production exact equality/hash不变；最终root
 回归发现的offline claim创建窗口也已确定性收口，真实unsafe metadata仍fail closed。App consumer与Live仍为0/Red。
 PostgreSQL不验证Ed25519，credential/attestor caller与V19 reader role/process仍在TCB；TX-B/TX-C、host/
-power/storage/HA fault、connection-loss/reconcile/race、live、billing与pre-egress均未关闭。完整live smoke、stochastic Harness、真实 Seed与
+power/storage/HA fault、其余read point与TCP/partition connection loss、automatic retry/reconcile、race、live、
+billing与pre-egress均未关闭。完整live smoke、stochastic Harness、真实 Seed与
 用户价值 Gate尚未完成。
 
 Owner：项目所有者 + main Codex agent
@@ -1822,6 +1826,28 @@ Pack010 progress：
     又在GitHub Actions run `31614258555`完成11/11 modules `BUILD SUCCESS`，此前4个graph-eval错误均关闭。
     随后仅同步该结果的docs-only commit不反向冒充已被此run测试。当前只扩大Engineering证据，
     没有App wiring、provider egress或Authority/Live上调；
+  - [x] V21 in-flight final overlay-head read connection loss：只新增test-only Acceptance与fault Main，
+    不修改production、schema、provisioning、V19 reader、ProcessSupport、Bytecode Gate或shipping App。
+    V13+V15+V18 fixture及fresh JVM A先得到`Attributed`；test-admin持有final overlay-head
+    `ACCESS EXCLUSIVE` lock，再以database/role/application/relation/wait state精确绑定并终止唯一reader
+    backend。fault child exit 21，只输出固定`GRAPH_ATTEMPT_INTEGRITY` receipt，不能输出四态verdict；
+    public JSON/`xmin`、legacy seq13/no14、V16四行与durable identity不变。故障后没有migrate/provision/
+    fixture或automatic retry，只有显式fresh packaged JVM C再次得到`Attributed`。focused `1/0`、
+    architecture/bytecode/shipping/exclusion `21/0`及最终唯一integration root `clean verify`均Green；最终为
+    `163 XML / 874 tests / 0`，其中另含下条单独记账的API privacy与Quick Capture 7 tests；8个V21
+    test class只在`target/test-classes`，App consumer与Gate violations为0，
+    source/class/report及五个artifact hash已冻结。证据只覆盖final overlay-head SELECT等lock时的server
+    backend termination，不覆盖其它read point、TCP half-open/network partition、automatic retry/reconcile、
+    race、App/Live或current authorization；详细回执见
+    [V21 Build Note](../operations/build-notes/2026-08-13-s2-s4-pack010-v21-in-flight-overlay-read-connection-loss.md)；
+  - [x] local Quick Capture entry与private API cache boundary：API privacy filter现在对captures、artifacts、
+    manifestations、agent drafts/runs的success和error response统一`private, no-store`，6个focused tests
+    Green且error不回显submitted/stored sentinel。packaged API新增`GET /capture`的2个page classes与3个
+    same-origin static resources；actual fat JAR在loopback launch下返回200、exact CSP/no-store、可访问的
+    TEXT/LINK表单，JS阻止submit且没有fetch/storage/外链。它没有POST实现、voice、列表、provider egress或
+    browser persistence。Quick Capture packaged IT `1/0`、两路review无P0/P1，最终与V21共同进入唯一root
+    `163 XML / 874 tests / 0`；source/report/resource/JAR hash在V21 Build Note的独立ledger中冻结。
+    该local UI/security slice不改变Authority/Live、Commercial或真实用户价值Gate；
   - [ ] DeepSeek live PASS与durable multi-provider TX-A：本轮唯一真实请求在intermediate bytes上
     fail closed为`RESPONSE_METADATA_MISMATCH`，没有retry/redirect或第二请求，具体不兼容字段、billing与
     provider retention均未知。下一次请求必须使用owner经隐藏stdin重新提供的rotated credential；未来
