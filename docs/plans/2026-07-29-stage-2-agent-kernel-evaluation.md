@@ -1818,7 +1818,9 @@ Pack010 progress：
     Acceptance中揭示test-only bridge收到sub-micro expiry并被production exact read-back正确回滚；确定性`+1ns`
     Red后，bridge改为事务前固定fail-fast，16个positive host-clock callers与默认synthetic binding均显式截断到
     `MICROS`，两个DB-clock callers保持不变。focused Acceptance `4/0`、全部bridge consumer `19/0`与最终
-    `160 XML / 866 tests / 0` root clean已Green；新的Linux CI仍待本次push后重跑，未被本地回执冒充Green。当前只扩大本地Engineering证据，
+    `160 XML / 866 tests / 0` root clean已Green；精确code HEAD `c01bead266eea4ae8122e3e59c2faece3d2921af`
+    又在GitHub Actions run `31614258555`完成11/11 modules `BUILD SUCCESS`，此前4个graph-eval错误均关闭。
+    随后仅同步该结果的docs-only commit不反向冒充已被此run测试。当前只扩大Engineering证据，
     没有App wiring、provider egress或Authority/Live上调；
   - [ ] DeepSeek live PASS与durable multi-provider TX-A：本轮唯一真实请求在intermediate bytes上
     fail closed为`RESPONSE_METADATA_MISMATCH`，没有retry/redirect或第二请求，具体不兼容字段、billing与

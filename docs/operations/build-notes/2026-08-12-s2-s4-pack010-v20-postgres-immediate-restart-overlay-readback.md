@@ -52,7 +52,7 @@ overlayRows=4
 shippingLiveRoute=DISABLED
 rootClean=GREEN_160_XML_866_TESTS_0
 remoteLinuxCiObserved=RED_RUN_31609813991_HEAD_39B6267_GRAPH_EVAL_4_ERRORS
-remoteLinuxCiAfterFix=NOT_RUN
+remoteLinuxCiAfterFix=GREEN_RUN_31614258555_HEAD_C01BEAD_11_MODULES_BUILD_SUCCESS
 v20SourceSha256=cf0d12081fdfb50a911b576e4ff24ff2ef61e94b0b6b35e3ee4ecc71373eaa71
 v20TestClassAggregate=b5c6e1ece85f808f7e7e1b65b24865582ae4f2dbab512e8fd193083e0d272591
 v19ShippingPayloadParity=5cb31fde30537fef35f2732d0bf57b87356693cf2e540b319906353f14c413fa
@@ -168,8 +168,8 @@ post-rebase pre-portability与当前bytes，不互相覆盖，也不伪称zero-d
   使泛化expiry message通过而durable row为0。该场景现与其他post-approval expiry测试统一为3秒，仍等待
   `TTL + 150ms`，并新增`PROVIDER_SESSION_INTENT_DURABLE`必须严格早于
   `REJECTED owner capability expired`的顺序断言；row=1、seq7、restart replay fence均未放宽。修复后本地
-  focused连续3次`1/0`、完整Store suite `61/0`及本次root clean均Green；新的Linux CI在本回执冻结时仍待重跑，
-  因此不把本地Green写成remote CI Green；
+  focused连续3次`1/0`、完整Store suite `61/0`及本次root clean均Green；后续Linux run
+  `31609813991`在下一段所述test fixture精度边界继续fail closed，因此不把这一阶段的本地Green写成remote Green；
 - 第二轮Linux CI（run `31609813991`，head `39b6267`）已越过Store与API模块，却在4个graph-eval
   Acceptance首次写provider session intent时触发同一exact read-back fence：16个test fixture调用点把host
   nanosecond `Instant.now() + 5m`送入test-only bridge，PostgreSQL `timestamptz`回读为microsecond后与参与hash的
@@ -177,8 +177,10 @@ post-rebase pre-portability与当前bytes，不互相覆盖，也不伪称zero-d
   recovery随后让bridge在打开store/事务前以固定消息拒绝sub-micro输入并证明row=0，让16个positive callers显式
   canonicalize到`MICROS`，默认synthetic binding同步收口，而两个原本取自数据库`clock_timestamp()`的调用保持
   不变。production store的hash/read-back equality、TTL与replay fence均未修改。focused 4个Acceptance为`4/0`，
-  覆盖全部18个bridge callsites的consumer suite为`19/0`，最终root clean为`160 XML / 866 tests / 0`；新的Linux CI仍待本次push后重跑，
-  不能把本地证据表述成remote Green；
+  覆盖全部18个bridge callsites的consumer suite为`19/0`，最终root clean为`160 XML / 866 tests / 0`。
+  精确code HEAD `c01bead266eea4ae8122e3e59c2faece3d2921af`随后在GitHub Actions run
+  `31614258555`完成11/11 modules `BUILD SUCCESS`，前述4个graph-eval Acceptance均Green。该远端Green
+  只签收`c01bead`的code+receipt bytes；随后用于记录本结果的docs-only commit不反向冒充已被该run测试；
 - 同构的dormant production缺口在`Pack010ProviderCredentialBroker`一个durable sink与
   `Pack010ProviderSessionComposer`六个durable sinks精确canonicalize；`CredentialLease.requireFresh`
   继续使用raw clock，避免改变expiry判断。Composer由nanosecond unit与真实PostgreSQL/restart行为覆盖；
