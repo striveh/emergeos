@@ -4,7 +4,7 @@ Date：2026-08-14
 
 Stage：Stage 1 / 产品闭环增量
 
-状态：`focused + root clean Engineering Green；commit / push / CI pending；overall Authority / Live Red`
+状态：`focused + root clean + exact code-head CI Engineering Green；Draft PR #6；overall Authority / Live Red`
 
 ## Outcome
 
@@ -16,9 +16,11 @@ Stage：Stage 1 / 产品闭环增量
 
 本切片把“批准了哪个当前成果、由什么输入来源、将走哪条执行路线”冻结为可审计 bytes；它没有实现
 Local Draftbox execute/undo，也没有证明 authenticated end-user identity、production authority、
-真实 Connector/provider、Live 或商业价值。冻结基线为
-`8b589b36d4eff9a4f0e72f7a295b9199ea8012b4`；当前是共享 dirty worktree candidate，尚无本切片
-commit/push/CI 结论。
+真实 Connector/provider、Live 或商业价值。代码与当时文档已形成 DCO commit
+`27da843dcb9deb9ae4008f1812dafd537a748cf3`，并通过非 force push推送至 feature branch，形成
+[Draft PR #6](https://github.com/striveh/emergeos/pull/6)；下文 CI结论只绑定该 exact code head。
+后续 docs-only head不改变这份 code evidence；PR当前 check状态以GitHub为准，本Note不预判或追写
+每个docs-only head。
 
 ## Acceptance Red -> minimum implementation
 
@@ -179,7 +181,25 @@ root integration 经过两个有界 failure round：首轮暴露 `RecoverableLoc
 expectation与 V18 raw-role path 两个独立兼容性 Red，各只做一次 bounded correction；下一轮才暴露
 Pack009 的 schema-16 expectation，并对该新 failure class做一次 bounded correction。最终上述 fresh
 `clean verify` 全绿；没有对同一失败循环试错。shipping Live route仍 disabled，root Green不把
-configured/dormant/loopback证据上调为 Authority / Live Green。commit、push 与 GitHub CI仍 pending。
+configured/dormant/loopback证据上调为 Authority / Live Green。code-bearing commit/push/CI见下节；
+后续docs-only head不改变该证据截止点。
+
+## Code-head commit, PR and CI receipt
+
+DCO commit `27da843dcb9deb9ae4008f1812dafd537a748cf3`已 push到 feature branch。
+[GitHub Actions run 31771125144](https://github.com/striveh/emergeos/actions/runs/31771125144)
+绑定该 exact head，终态为 `SUCCESS / BUILD SUCCESS`，耗时`24m42s`。CI从 fresh checkout执行
+repository verify；日志确认以下 packaged/fault evidence均实际运行并 Green，而非只沿用本地 XML：
+
+- `ExplicitLocalApprovalScopeHttpIT`、`ExactLocalApprovalUiHttpIT`、
+  `ExactLocalApprovalHttpIT`与`RecoverableLocalActionHttpIT`；
+- `Pack009DurableGraphCrashProcessIT`；
+- `Pack010V18TypedAttestorShippingJarIT`。
+
+该 CI保持 shipping Live route disabled；它不含真实 provider/Connector/effect或 Receipt evidence，
+所以 overall Authority / Live仍为 Red。PR在本回执截止点仍是`Draft / Open / CLEAN`，没有 merge、
+release或deploy。本节明确绑定 exact code commit与对应CI run；后续docs-only head不改变该code
+evidence，PR当前check状态以GitHub为准，本Note不预判或追写每个docs-only head。
 
 ## Independent review and remaining risk
 
@@ -189,7 +209,8 @@ prototype的隔离/绑定依据，不是生产 authentication 或可信现实身
 
 结论分层：
 
-- Engineering：本 exact approval-scope focused slice及 fresh root clean均 Green；commit/push/CI pending；
+- Engineering：本 exact approval-scope focused、fresh root clean与 exact code-head CI均 Green；
+  回执截止时Draft PR #6为Open/CLEAN且未merge/release；当前状态以GitHub为准；
 - Product：用户可看见并精确批准一个 current Artifact 的本地草稿计划，但 execute/undo/Receipt尚不存在；
 - Human learning：没有 founder dogfood、Teach-back、真实用户 Seed 或访谈证据；
 - Commercial：没有付费、复用、转化、billing 或市场证据；
