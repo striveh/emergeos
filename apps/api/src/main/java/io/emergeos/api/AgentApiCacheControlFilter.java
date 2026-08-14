@@ -22,7 +22,9 @@ final class AgentApiCacheControlFilter extends OncePerRequestFilter {
         || isAtOrBelow(path, "/api/v1/artifacts")
         || isAtOrBelow(path, "/api/v1/manifestations")
         || isAtOrBelow(path, "/api/v1/agent-drafts")
-        || isAtOrBelow(path, "/api/v1/agent-runs"));
+        || isAtOrBelow(path, "/api/v1/agent-runs")
+        || isAtOrBelow(path, "/api/v1/action-approvals")
+        || isAtOrBelow(path, "/api/v1/actions"));
   }
 
   private static boolean isAtOrBelow(String path, String root) {

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.domain.ActionAttempt;
+import io.emergeos.core.domain.ActionApprovalScope;
 import io.emergeos.core.domain.ActionAttemptStatus;
 import io.emergeos.core.domain.ActionCapability;
 import io.emergeos.core.domain.ActionPlan;
@@ -185,6 +186,30 @@ class PostgresStage1OperationsProbeTest {
             plan.idempotencyKey(),
             plan.expiresAt(),
             2);
+    long capabilityTtlMicros =
+        Math.addExact(
+            Math.multiplyExact(
+                plan.expiresAt().getEpochSecond() - approval.decidedAt().getEpochSecond(),
+                1_000_000L),
+            (plan.expiresAt().getNano() - approval.decidedAt().getNano()) / 1_000L);
+    ActionApprovalScope scope =
+        new ActionApprovalScope(
+            ActionApprovalScope.CONFIGURED_LOCAL_PRINCIPAL,
+            plan.principalId(),
+            ActionApprovalScope.LEGACY_SERVER_IMPLICIT,
+            ActionApprovalScope.SIMULATED_PROVIDER_V1,
+            plan.actionType(),
+            plan.targetRef(),
+            plan.artifactId(),
+            plan.artifactVersion(),
+            plan.artifactHash(),
+            plan.risk(),
+            plan.policyVersion(),
+            capability.connector(),
+            capability.audience(),
+            capability.accountRef(),
+            capabilityTtlMicros,
+            capability.maxCalls());
     return new ActionAttempt(
         "attempt-" + suffix,
         plan,
@@ -193,7 +218,8 @@ class PostgresStage1OperationsProbeTest {
         ActionAttemptStatus.PLANNED,
         0,
         List.of(new ActionTransition(1, null, ActionAttemptStatus.PLANNED, NOW)),
-        null);
+        null,
+        scope);
   }
 
   private static ArtifactLineage artifact(String principalId) {

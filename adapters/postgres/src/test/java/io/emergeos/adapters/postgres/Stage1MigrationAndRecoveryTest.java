@@ -272,39 +272,125 @@ class Stage1MigrationAndRecoveryTest {
       DriverManagerDataSource dataSource,
       ArtifactLineage artifact,
       String suffix) {
-    DataSourceTransactionManager transactions =
-        new DataSourceTransactionManager(dataSource);
-    PostgresActionAttemptStore store =
-        new PostgresActionAttemptStore(dataSource, transactions);
     ActionAttempt proposed = planned(artifact, suffix);
-    ActionAttempt canonical =
-        assertInstanceOf(
-                ActionAttemptStore.PlanResult.Accepted.class,
-                store.planOrFind(proposed))
-            .attempt();
-    ActionAttempt dispatching =
-        assertInstanceOf(
-                ActionAttemptStore.ClaimResult.Claimed.class,
-                store.claimDispatch(canonical, NOW.plusSeconds(180)))
-            .attempt();
-    ActionAttempt unknown =
-        store.markUnknown(dispatching, NOW.plusSeconds(181));
-    ActionAttempt reconciling =
-        assertInstanceOf(
-                ActionAttemptStore.ClaimResult.Claimed.class,
-                store.claimReconciliation(unknown, NOW.plusSeconds(182)))
-            .attempt();
-    store.complete(
-        reconciling,
-        ActionReceipt.succeeded(
-            "receipt-" + suffix,
-            proposed.attemptId(),
-            "sim-object-" + suffix,
-            "sim-request-" + suffix,
-            "simulated://provider/" + suffix,
-            NOW.plusSeconds(183),
-            true),
-        NOW.plusSeconds(183));
+    ActionPlan plan = proposed.plan();
+    ApprovalDecision approval = proposed.approval();
+    ActionCapability capability = proposed.capability();
+    JdbcClient jdbc = JdbcClient.create(dataSource);
+    var transactions =
+        new org.springframework.transaction.support.TransactionTemplate(
+            new DataSourceTransactionManager(dataSource));
+    transactions.executeWithoutResult(
+        ignored -> {
+          assertEquals(
+              1,
+              jdbc.sql(
+                      """
+                      INSERT INTO action_attempts (
+                          principal_id, attempt_id, connector, account_ref, idempotency_key,
+                          status, state_version, capability_used_calls, capability_max_calls,
+                          plan_id, plan_hash, action_type, target_ref,
+                          artifact_id, artifact_version, artifact_hash,
+                          risk, policy_version, plan_expires_at,
+                          approval_id, approved_at,
+                          capability_id, capability_subject, capability_connector,
+                          capability_audience, capability_account_ref,
+                          capability_plan_id, capability_plan_hash, capability_artifact_hash,
+                          capability_idempotency_key, capability_expires_at,
+                          created_at, updated_at
+                      ) VALUES (
+                          :principalId, :attemptId, :connector, :accountRef, :idempotencyKey,
+                          'SUCCEEDED', 5, 2, :maxCalls,
+                          :planId, :planHash, :actionType, :targetRef,
+                          :artifactId, :artifactVersion, :artifactHash,
+                          :risk, :policyVersion, :expiresAt,
+                          :approvalId, :approvedAt,
+                          :capabilityId, :principalId, :connector,
+                          :audience, :accountRef,
+                          :planId, :planHash, :artifactHash,
+                          :idempotencyKey, :expiresAt,
+                          :approvedAt, :completedAt
+                      )
+                      """)
+                  .param("principalId", plan.principalId())
+                  .param("attemptId", proposed.attemptId())
+                  .param("connector", capability.connector())
+                  .param("accountRef", capability.accountRef())
+                  .param("idempotencyKey", plan.idempotencyKey())
+                  .param("maxCalls", capability.maxCalls())
+                  .param("planId", plan.planId())
+                  .param("planHash", plan.planHash())
+                  .param("actionType", plan.actionType())
+                  .param("targetRef", plan.targetRef())
+                  .param("artifactId", plan.artifactId())
+                  .param("artifactVersion", plan.artifactVersion())
+                  .param("artifactHash", plan.artifactHash())
+                  .param("risk", plan.risk().name())
+                  .param("policyVersion", plan.policyVersion())
+                  .param("expiresAt", java.sql.Timestamp.from(plan.expiresAt()))
+                  .param("approvalId", approval.decisionId())
+                  .param("approvedAt", java.sql.Timestamp.from(approval.decidedAt()))
+                  .param("capabilityId", capability.capabilityId())
+                  .param("audience", capability.audience())
+                  .param("completedAt", java.sql.Timestamp.from(NOW.plusSeconds(183)))
+                  .update());
+          List<ActionTransition> transitions =
+              List.of(
+                  new ActionTransition(1, null, ActionAttemptStatus.PLANNED, NOW.plusSeconds(170)),
+                  new ActionTransition(2, ActionAttemptStatus.PLANNED, ActionAttemptStatus.DISPATCHING, NOW.plusSeconds(180)),
+                  new ActionTransition(3, ActionAttemptStatus.DISPATCHING, ActionAttemptStatus.UNKNOWN, NOW.plusSeconds(181)),
+                  new ActionTransition(4, ActionAttemptStatus.UNKNOWN, ActionAttemptStatus.RECONCILING, NOW.plusSeconds(182)),
+                  new ActionTransition(5, ActionAttemptStatus.RECONCILING, ActionAttemptStatus.SUCCEEDED, NOW.plusSeconds(183)));
+          for (ActionTransition transition : transitions) {
+            assertEquals(
+                1,
+                jdbc.sql(
+                        """
+                        INSERT INTO action_attempt_transitions (
+                            principal_id, attempt_id, sequence, from_status, to_status,
+                            capability_use_delta, occurred_at
+                        ) VALUES (
+                            :principalId, :attemptId, :sequence, :fromStatus, :toStatus,
+                            :useDelta, :occurredAt
+                        )
+                        """)
+                    .param("principalId", plan.principalId())
+                    .param("attemptId", proposed.attemptId())
+                    .param("sequence", transition.sequence())
+                    .param(
+                        "fromStatus",
+                        transition.fromStatus() == null ? null : transition.fromStatus().name())
+                    .param("toStatus", transition.toStatus().name())
+                    .param(
+                        "useDelta",
+                        transition.toStatus() == ActionAttemptStatus.DISPATCHING
+                                || transition.toStatus() == ActionAttemptStatus.RECONCILING
+                            ? 1
+                            : 0)
+                    .param("occurredAt", java.sql.Timestamp.from(transition.occurredAt()))
+                    .update());
+          }
+          assertEquals(
+              1,
+              jdbc.sql(
+                      """
+                      INSERT INTO action_receipts (
+                          principal_id, attempt_id, receipt_id, outcome, external_id,
+                          reason_code, provider_request_id, raw_response_ref, occurred_at, simulated
+                      ) VALUES (
+                          :principalId, :attemptId, :receiptId, 'SUCCEEDED', :externalId,
+                          NULL, :providerRequestId, :rawResponseRef, :occurredAt, TRUE
+                      )
+                      """)
+                  .param("principalId", plan.principalId())
+                  .param("attemptId", proposed.attemptId())
+                  .param("receiptId", "receipt-" + suffix)
+                  .param("externalId", "sim-object-" + suffix)
+                  .param("providerRequestId", "sim-request-" + suffix)
+                  .param("rawResponseRef", "simulated://provider/" + suffix)
+                  .param("occurredAt", java.sql.Timestamp.from(NOW.plusSeconds(183)))
+                  .update());
+        });
   }
 
   private static ActionAttempt planned(

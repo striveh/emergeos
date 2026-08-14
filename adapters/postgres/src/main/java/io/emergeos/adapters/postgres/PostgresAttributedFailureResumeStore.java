@@ -521,7 +521,7 @@ public final class PostgresAttributedFailureResumeStore {
                            WHERE namespace.nspname = 'public'
                              AND pg_catalog.has_function_privilege(
                                current_user, procedure.oid, 'EXECUTE')
-                         ) = 4
+                         ) = 5
                          AND (
                            SELECT count(*)
                            FROM pg_catalog.pg_proc procedure
@@ -536,15 +536,23 @@ public final class PostgresAttributedFailureResumeStore {
                                'agent_graph_read_attributed_failure_resume_v12',
                                'agent_graph_claim_attributed_failure_resume_v12',
                                'agent_graph_complete_claimed_failure_child_v12',
-                               'agent_graph_complete_claimed_failure_parent_and_seal_v12')
+                               'agent_graph_complete_claimed_failure_parent_and_seal_v12',
+                               'emergeos_pack010_schema_version_v1')
                              AND pg_catalog.pg_get_function_identity_arguments(
                                procedure.oid) = CASE procedure.proname
                                WHEN 'agent_graph_read_attributed_failure_resume_v12'
                                  THEN 'checked_principal character varying, checked_attempt character, checked_manifest character'
                                WHEN 'agent_graph_claim_attributed_failure_resume_v12'
                                  THEN 'checked_principal character varying, checked_attempt character, checked_manifest character, checked_provenance character, checked_state_version bigint, checked_claimant character varying, checked_fence_token_hash character, checked_lease_millis integer'
+                               WHEN 'emergeos_pack010_schema_version_v1'
+                                 THEN ''
                                ELSE 'payload jsonb, checked_provenance character, checked_state_version bigint, checked_claimant character varying, checked_fence_token_hash character'
                              END
+                             AND (
+                               procedure.proname <>
+                                 'emergeos_pack010_schema_version_v1'
+                               OR pg_catalog.pg_get_function_result(
+                                    procedure.oid) = 'integer')
                              AND pg_catalog.encode(
                                pg_catalog.sha256(pg_catalog.convert_to(
                                  procedure.prosrc, 'UTF8')), 'hex') =
@@ -557,6 +565,8 @@ public final class PostgresAttributedFailureResumeStore {
                                  THEN '6600b78c7cd407864b04965b21c9b2559d2134f49236895eaa641b224e4c76f2'
                                WHEN 'agent_graph_complete_claimed_failure_parent_and_seal_v12'
                                  THEN '8ed2cb0c6fec62169c868097decfa9ddf577b1a0316f6e8f0772bb49af88abb0'
+                               WHEN 'emergeos_pack010_schema_version_v1'
+                                 THEN '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143'
                                ELSE NULL
                              END
                              AND owner.rolname = CASE
@@ -588,7 +598,7 @@ public final class PostgresAttributedFailureResumeStore {
                                    'f', procedure.proowner))) acl
                                WHERE acl.grantee = 0
                                  AND acl.privilege_type = 'EXECUTE')
-                         ) = 4
+                         ) = 5
                          AND NOT EXISTS (
                            SELECT 1
                            FROM pg_catalog.pg_class relation
@@ -636,11 +646,11 @@ public final class PostgresAttributedFailureResumeStore {
                                  procedure.prosrc, 'UTF8')), 'hex') =
                                CASE procedure.proname
                                WHEN 'agent_graph_require_failure_resumer_v12'
-                                 THEN '18e4c45e18c348d21b13c9de8ce600859c3acd64892006c99f8f93cbbd42340e'
+                                 THEN '814c2d1a58013749d0441f07411e0065c14acc1d9523bc1ea8d8505218573920'
                                WHEN 'agent_graph_assert_failure_terminal_resume_v12'
                                  THEN 'fdad487040c702df9b58481e30158a96e1564963babd86b9d4a0d8e39bceebc3'
                                WHEN 'agent_graph_require_executor_v10'
-                                 THEN 'fa653be43cb040236f47a7198b75d0a2a7b856281199fc7bf4d17828406b27b4'
+                                 THEN '794a126edf1b5a0812ac7feab6ea2be0acc8e808608c83b069b41bf4c6fb394e'
                                WHEN 'agent_graph_complete_child_v10'
                                  THEN 'db30bd2a5792296ba8659d68d9e665c341b9a841bc0abe319a9c1cbaaea401ae'
                                WHEN 'agent_graph_complete_parent_and_seal_v10'
@@ -686,7 +696,14 @@ public final class PostgresAttributedFailureResumeStore {
                              ON constraint_row.oid = trigger.tgconstraint
                            WHERE namespace.nspname = 'public'
                              AND NOT trigger.tgisinternal
-                         ) = 'e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b'
+                         ) = CASE
+                           public.emergeos_pack010_schema_version_v1()
+                           WHEN 16
+                             THEN 'e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b'
+                           WHEN 17
+                             THEN '6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b'
+                           ELSE NULL
+                         END
                          AS exact
                   FROM pg_catalog.pg_database database
                   JOIN pg_catalog.pg_roles role

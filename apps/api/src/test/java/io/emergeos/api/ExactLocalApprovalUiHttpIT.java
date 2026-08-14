@@ -170,12 +170,12 @@ class ExactLocalApprovalUiHttpIT {
       assertTrustedOutcomePrerequisite(stale);
       assertApprovalCard(stale);
       assertEquals(1, stale.approvalPostCount(), "EXACT_LOCAL_APPROVAL_UI_STALE_POST_COUNT");
-      assertEquals(409, stale.approvalStatus(), "EXACT_LOCAL_APPROVAL_UI_STALE_NOT_REJECTED");
+      assertEquals(412, stale.approvalStatus(), "EXACT_LOCAL_APPROVAL_UI_STALE_NOT_REJECTED");
       assertEquals(1, stale.actualProblemMimeExact(), "EXACT_LOCAL_APPROVAL_UI_STALE_PROBLEM_MIME_DRIFT");
       assertEquals(1, stale.actualProblemNoStore(), "EXACT_LOCAL_APPROVAL_UI_STALE_PROBLEM_CACHE_UNSAFE");
       assertEquals(1, stale.actualProblemTypeExact(), "EXACT_LOCAL_APPROVAL_UI_STALE_PROBLEM_TYPE_DRIFT");
-      assertEquals(0, stale.approvalStaleRendered(), "EXACT_LOCAL_APPROVAL_UI_UNPROVEN_409_CLAIMED_STALE");
-      assertEquals(1, stale.approvalUnknownRendered(), "EXACT_LOCAL_APPROVAL_UI_UNPROVEN_409_NOT_UNKNOWN");
+      assertEquals(1, stale.approvalStaleRendered(), "EXACT_LOCAL_APPROVAL_UI_TYPED_412_NOT_STALE");
+      assertEquals(0, stale.approvalUnknownRendered(), "EXACT_LOCAL_APPROVAL_UI_TYPED_412_RENDERED_UNKNOWN");
       assertNoExecutionSurface(stale);
       assertPlannedOnly(stale.approvalNonce(), 0);
 
@@ -294,6 +294,11 @@ class ExactLocalApprovalUiHttpIT {
     assertEquals(1, result.cardTargetRiskExact(), "EXACT_LOCAL_APPROVAL_UI_TARGET_RISK_MISSING");
     assertEquals(1, result.cardArtifactExact(), "EXACT_LOCAL_APPROVAL_UI_ARTIFACT_BINDING_MISSING");
     assertEquals(1, result.cardBoundaryExact(), "EXACT_LOCAL_APPROVAL_UI_BOUNDARY_COPY_MISSING");
+    assertEquals(1, result.cardScopeExact(), "EXACT_LOCAL_APPROVAL_UI_SCOPE_BINDING_MISSING");
+    assertEquals(
+        1,
+        result.cardSensitiveRefsHidden(),
+        "EXACT_LOCAL_APPROVAL_UI_SENSITIVE_REFERENCE_EXPOSED");
   }
 
   private static void assertUntrustedProblemUnknown(Scenario result, String variant)
@@ -553,6 +558,8 @@ class ExactLocalApprovalUiHttpIT {
       int cardTargetRiskExact,
       int cardArtifactExact,
       int cardBoundaryExact,
+      int cardScopeExact,
+      int cardSensitiveRefsHidden,
       int approvalClickDispatched,
       int approvalPostCount,
       int approvalRequestExact,
@@ -593,6 +600,8 @@ class ExactLocalApprovalUiHttpIT {
           outputInt(output, "CARD_TARGET_RISK_EXACT"),
           outputInt(output, "CARD_ARTIFACT_EXACT"),
           outputInt(output, "CARD_BOUNDARY_EXACT"),
+          outputInt(output, "CARD_SCOPE_EXACT"),
+          outputInt(output, "CARD_SENSITIVE_REFS_HIDDEN"),
           outputInt(output, "APPROVAL_CLICK_DISPATCHED"),
           outputInt(output, "APPROVAL_POST_COUNT"),
           outputInt(output, "APPROVAL_REQUEST_EXACT"),

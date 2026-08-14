@@ -4,7 +4,9 @@ public record PlanLocalApprovalCommand(
     String artifactId,
     int approvedArtifactVersion,
     String approvedArtifactHash,
-    String approvalNonce) {
+    String approvalNonce,
+    String approvedScopeSchema,
+    String approvedScopeHash) {
 
   public PlanLocalApprovalCommand {
     CreateArtifactCommand.requireIdentifier(artifactId, "artifactId");
@@ -13,6 +15,8 @@ public record PlanLocalApprovalCommand(
     }
     requireHash(approvedArtifactHash, "approvedArtifactHash");
     CreateArtifactCommand.requireIdentifier(approvalNonce, "approvalNonce");
+    CreateArtifactCommand.requireIdentifier(approvedScopeSchema, "approvedScopeSchema");
+    requireHash(approvedScopeHash, "approvedScopeHash");
   }
 
   private static void requireHash(String value, String name) {

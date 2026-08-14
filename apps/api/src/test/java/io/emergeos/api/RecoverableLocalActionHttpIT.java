@@ -42,7 +42,7 @@ class RecoverableLocalActionHttpIT {
   private static final String OWNER = "action-owner";
   private static final String CONNECTOR = "simulated.local-draft";
   private static final String AUDIENCE = "adapter:simulated-provider";
-  private static final String CURRENT_SCHEMA_VERSION = "16";
+  private static final String CURRENT_SCHEMA_VERSION = "17";
 
   @Container
   private static final PostgreSQLContainer POSTGRES =

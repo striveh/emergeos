@@ -76,7 +76,8 @@ class ExactLocalApprovalHttpIT {
     try {
       ArtifactHead approved = createArtifactThroughAgentDraft(first, "initial");
       String approvalNonce = "exact-local-approval-001";
-      String request = approvalRequest(approved, approvalNonce);
+      ScopeHead approvedScope = approvalScope(first.port(), approved);
+      String request = approvalRequest(approved, approvalNonce, approvedScope);
 
       HttpResponse<String> created =
           sendJson(
@@ -107,21 +108,19 @@ class ExactLocalApprovalHttpIT {
       assertApprovalRows(approvalNonce, 1, 0, List.of("PLANNED"), 0);
       assertStoredApproval(attemptId, approvalNonce, approved, replayed.body());
 
-      ArtifactHead changedRequest =
-          new ArtifactHead(
-              approved.artifactId(),
-              approved.version() + 1,
-              "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+      ArtifactHead changedRequest = createArtifactThroughAgentDraft(first, "nonce-conflict");
+      ScopeHead changedScope = approvalScope(first.port(), changedRequest);
       HttpResponse<String> nonceConflict =
           sendJson(
               first.port(),
               "POST",
-              "/api/v1/artifacts/" + approved.artifactId() + "/action-approvals",
-              approvalRequest(changedRequest, approvalNonce));
+              "/api/v1/artifacts/" + changedRequest.artifactId() + "/action-approvals",
+              approvalRequest(changedRequest, approvalNonce, changedScope));
       assertEquals(409, nonceConflict.statusCode(), nonceConflict::body);
       assertApprovalRows(approvalNonce, 1, 0, List.of("PLANNED"), 0);
 
       ArtifactHead stale = createArtifactThroughAgentDraft(first, "stale");
+      ScopeHead staleScope = approvalScope(first.port(), stale);
       HttpResponse<String> revised =
           sendJson(
               first.port(),
@@ -136,10 +135,8 @@ class ExactLocalApprovalHttpIT {
               first.port(),
               "POST",
               "/api/v1/artifacts/" + stale.artifactId() + "/action-approvals",
-              approvalRequest(stale, staleNonce));
-      assertTrue(
-          staleApproval.statusCode() == 409 || staleApproval.statusCode() == 412,
-          () -> "stale exact approval must be rejected before planning: " + staleApproval.body());
+              approvalRequest(stale, staleNonce, staleScope));
+      assertApprovalStale(staleApproval);
       assertEquals(0, attemptRowCount(staleNonce));
 
       RunningApplication contender = startApplication(OWNER);
@@ -160,7 +157,7 @@ class ExactLocalApprovalHttpIT {
               foreign.port(),
               "POST",
               "/api/v1/artifacts/" + approved.artifactId() + "/action-approvals",
-              approvalRequest(approved, foreignNonce));
+              approvalRequest(approved, foreignNonce, approvedScope));
       HttpResponse<String> missingArtifact =
           sendJson(
               foreign.port(),
@@ -168,14 +165,16 @@ class ExactLocalApprovalHttpIT {
               "/api/v1/artifacts/missing-artifact/action-approvals",
               approvalRequest(
                   new ArtifactHead("missing-artifact", approved.version(), approved.hash()),
-                  foreignNonce));
+                  foreignNonce,
+                  approvedScope));
       assertSameNotFound(foreignArtifact, missingArtifact);
       assertEquals(0, attemptRowCount(foreignNonce));
       stop(foreign);
 
       ArtifactHead racedArtifact = createArtifactThroughAgentDraft(first, "race");
       String raceNonce = "exact-local-approval-race-001";
-      String raceRequest = approvalRequest(racedArtifact, raceNonce);
+      String raceRequest =
+          approvalRequest(racedArtifact, raceNonce, approvalScope(first.port(), racedArtifact));
       List<HttpResponse<String>> raced =
           new ArrayList<>(
               race(
@@ -209,7 +208,11 @@ class ExactLocalApprovalHttpIT {
 
       ArtifactHead responseLossArtifact = createArtifactThroughAgentDraft(first, "response-loss");
       String responseLossNonce = "exact-local-approval-response-loss-001";
-      String responseLossRequest = approvalRequest(responseLossArtifact, responseLossNonce);
+      String responseLossRequest =
+          approvalRequest(
+              responseLossArtifact,
+              responseLossNonce,
+              approvalScope(first.port(), responseLossArtifact));
       fireAndForgetJson(
           first.port(),
           "/api/v1/artifacts/"
@@ -290,6 +293,7 @@ class ExactLocalApprovalHttpIT {
       String approvalNonce)
       throws Exception {
     int receiptsBefore = queryInt("SELECT count(*) FROM action_receipts");
+    ScopeHead approvedScope = approvalScope(approvalApplication.port(), approvedBase);
     String revisionContent = "synthetic revision wins approval race";
     String revisionHash = ContentHashes.sha256(revisionContent);
     ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -320,7 +324,7 @@ class ExactLocalApprovalHttpIT {
                           "/api/v1/artifacts/"
                               + approvedBase.artifactId()
                               + "/action-approvals",
-                          approvalRequest(approvedBase, approvalNonce)));
+                          approvalRequest(approvedBase, approvalNonce, approvedScope)));
           blockedBackendPid =
               awaitBlockedApprovalArtifactHeadLock(approvalApplication.applicationName());
           revisionConnection.commit();
@@ -561,6 +565,7 @@ class ExactLocalApprovalHttpIT {
 
   private static String validatePlannedApproval(
       HttpResponse<String> response, ArtifactHead expected, String expectedActor) {
+    assertPrivateNoStore(response);
     String attemptId = JsonPath.read(response.body(), "$.attemptId");
     assertTrue(attemptId != null && !attemptId.isBlank());
     assertEquals("PLANNED", JsonPath.read(response.body(), "$.status"));
@@ -580,6 +585,25 @@ class ExactLocalApprovalHttpIT {
     assertEquals(planId, JsonPath.read(response.body(), "$.approval.planId"));
     assertEquals(planHash, JsonPath.read(response.body(), "$.approval.planHash"));
     assertEquals(expected.hash(), JsonPath.read(response.body(), "$.approval.artifactHash"));
+
+    assertEquals(
+        "emergeos.action-approval-scope.v1",
+        JsonPath.read(response.body(), "$.scopeSchema"));
+    assertTrue(JsonPath.<String>read(response.body(), "$.scopeHash").matches("[0-9a-f]{64}"));
+    assertEquals(
+        "CONFIGURED_LOCAL_PRINCIPAL",
+        JsonPath.read(response.body(), "$.approvalPrincipal.basis"));
+    assertEquals(expectedActor, JsonPath.read(response.body(), "$.approvalPrincipal.configuredPrincipalId"));
+    assertEquals(
+        "EXPLICIT_LOCAL_OWNER_INPUT",
+        JsonPath.read(response.body(), "$.provenance.approvalOrigin"));
+    assertEquals(
+        "LOCAL_DRAFTBOX_V1",
+        JsonPath.read(response.body(), "$.provenance.executionRoute"));
+    assertEquals(expected.artifactId(), JsonPath.read(response.body(), "$.artifact.artifactId"));
+    assertEquals(expected.version(), number(response.body(), "$.artifact.artifactVersion"));
+    assertEquals(expected.hash(), JsonPath.read(response.body(), "$.artifact.artifactHash"));
+    assertEquals("NOT_EXECUTED", JsonPath.read(response.body(), "$.executionState"));
 
     assertEquals(0, number(response.body(), "$.capability.usedCalls"));
     assertEquals(1, number(response.body(), "$.transitions.length()"));
@@ -614,6 +638,24 @@ class ExactLocalApprovalHttpIT {
     assertEquals(stored.approvalId(), JsonPath.read(responseBody, "$.approval.decisionId"));
     assertEquals(stored.approvedAt(), Instant.parse(JsonPath.read(responseBody, "$.approval.decidedAt")));
     assertEquals(1, attemptRowCount(approvalNonce));
+    assertEquals(
+        "EXPLICIT_LOCAL_OWNER_INPUT",
+        queryString(
+            "SELECT approval_origin FROM action_attempts WHERE principal_id = ? AND attempt_id = ?",
+            OWNER,
+            attemptId));
+    assertEquals(
+        "LOCAL_DRAFTBOX_V1",
+        queryString(
+            "SELECT execution_route FROM action_attempts WHERE principal_id = ? AND attempt_id = ?",
+            OWNER,
+            attemptId));
+    assertEquals(
+        JsonPath.read(responseBody, "$.scopeHash"),
+        queryString(
+            "SELECT scope_hash FROM action_attempts WHERE principal_id = ? AND attempt_id = ?",
+            OWNER,
+            attemptId));
     assertEquals(
         1,
         queryInt(
@@ -665,6 +707,8 @@ class ExactLocalApprovalHttpIT {
 
   private static void assertSameNotFound(
       HttpResponse<String> foreign, HttpResponse<String> missing) {
+    assertPrivateNoStore(foreign);
+    assertPrivateNoStore(missing);
     assertEquals(404, foreign.statusCode(), foreign::body);
     assertEquals(404, missing.statusCode(), missing::body);
     assertEquals(
@@ -680,15 +724,63 @@ class ExactLocalApprovalHttpIT {
     return problem;
   }
 
-  private static String approvalRequest(ArtifactHead artifact, String approvalNonce) {
+  private static ScopeHead approvalScope(int port, ArtifactHead artifact) throws Exception {
+    HttpResponse<String> response =
+        sendJson(
+            port,
+            "GET",
+            "/api/v1/artifacts/"
+                + artifact.artifactId()
+                + "/action-approval-scope?artifactVersion="
+                + artifact.version()
+                + "&artifactHash="
+                + artifact.hash(),
+            null);
+    assertEquals(200, response.statusCode(), response::body);
+    assertPrivateNoStore(response);
+    assertEquals(
+        "emergeos.action-approval-scope.v1", JsonPath.read(response.body(), "$.scopeSchema"));
+    String scopeHash = JsonPath.read(response.body(), "$.scopeHash");
+    assertTrue(scopeHash.matches("[0-9a-f]{64}"));
+    assertEquals(artifact.artifactId(), JsonPath.read(response.body(), "$.artifact.artifactId"));
+    assertEquals(artifact.version(), number(response.body(), "$.artifact.artifactVersion"));
+    assertEquals(artifact.hash(), JsonPath.read(response.body(), "$.artifact.artifactHash"));
+    assertEquals("NOT_EXECUTED", JsonPath.read(response.body(), "$.executionState"));
+    return new ScopeHead("emergeos.action-approval-scope.v1", scopeHash);
+  }
+
+  private static String approvalRequest(
+      ArtifactHead artifact, String approvalNonce, ScopeHead scope) {
     return """
         {
           "approvedArtifactVersion": %d,
           "approvedArtifactHash": "%s",
-          "approvalNonce": "%s"
+          "approvalNonce": "%s",
+          "approvedScopeSchema": "%s",
+          "approvedScopeHash": "%s"
         }
         """
-        .formatted(artifact.version(), artifact.hash(), approvalNonce);
+        .formatted(
+            artifact.version(),
+            artifact.hash(),
+            approvalNonce,
+            scope.schema(),
+            scope.hash());
+  }
+
+  private static void assertApprovalStale(HttpResponse<String> response) {
+    assertEquals(412, response.statusCode(), response::body);
+    assertPrivateNoStore(response);
+    assertTrue(
+        response.headers().firstValue("Content-Type").orElse("").startsWith("application/problem+json"));
+    assertEquals(412, number(response.body(), "$.status"));
+    assertEquals("urn:emergeos:problem:approval-stale", JsonPath.read(response.body(), "$.type"));
+    assertEquals("Action approval stale", JsonPath.read(response.body(), "$.title"));
+  }
+
+  private static void assertPrivateNoStore(HttpResponse<?> response) {
+    assertEquals(
+        "private, no-store", response.headers().firstValue("Cache-Control").orElse(null));
   }
 
   private static String revisionRequest(String content, ArtifactHead base) {
@@ -1020,6 +1112,8 @@ class ExactLocalApprovalHttpIT {
   }
 
   private record ArtifactHead(String artifactId, int version, String hash) {}
+
+  private record ScopeHead(String schema, String hash) {}
 
   private record StoredApproval(
       String attemptId,

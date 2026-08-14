@@ -2,6 +2,7 @@ package io.emergeos.core.application;
 
 import io.emergeos.core.domain.ActionAttempt;
 import io.emergeos.core.domain.ActionAttemptStatus;
+import io.emergeos.core.domain.ActionApprovalScope;
 import io.emergeos.core.domain.ActionCapability;
 import io.emergeos.core.domain.ActionPlan;
 import io.emergeos.core.domain.ActionReceipt;
@@ -52,10 +53,18 @@ public final class RecoverableActionService {
       throw new IllegalStateException("approved Artifact is not the current version");
     }
     Instant now = canonicalTime(clock.instant());
-    ActionAttempt canonical = persistPlan(artifact, command.idempotencyKey(), now).attempt();
+    ActionAttempt canonical =
+        persistPlan(
+                artifact,
+                command.idempotencyKey(),
+                now,
+                ActionApprovalScope.LEGACY_SERVER_IMPLICIT,
+                ActionApprovalScope.SIMULATED_PROVIDER_V1)
+            .attempt();
     if (canonical.status() != ActionAttemptStatus.PLANNED) {
       return canonical;
     }
+    assertSimulatedProviderEligible(canonical);
     assertAuthority(canonical, now);
     ActionAttemptStore.ClaimResult claim = attempts.claimDispatch(canonical, now);
     if (claim instanceof ActionAttemptStore.ClaimResult.Claimed claimed) {
@@ -67,13 +76,25 @@ public final class RecoverableActionService {
   public PlannedApproval planApproval(PlanLocalApprovalCommand command) {
     Objects.requireNonNull(command, "command");
     requireOwnedArtifact(command.artifactId());
+    ActionApprovalScope scope =
+        scope(
+            command.artifactId(),
+            command.approvedArtifactVersion(),
+            command.approvedArtifactHash(),
+            ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
+            ActionApprovalScope.LOCAL_DRAFTBOX_V1);
+    if (!scope.scopeSchema().equals(command.approvedScopeSchema())
+        || !scope.scopeHash().equals(command.approvedScopeHash())) {
+      throw new ApprovalStaleException();
+    }
     ActionAttempt proposed =
         planned(
             command.artifactId(),
             command.approvedArtifactVersion(),
             command.approvedArtifactHash(),
             command.approvalNonce(),
-            canonicalTime(clock.instant()));
+            canonicalTime(clock.instant()),
+            scope);
     ActionAttemptStore.PlanResult result = attempts.planApprovalOrFind(proposed);
     if (result instanceof ActionAttemptStore.PlanResult.Conflict) {
       throw new ActionIdempotencyConflictException();
@@ -93,6 +114,7 @@ public final class RecoverableActionService {
       return current;
     }
     Instant now = canonicalTime(clock.instant());
+    assertSimulatedProviderEligible(current);
     assertAuthority(current, now);
     ActionAttemptStore.ClaimResult claim = attempts.claimReconciliation(current, now);
     if (claim instanceof ActionAttemptStore.ClaimResult.Claimed claimed) {
@@ -102,11 +124,45 @@ public final class RecoverableActionService {
     return observedOrThrow(claim);
   }
 
+  public ActionApprovalScope previewApprovalScope(
+      String artifactId, int artifactVersion, String artifactHash) {
+    CreateArtifactCommand.requireIdentifier(artifactId, "artifactId");
+    if (artifactVersion < 1) {
+      throw new IllegalArgumentException("artifactVersion must be positive");
+    }
+    if (artifactHash == null || !artifactHash.matches("[0-9a-f]{64}")) {
+      throw new IllegalArgumentException("artifactHash must be a lowercase SHA-256 hash");
+    }
+    ArtifactLineage artifact = requireOwnedArtifact(artifactId);
+    if (artifact.current().version() != artifactVersion
+        || !artifact.current().contentHash().equals(artifactHash)) {
+      throw new ApprovalStaleException();
+    }
+    return scope(
+        artifactId,
+        artifactVersion,
+        artifactHash,
+        ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
+        ActionApprovalScope.LOCAL_DRAFTBOX_V1);
+  }
+
   public ActionAttempt get(String attemptId) {
     CreateArtifactCommand.requireIdentifier(attemptId, "attemptId");
     return attempts
         .findOwned(authority.principalId(), attemptId)
         .orElseThrow(() -> new NoSuchElementException("ActionAttempt not found"));
+  }
+
+  public ActionAttempt getPlannedExplicitApproval(String attemptId) {
+    ActionAttempt attempt = get(attemptId);
+    if (attempt.status() != ActionAttemptStatus.PLANNED
+        || !ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT.equals(
+            attempt.approvalScope().approvalOrigin())
+        || !ActionApprovalScope.LOCAL_DRAFTBOX_V1.equals(
+            attempt.approvalScope().executionRoute())) {
+      throw new NoSuchElementException("Action approval not found");
+    }
+    return attempt;
   }
 
   private ActionAttempt invoke(
@@ -154,7 +210,11 @@ public final class RecoverableActionService {
   }
 
   private ActionAttemptStore.PlanResult.Accepted persistPlan(
-      ArtifactLineage artifact, String idempotencyKey, Instant now) {
+      ArtifactLineage artifact,
+      String idempotencyKey,
+      Instant now,
+      String approvalOrigin,
+      String executionRoute) {
     ActionAttemptStore.PlanResult result =
         attempts.planOrFind(
             planned(
@@ -162,7 +222,13 @@ public final class RecoverableActionService {
                 artifact.current().version(),
                 artifact.current().contentHash(),
                 idempotencyKey,
-                now));
+                now,
+                scope(
+                    artifact.artifactId(),
+                    artifact.current().version(),
+                    artifact.current().contentHash(),
+                    approvalOrigin,
+                    executionRoute)));
     if (result instanceof ActionAttemptStore.PlanResult.Conflict) {
       throw new ActionIdempotencyConflictException();
     }
@@ -174,7 +240,8 @@ public final class RecoverableActionService {
       int artifactVersion,
       String artifactHash,
       String idempotencyKey,
-      Instant now) {
+      Instant now,
+      ActionApprovalScope scope) {
     Instant expiresAt =
         canonicalTime(now.plus(authority.capabilityTtl()));
     if (!expiresAt.isAfter(now)) {
@@ -224,7 +291,36 @@ public final class RecoverableActionService {
         ActionAttemptStatus.PLANNED,
         0,
         List.of(new ActionTransition(1, null, ActionAttemptStatus.PLANNED, now)),
-        null);
+        null,
+        scope);
+  }
+
+  private ActionApprovalScope scope(
+      String artifactId,
+      int artifactVersion,
+      String artifactHash,
+      String approvalOrigin,
+      String executionRoute) {
+    long ttlMicros = Math.addExact(
+        Math.multiplyExact(authority.capabilityTtl().getSeconds(), 1_000_000L),
+        authority.capabilityTtl().getNano() / 1_000L);
+    return new ActionApprovalScope(
+        ActionApprovalScope.CONFIGURED_LOCAL_PRINCIPAL,
+        authority.principalId(),
+        approvalOrigin,
+        executionRoute,
+        authority.actionType(),
+        authority.targetRef(),
+        artifactId,
+        artifactVersion,
+        artifactHash,
+        authority.risk(),
+        authority.policyVersion(),
+        authority.connector(),
+        authority.audience(),
+        authority.accountRef(),
+        ttlMicros,
+        authority.maxProviderCalls());
   }
 
   public record PlannedApproval(ActionAttempt attempt, boolean created) {
@@ -243,6 +339,16 @@ public final class RecoverableActionService {
             authority.audience(),
             authority.accountRef(),
             now);
+  }
+
+  private static void assertSimulatedProviderEligible(ActionAttempt attempt) {
+    if (!ActionApprovalScope.LEGACY_SERVER_IMPLICIT.equals(
+            attempt.approvalScope().approvalOrigin())
+        || !ActionApprovalScope.SIMULATED_PROVIDER_V1.equals(
+            attempt.approvalScope().executionRoute())) {
+      throw new IllegalStateException(
+          "ActionAttempt is not eligible for simulated provider execution or reconciliation");
+    }
   }
 
   private static ActionAttempt observedOrThrow(ActionAttemptStore.ClaimResult claim) {

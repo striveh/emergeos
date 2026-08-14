@@ -3,6 +3,7 @@ package io.emergeos.adapters.postgres;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -10,8 +11,10 @@ import io.emergeos.contracts.DataClass;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.application.ApproveLocalActionCommand;
 import io.emergeos.core.application.LocalActionAuthority;
+import io.emergeos.core.application.PlanLocalApprovalCommand;
 import io.emergeos.core.application.RecoverableActionService;
 import io.emergeos.core.domain.ActionAttempt;
+import io.emergeos.core.domain.ActionApprovalScope;
 import io.emergeos.core.domain.ActionAttemptStatus;
 import io.emergeos.core.domain.ActionCapability;
 import io.emergeos.core.domain.ActionPlan;
@@ -167,6 +170,156 @@ class PostgresActionAttemptStoreTest {
   }
 
   @Test
+  void providerClaimsRejectUnprovenAndExplicitScopesWithoutMutationButAllowLegacy() {
+    ActionAttempt preV17Unknown =
+        persistUnknownWithoutProviderClaim(
+            asPreV17Unproven(
+                planned(
+                    "attempt-pre-v17-unknown",
+                    "plan-pre-v17-unknown",
+                    "capability-pre-v17-unknown",
+                    "approval-pre-v17-unknown",
+                    ownArtifact(OWNER, "artifact-pre-v17-unknown"),
+                    "pre-v17-unknown-key",
+                    CONNECTOR,
+                    AUDIENCE,
+                    ACCOUNT,
+                    NOW)));
+    assertEquals(
+        ActionApprovalScope.PRE_V17_UNPROVEN,
+        preV17Unknown.approvalScope().approvalOrigin());
+    assertEquals(
+        ActionApprovalScope.SIMULATED_PROVIDER_V1,
+        preV17Unknown.approvalScope().executionRoute());
+    assertEquals(ActionAttemptStatus.UNKNOWN, preV17Unknown.status());
+    assertEquals(1, preV17Unknown.capabilityUsedCalls());
+    assertNull(preV17Unknown.receipt());
+    ClaimSnapshot preV17Before = claimSnapshot(preV17Unknown.attemptId());
+
+    ActionAttemptStore.ClaimResult preV17Reconciliation =
+        store().claimReconciliation(preV17Unknown, NOW.plusSeconds(3));
+
+    assertTrue(
+        preV17Reconciliation instanceof ActionAttemptStore.ClaimResult.Rejected,
+        "PRE_V17_UNPROVEN_RECONCILE_CLAIMED");
+    assertEquals(
+        preV17Before,
+        claimSnapshot(preV17Unknown.attemptId()),
+        "PRE_V17_UNPROVEN_RECONCILE_MUTATED");
+
+    ActionAttempt explicitPlanned =
+        persistPlanned(
+            withScope(
+                planned(
+                    "attempt-explicit-dispatch",
+                    "plan-explicit-dispatch",
+                    "capability-explicit-dispatch",
+                    "approval-explicit-dispatch",
+                    ownArtifact(OWNER, "artifact-explicit-dispatch"),
+                    "explicit-dispatch-key",
+                    CONNECTOR,
+                    AUDIENCE,
+                    ACCOUNT,
+                    NOW),
+                ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
+                ActionApprovalScope.LOCAL_DRAFTBOX_V1));
+    assertEquals(
+        ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
+        explicitPlanned.approvalScope().approvalOrigin());
+    assertEquals(
+        ActionApprovalScope.LOCAL_DRAFTBOX_V1,
+        explicitPlanned.approvalScope().executionRoute());
+    assertEquals(ActionAttemptStatus.PLANNED, explicitPlanned.status());
+    ClaimSnapshot explicitPlannedBefore = claimSnapshot(explicitPlanned.attemptId());
+
+    ActionAttemptStore.ClaimResult explicitDispatch =
+        store().claimDispatch(explicitPlanned, NOW.plusSeconds(1));
+
+    assertTrue(
+        explicitDispatch instanceof ActionAttemptStore.ClaimResult.Rejected,
+        "EXPLICIT_LOCAL_APPROVAL_DISPATCH_CLAIMED");
+    assertEquals(
+        explicitPlannedBefore,
+        claimSnapshot(explicitPlanned.attemptId()),
+        "EXPLICIT_LOCAL_APPROVAL_DISPATCH_MUTATED");
+
+    ActionAttempt explicitUnknown =
+        persistUnknownWithoutProviderClaim(
+            withScope(
+                planned(
+                    "attempt-explicit-unknown",
+                    "plan-explicit-unknown",
+                    "capability-explicit-unknown",
+                    "approval-explicit-unknown",
+                    ownArtifact(OWNER, "artifact-explicit-unknown"),
+                    "explicit-unknown-key",
+                    CONNECTOR,
+                    AUDIENCE,
+                    ACCOUNT,
+                    NOW),
+                ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
+                ActionApprovalScope.LOCAL_DRAFTBOX_V1));
+    assertEquals(
+        ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
+        explicitUnknown.approvalScope().approvalOrigin());
+    assertEquals(
+        ActionApprovalScope.LOCAL_DRAFTBOX_V1,
+        explicitUnknown.approvalScope().executionRoute());
+    assertEquals(ActionAttemptStatus.UNKNOWN, explicitUnknown.status());
+    assertEquals(1, explicitUnknown.capabilityUsedCalls());
+    assertNull(explicitUnknown.receipt());
+    ClaimSnapshot explicitUnknownBefore = claimSnapshot(explicitUnknown.attemptId());
+
+    ActionAttemptStore.ClaimResult explicitReconciliation =
+        store().claimReconciliation(explicitUnknown, NOW.plusSeconds(3));
+
+    assertTrue(
+        explicitReconciliation instanceof ActionAttemptStore.ClaimResult.Rejected,
+        "EXPLICIT_LOCAL_APPROVAL_RECONCILE_CLAIMED");
+    assertEquals(
+        explicitUnknownBefore,
+        claimSnapshot(explicitUnknown.attemptId()),
+        "EXPLICIT_LOCAL_APPROVAL_RECONCILE_MUTATED");
+
+    ActionAttempt legacyPlanned =
+        persistPlanned(
+            planned(
+                "attempt-legacy-provider",
+                "plan-legacy-provider",
+                "capability-legacy-provider",
+                "approval-legacy-provider",
+                ownArtifact(OWNER, "artifact-legacy-provider"),
+                "legacy-provider-key",
+                CONNECTOR,
+                AUDIENCE,
+                ACCOUNT,
+                NOW));
+    assertEquals(
+        ActionApprovalScope.LEGACY_SERVER_IMPLICIT,
+        legacyPlanned.approvalScope().approvalOrigin());
+    assertEquals(
+        ActionApprovalScope.SIMULATED_PROVIDER_V1,
+        legacyPlanned.approvalScope().executionRoute());
+    ActionAttemptStore.ClaimResult legacyDispatch =
+        store().claimDispatch(legacyPlanned, NOW.plusSeconds(1));
+    ActionAttempt legacyDispatching =
+        assertInstanceOf(
+                ActionAttemptStore.ClaimResult.Claimed.class,
+                legacyDispatch,
+                "LEGACY_SERVER_IMPLICIT_DISPATCH_NOT_CLAIMED")
+            .attempt();
+    ActionAttempt legacyUnknown = store().markUnknown(legacyDispatching, NOW.plusSeconds(2));
+
+    ActionAttemptStore.ClaimResult legacyReconciliation =
+        store().claimReconciliation(legacyUnknown, NOW.plusSeconds(3));
+
+    assertInstanceOf(
+        ActionAttemptStore.ClaimResult.Claimed.class,
+        legacyReconciliation,
+        "LEGACY_SERVER_IMPLICIT_RECONCILE_NOT_CLAIMED");
+  }
+
+  @Test
   void serviceCanonicalizesNanosecondClockBeforePlanHashRoundTrip() {
     ArtifactLineage artifact = ownArtifact(OWNER, "artifact-nanosecond-clock");
     Instant nanosecondNow = NOW.plusNanos(123_456_789);
@@ -201,6 +354,111 @@ class PostgresActionAttemptStoreTest {
     assertEquals(
         unknown,
         secondStore().findOwned(OWNER, unknown.attemptId()).orElseThrow());
+    assertEquals(
+        ActionApprovalScope.LEGACY_SERVER_IMPLICIT,
+        unknown.approvalScope().approvalOrigin());
+    assertEquals(
+        ActionApprovalScope.SIMULATED_PROVIDER_V1,
+        unknown.approvalScope().executionRoute());
+    assertEquals(
+        ActionApprovalScope.LEGACY_SERVER_IMPLICIT,
+        jdbc.sql("SELECT approval_origin FROM action_attempts WHERE attempt_id = :attemptId")
+            .param("attemptId", unknown.attemptId())
+            .query(String.class)
+            .single());
+  }
+
+  @Test
+  void explicitScopeRoundTripsWithDatabaseHashAndRejectsRawScopeTampering()
+      throws Exception {
+    ArtifactLineage artifact = ownArtifact(OWNER, "artifact-explicit-scope");
+    RecoverableActionService service =
+        new RecoverableActionService(
+            store(),
+            new PostgresArtifactLineageStore(dataSource, transactionManager),
+            request -> {
+              throw new AssertionError("explicit planning must not invoke a provider");
+            },
+            prefix -> prefix + "-explicit-scope",
+            Clock.fixed(NOW, java.time.ZoneOffset.UTC),
+            new LocalActionAuthority(
+                OWNER,
+                CONNECTOR,
+                AUDIENCE,
+                ACCOUNT,
+                "CREATE_LOCAL_DRAFT",
+                "local://drafts",
+                RiskLevel.REVERSIBLE,
+                "local-action-v1",
+                Duration.ofMinutes(5),
+                2));
+    ActionApprovalScope preview =
+        service.previewApprovalScope(
+            artifact.artifactId(),
+            artifact.current().version(),
+            artifact.current().contentHash());
+    ActionAttempt planned =
+        service
+            .planApproval(
+                new PlanLocalApprovalCommand(
+                    artifact.artifactId(),
+                    artifact.current().version(),
+                    artifact.current().contentHash(),
+                    "explicit-scope-key",
+                    preview.scopeSchema(),
+                    preview.scopeHash()))
+            .attempt();
+
+    assertEquals(ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
+        planned.approvalScope().approvalOrigin());
+    assertEquals(ActionApprovalScope.LOCAL_DRAFTBOX_V1,
+        planned.approvalScope().executionRoute());
+    assertEquals(preview.scopeHash(), planned.approvalScope().scopeHash());
+    assertEquals(
+        preview.scopeHash(),
+        jdbc.sql("SELECT scope_hash FROM action_attempts WHERE attempt_id = :attemptId")
+            .param("attemptId", planned.attemptId())
+            .query(String.class)
+            .single());
+    assertEquals(planned, secondStore().findOwned(OWNER, planned.attemptId()).orElseThrow());
+
+    assertScopeUpdateRejected(planned.attemptId(), "approval_origin", "LEGACY_SERVER_IMPLICIT");
+    assertScopeUpdateRejected(planned.attemptId(), "execution_route", "SIMULATED_PROVIDER_V1");
+    assertScopeUpdateRejected(planned.attemptId(), "scope_schema", "emergeos.action-approval-scope.v2");
+    assertScopeUpdateRejected(planned.attemptId(), "scope_capability_ttl_micros", 1L);
+    assertScopeUpdateRejected(planned.attemptId(), "approval_id", "approval-tampered");
+    assertScopeUpdateRejected(planned.attemptId(), "capability_id", "capability-tampered");
+    assertScopeUpdateRejected(
+        planned.attemptId(),
+        "scope_hash",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    assertTransitionAndAttemptHistoryCannotBeRewrittenOrDeleted(planned.attemptId());
+    assertEquals(planned, secondStore().findOwned(OWNER, planned.attemptId()).orElseThrow());
+
+    ActionAttempt transitionable =
+        assertInstanceOf(
+                ActionAttemptStore.PlanResult.Accepted.class,
+                store()
+                    .planOrFind(
+                        planned(
+                            "attempt-identity-transition",
+                            "plan-identity-transition",
+                            "capability-identity-transition",
+                            "approval-identity-transition",
+                            ownArtifact(OWNER, "artifact-identity-transition"),
+                            "identity-transition-key",
+                            CONNECTOR,
+                            AUDIENCE,
+                            ACCOUNT,
+                            NOW)))
+            .attempt();
+    ActionAttempt dispatching =
+        assertInstanceOf(
+                ActionAttemptStore.ClaimResult.Claimed.class,
+                store().claimDispatch(transitionable, NOW.plusSeconds(1)))
+            .attempt();
+    assertEquals(ActionAttemptStatus.DISPATCHING, dispatching.status());
+    assertEquals(1, dispatching.capabilityUsedCalls());
   }
 
   @Test
@@ -762,7 +1020,13 @@ class PostgresActionAttemptStoreTest {
         original.status(),
         original.capabilityUsedCalls(),
         original.transitions(),
-        original.receipt());
+        original.receipt(),
+        approvalScope(
+            plan,
+            approval,
+            capability,
+            original.approvalScope().approvalOrigin(),
+            original.approvalScope().executionRoute()));
   }
 
   private static ActionAttempt planned(
@@ -819,8 +1083,155 @@ class PostgresActionAttemptStoreTest {
         ActionAttemptStatus.PLANNED,
         0,
         List.of(new ActionTransition(1, null, ActionAttemptStatus.PLANNED, plannedAt)),
-        null);
+        null,
+        approvalScope(
+            plan,
+            approval,
+            capability,
+            ActionApprovalScope.LEGACY_SERVER_IMPLICIT,
+            ActionApprovalScope.SIMULATED_PROVIDER_V1));
   }
+
+  private static ActionAttempt asPreV17Unproven(ActionAttempt attempt) {
+    return new ActionAttempt(
+        attempt.attemptId(),
+        attempt.plan(),
+        attempt.approval(),
+        attempt.capability(),
+        attempt.status(),
+        attempt.capabilityUsedCalls(),
+        attempt.transitions(),
+        attempt.receipt());
+  }
+
+  private static ActionAttempt withScope(
+      ActionAttempt attempt, String approvalOrigin, String executionRoute) {
+    return new ActionAttempt(
+        attempt.attemptId(),
+        attempt.plan(),
+        attempt.approval(),
+        attempt.capability(),
+        attempt.status(),
+        attempt.capabilityUsedCalls(),
+        attempt.transitions(),
+        attempt.receipt(),
+        approvalScope(
+            attempt.plan(),
+            attempt.approval(),
+            attempt.capability(),
+            approvalOrigin,
+            executionRoute));
+  }
+
+  private static ActionApprovalScope approvalScope(
+      ActionPlan plan,
+      ApprovalDecision approval,
+      ActionCapability capability,
+      String approvalOrigin,
+      String executionRoute) {
+    long ttlMicros =
+        Math.addExact(
+            Math.multiplyExact(
+                plan.expiresAt().getEpochSecond() - approval.decidedAt().getEpochSecond(),
+                1_000_000L),
+            (plan.expiresAt().getNano() - approval.decidedAt().getNano()) / 1_000L);
+    return new ActionApprovalScope(
+        ActionApprovalScope.CONFIGURED_LOCAL_PRINCIPAL,
+        plan.principalId(),
+        approvalOrigin,
+        executionRoute,
+        plan.actionType(),
+        plan.targetRef(),
+        plan.artifactId(),
+        plan.artifactVersion(),
+        plan.artifactHash(),
+        plan.risk(),
+        plan.policyVersion(),
+        capability.connector(),
+        capability.audience(),
+        capability.accountRef(),
+        ttlMicros,
+        capability.maxCalls());
+  }
+
+  private static ActionAttempt persistPlanned(ActionAttempt proposed) {
+    return assertInstanceOf(
+            ActionAttemptStore.PlanResult.Accepted.class,
+            store().planOrFind(proposed),
+            "DIRECT_CLAIM_FIXTURE_PLAN_NOT_PERSISTED")
+        .attempt();
+  }
+
+  private static ActionAttempt persistUnknownWithoutProviderClaim(ActionAttempt proposed) {
+    ActionAttempt persisted = persistPlanned(proposed);
+    int transitionsInserted =
+        jdbc.sql(
+                """
+                INSERT INTO action_attempt_transitions (
+                    principal_id, attempt_id, sequence, from_status, to_status,
+                    capability_use_delta, occurred_at
+                ) VALUES
+                    (:principalId, :attemptId, 2, 'PLANNED', 'DISPATCHING', 1, :dispatchAt),
+                    (:principalId, :attemptId, 3, 'DISPATCHING', 'UNKNOWN', 0, :unknownAt)
+                """)
+            .param("principalId", persisted.plan().principalId())
+            .param("attemptId", persisted.attemptId())
+            .param("dispatchAt", java.sql.Timestamp.from(NOW.plusSeconds(1)))
+            .param("unknownAt", java.sql.Timestamp.from(NOW.plusSeconds(2)))
+            .update();
+    assertEquals(
+        2,
+        transitionsInserted,
+        "DIRECT_CLAIM_FIXTURE_UNKNOWN_TRANSITIONS_NOT_PERSISTED");
+    int attemptUpdated =
+        jdbc.sql(
+                """
+                UPDATE action_attempts
+                SET status = 'UNKNOWN',
+                    state_version = 3,
+                    capability_used_calls = 1,
+                    updated_at = :unknownAt
+                WHERE principal_id = :principalId
+                  AND attempt_id = :attemptId
+                  AND status = 'PLANNED'
+                  AND state_version = 1
+                  AND capability_used_calls = 0
+                """)
+            .param("unknownAt", java.sql.Timestamp.from(NOW.plusSeconds(2)))
+            .param("principalId", persisted.plan().principalId())
+            .param("attemptId", persisted.attemptId())
+            .update();
+    assertEquals(1, attemptUpdated, "DIRECT_CLAIM_FIXTURE_UNKNOWN_ATTEMPT_NOT_PERSISTED");
+    return secondStore()
+        .findOwned(persisted.plan().principalId(), persisted.attemptId())
+        .orElseThrow();
+  }
+
+  private static ClaimSnapshot claimSnapshot(String attemptId) {
+    return new ClaimSnapshot(
+        secondStore().findOwned(OWNER, attemptId).orElseThrow(),
+        jdbc.sql("SELECT state_version FROM action_attempts WHERE attempt_id = :attemptId")
+            .param("attemptId", attemptId)
+            .query(Integer.class)
+            .single(),
+        jdbc.sql(
+                """
+                SELECT capability_use_delta
+                FROM action_attempt_transitions
+                WHERE attempt_id = :attemptId
+                ORDER BY sequence
+                """)
+            .param("attemptId", attemptId)
+            .query(Integer.class)
+            .list(),
+        receiptCount(attemptId));
+  }
+
+  private record ClaimSnapshot(
+      ActionAttempt attempt,
+      int stateVersion,
+      List<Integer> capabilityUseDeltas,
+      int receiptCount) {}
 
   private static ArtifactLineage ownArtifact(String principalId, String artifactId) {
     String captureId = "capture-" + artifactId;
@@ -938,6 +1349,90 @@ class PostgresActionAttemptStoreTest {
         .param("attemptId", attemptId)
         .query(Integer.class)
         .single();
+  }
+
+  private static void assertScopeUpdateRejected(
+      String attemptId, String column, Object value) {
+    String allowedColumn =
+        switch (column) {
+          case "approval_id", "capability_id", "approval_origin", "execution_route",
+              "scope_schema", "scope_hash", "scope_capability_ttl_micros" -> column;
+          default -> throw new IllegalArgumentException("unsupported test column");
+        };
+    DataAccessException failure = assertThrows(
+        DataAccessException.class,
+        () ->
+            jdbc.sql(
+                    "UPDATE action_attempts SET "
+                        + allowedColumn
+                        + " = :value WHERE attempt_id = :attemptId")
+                .param("value", value)
+                .param("attemptId", attemptId)
+                .update());
+    assertEquals(
+        "23514",
+        assertInstanceOf(java.sql.SQLException.class, failure.getMostSpecificCause())
+            .getSQLState());
+  }
+
+  private static void assertTransitionAndAttemptHistoryCannotBeRewrittenOrDeleted(
+      String attemptId) throws Exception {
+    DataAccessException transitionUpdate =
+        assertThrows(
+            DataAccessException.class,
+            () ->
+                jdbc.sql(
+                        "UPDATE action_attempt_transitions "
+                            + "SET occurred_at = occurred_at + interval '1 microsecond' "
+                            + "WHERE attempt_id = :attemptId AND sequence = 1")
+                    .param("attemptId", attemptId)
+                    .update());
+    assertEquals(
+        "23514",
+        assertInstanceOf(java.sql.SQLException.class, transitionUpdate.getMostSpecificCause())
+            .getSQLState());
+
+    int transitionsBefore =
+        jdbc.sql(
+                "SELECT count(*) FROM action_attempt_transitions "
+                    + "WHERE attempt_id = :attemptId")
+            .param("attemptId", attemptId)
+            .query(Integer.class)
+            .single();
+    try (var connection = dataSource.getConnection()) {
+      connection.setAutoCommit(false);
+      try {
+        var childAttempt = connection.setSavepoint("before_child_delete");
+        try (var deleteChild =
+            connection.prepareStatement(
+                "DELETE FROM action_attempt_transitions WHERE attempt_id = ?")) {
+          deleteChild.setString(1, attemptId);
+          java.sql.SQLException childRejected =
+              assertThrows(java.sql.SQLException.class, deleteChild::executeUpdate);
+          assertEquals("23514", childRejected.getSQLState());
+        }
+        connection.rollback(childAttempt);
+        try (var deleteAttempt =
+            connection.prepareStatement(
+                "DELETE FROM action_attempts WHERE attempt_id = ?")) {
+          deleteAttempt.setString(1, attemptId);
+          java.sql.SQLException attemptRejected =
+              assertThrows(java.sql.SQLException.class, deleteAttempt::executeUpdate);
+          assertEquals("23514", attemptRejected.getSQLState());
+        }
+      } finally {
+        connection.rollback();
+      }
+    }
+    assertEquals(1, attemptCount("explicit-scope-key"));
+    assertEquals(
+        transitionsBefore,
+        jdbc.sql(
+                "SELECT count(*) FROM action_attempt_transitions "
+                    + "WHERE attempt_id = :attemptId")
+            .param("attemptId", attemptId)
+            .query(Integer.class)
+            .single());
   }
 
   private static void awaitBlockedApprovalHeadLock() throws Exception {

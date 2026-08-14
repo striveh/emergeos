@@ -486,7 +486,7 @@ class Pack009DurableGraphCrashProcessIT {
           count(
               connection,
               "agent_graph_attempt_terminal_bindings"));
-      assertEquals(16, count(connection, "flyway_schema_history"));
+      assertEquals(17, count(connection, "flyway_schema_history"));
 
       try (PreparedStatement statement =
           connection.prepareStatement(

@@ -182,6 +182,78 @@ class PrivateApiCacheControlTest extends PostgresApiTest {
         status().isBadRequest());
   }
 
+  @Test
+  void actionAndApprovalReadErrorsArePrivateAndNotStored() throws Exception {
+    expectPrivateError(get("/api/v1/action-approvals/missing-attempt"), status().isNotFound());
+    expectPrivateError(get("/api/v1/actions/missing-attempt"), status().isNotFound());
+  }
+
+  @Test
+  void explicitApprovalPreviewPostAndReadArePrivateAndNotStored() throws Exception {
+    MvcResult capture = createCapture("private-cache-approval", "approval source content");
+    String captureId = JsonPath.read(capture.getResponse().getContentAsString(), "$.captureId");
+    MvcResult artifact =
+        mockMvc
+            .perform(
+                post("/api/v1/artifacts")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """
+                        {
+                          "captureId": "%s",
+                          "content": "approval artifact content"
+                        }
+                        """
+                            .formatted(captureId)))
+            .andExpect(status().isCreated())
+            .andReturn();
+    String artifactBody = artifact.getResponse().getContentAsString();
+    String artifactId = JsonPath.read(artifactBody, "$.artifactId");
+    int artifactVersion = JsonPath.<Number>read(artifactBody, "$.currentVersion").intValue();
+    String artifactHash = JsonPath.read(artifactBody, "$.currentHash");
+    MvcResult preview =
+        mockMvc
+            .perform(
+                get("/api/v1/artifacts/{artifactId}/action-approval-scope", artifactId)
+                    .queryParam("artifactVersion", Integer.toString(artifactVersion))
+                    .queryParam("artifactHash", artifactHash))
+            .andExpect(status().isOk())
+            .andReturn();
+    String previewBody = preview.getResponse().getContentAsString();
+    String scopeSchema = JsonPath.read(previewBody, "$.scopeSchema");
+    String scopeHash = JsonPath.read(previewBody, "$.scopeHash");
+    MvcResult approval =
+        mockMvc
+            .perform(
+                post("/api/v1/artifacts/{artifactId}/action-approvals", artifactId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """
+                        {
+                          "approvedArtifactVersion": %d,
+                          "approvedArtifactHash": "%s",
+                          "approvalNonce": "private-cache-approval-nonce",
+                          "approvedScopeSchema": "%s",
+                          "approvedScopeHash": "%s"
+                        }
+                        """
+                            .formatted(
+                                artifactVersion, artifactHash, scopeSchema, scopeHash)))
+            .andExpect(status().isCreated())
+            .andReturn();
+    String attemptId =
+        JsonPath.read(approval.getResponse().getContentAsString(), "$.attemptId");
+    MvcResult read =
+        mockMvc
+            .perform(get("/api/v1/action-approvals/{attemptId}", attemptId))
+            .andExpect(status().isOk())
+            .andReturn();
+
+    assertPrivateNoStore(preview);
+    assertPrivateNoStore(approval);
+    assertPrivateNoStore(read);
+  }
+
   private MvcResult createCapture(String nonce, String content) throws Exception {
     return mockMvc
         .perform(

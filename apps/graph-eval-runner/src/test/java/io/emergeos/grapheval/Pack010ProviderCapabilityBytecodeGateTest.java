@@ -1495,6 +1495,26 @@ class Pack010ProviderCapabilityBytecodeGateTest {
   }
 
   @Test
+  void graphTerminalExecutorHasNoRawV13ProviderRoleConstant()
+      throws Exception {
+    String executorName =
+        "io/emergeos/adapters/postgres/"
+            + "PostgresGraphTerminalExecutor.class";
+    long rawProviderRoleConstants =
+        GraphEvalBytecodeGate.utf8Constants(
+                classResourceBytes(executorName))
+            .stream()
+            .filter(
+                value ->
+                    value.contains("emergeos_provider_attestor"))
+            .count();
+    assertEquals(
+        0L,
+        rawProviderRoleConstants,
+        "GRAPH_TERMINAL_EXECUTOR_RAW_V13_PROVIDER_ROLE_PRESENT");
+  }
+
+  @Test
   void v18TypedAttestorIsTheOnlyReviewedV16MutationAuthorityConsumer()
       throws Exception {
     String adapterName =

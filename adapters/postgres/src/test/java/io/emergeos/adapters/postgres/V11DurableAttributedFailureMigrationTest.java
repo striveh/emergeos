@@ -193,7 +193,11 @@ class V11DurableAttributedFailureMigrationTest {
   @Test
   void freshV16PreservesV12RevocationAndProvisioningCreatesExactRoleSplit() {
     DataSource admin = baseDataSource();
-    Flyway flyway = Flyway.configure().dataSource(admin).load();
+    Flyway flyway =
+        Flyway.configure()
+            .dataSource(admin)
+            .target(MigrationVersion.fromVersion("16"))
+            .load();
     assertEquals(16, flyway.migrate().migrationsExecuted);
     assertEquals(
         MigrationVersion.fromVersion("16"),

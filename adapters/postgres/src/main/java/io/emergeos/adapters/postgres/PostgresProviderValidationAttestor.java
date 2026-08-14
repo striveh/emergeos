@@ -495,7 +495,7 @@ public final class PostgresProviderValidationAttestor
                            WHERE function_namespace.nspname = 'public'
                              AND pg_catalog.has_function_privilege(
                                current_user, procedure.oid, 'EXECUTE')
-                         ) = 3
+                         ) = 4
                          AND (
                            SELECT count(*)
                            FROM pg_catalog.pg_proc procedure
@@ -511,7 +511,8 @@ public final class PostgresProviderValidationAttestor
                                'agent_graph_require_provider_validation_v13',
                                'agent_graph_stage_provider_validation_v13',
                                'agent_graph_commit_provider_validation_v13',
-                               'agent_graph_assert_provider_validation_v13')
+                               'agent_graph_assert_provider_validation_v13',
+                               'emergeos_pack010_schema_version_v1')
                              AND pg_catalog.pg_get_function_identity_arguments(
                                procedure.oid) = CASE procedure.proname
                                WHEN 'agent_graph_framed_sha256_v13'
@@ -523,6 +524,8 @@ public final class PostgresProviderValidationAttestor
                                WHEN 'agent_graph_commit_provider_validation_v13'
                                  THEN 'payload jsonb'
                                WHEN 'agent_graph_assert_provider_validation_v13'
+                                 THEN ''
+                               WHEN 'emergeos_pack010_schema_version_v1'
                                  THEN ''
                                ELSE NULL
                              END
@@ -538,6 +541,8 @@ public final class PostgresProviderValidationAttestor
                                  THEN 'jsonb'
                                WHEN 'agent_graph_assert_provider_validation_v13'
                                  THEN 'trigger'
+                               WHEN 'emergeos_pack010_schema_version_v1'
+                                 THEN 'integer'
                                ELSE NULL
                              END
                              AND pg_catalog.encode(
@@ -554,6 +559,8 @@ public final class PostgresProviderValidationAttestor
                                  THEN '2e2de1a391d9d069763927356683bb3d2ce1db52aa9a39496bb388fdc57a71e4'
                                WHEN 'agent_graph_assert_provider_validation_v13'
                                  THEN '49b95c2e4cb9f9de7de818bbe8bcaae196ade855ab179d38a8657dc0ca63521a'
+                               WHEN 'emergeos_pack010_schema_version_v1'
+                                 THEN '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143'
                                ELSE NULL
                              END
                              AND procedure.prosecdef =
@@ -590,11 +597,12 @@ public final class PostgresProviderValidationAttestor
                                (procedure.proname IN (
                                  'agent_graph_require_provider_validation_v13',
                                  'agent_graph_stage_provider_validation_v13',
-                                 'agent_graph_commit_provider_validation_v13'))
+                                 'agent_graph_commit_provider_validation_v13',
+                                 'emergeos_pack010_schema_version_v1'))
                              AND NOT pg_catalog.has_function_privilege(
                                current_user, procedure.oid,
                                'EXECUTE WITH GRANT OPTION')
-                         ) = 5
+                         ) = 6
                          AND (
                            SELECT count(*)
                            FROM pg_catalog.pg_proc procedure
@@ -606,8 +614,9 @@ public final class PostgresProviderValidationAttestor
                                'agent_graph_require_provider_validation_v13',
                                'agent_graph_stage_provider_validation_v13',
                                'agent_graph_commit_provider_validation_v13',
-                               'agent_graph_assert_provider_validation_v13')
-                         ) = 5
+                               'agent_graph_assert_provider_validation_v13',
+                               'emergeos_pack010_schema_version_v1')
+                         ) = 6
                          AND NOT EXISTS (
                            SELECT 1
                            FROM pg_catalog.pg_proc procedure
@@ -625,13 +634,16 @@ public final class PostgresProviderValidationAttestor
                                'agent_graph_require_provider_validation_v13',
                                'agent_graph_stage_provider_validation_v13',
                                'agent_graph_commit_provider_validation_v13',
-                               'agent_graph_assert_provider_validation_v13')
+                               'agent_graph_assert_provider_validation_v13',
+                               'emergeos_pack010_schema_version_v1')
                              AND acl.grantee <> procedure.proowner
-                             AND NOT (
-                               acl.privilege_type = 'EXECUTE'
-                               AND NOT acl.is_grantable
-                               AND (
-                                 (grantee.rolname =
+                             AND (
+                               grantee.rolname IS NULL
+                               OR NOT (
+                                 acl.privilege_type = 'EXECUTE'
+                                 AND NOT acl.is_grantable
+                                 AND (
+                                   (grantee.rolname =
                                     'emergeos_provider_attestor'
                                   AND procedure.proname IN (
                                     'agent_graph_require_provider_validation_v13',
@@ -640,7 +652,14 @@ public final class PostgresProviderValidationAttestor
                                  OR (grantee.rolname =
                                        'emergeos_terminal_owner'
                                      AND procedure.proname =
-                                       'agent_graph_framed_sha256_v13'))))
+                                       'agent_graph_framed_sha256_v13')
+                                 OR (procedure.proname =
+                                       'emergeos_pack010_schema_version_v1'
+                                     AND grantee.rolname IN (
+                                       'emergeos_terminal_owner',
+                                       'emergeos_graph_executor',
+                                       'emergeos_failure_resumer',
+                                       'emergeos_provider_attestor'))))))
                          AND (
                            SELECT count(*) = 67
                              AND pg_catalog.encode(
@@ -855,8 +874,14 @@ public final class PostgresProviderValidationAttestor
                                        trigger_function.oid) || ')'),
                                  ',' ORDER BY trigger_relation.relname,
                                    trigger.tgname), ''),
-                               'UTF8')), 'hex') =
-                             'e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b'
+                               'UTF8')), 'hex') = CASE
+                             public.emergeos_pack010_schema_version_v1()
+                               WHEN 16
+                                 THEN 'e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b'
+                               WHEN 17
+                                 THEN '6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b'
+                               ELSE NULL
+                             END
                            FROM pg_catalog.pg_trigger trigger
                            JOIN pg_catalog.pg_class trigger_relation
                              ON trigger_relation.oid = trigger.tgrelid
