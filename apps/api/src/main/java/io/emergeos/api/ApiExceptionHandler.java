@@ -3,6 +3,7 @@ package io.emergeos.api;
 import io.emergeos.core.application.ActionIdempotencyConflictException;
 import io.emergeos.core.application.CaptureNonceConflictException;
 import io.emergeos.core.application.ArtifactRevisionConflictException;
+import io.emergeos.core.application.ApprovalStaleException;
 import io.emergeos.adapters.postgres.AgentRunConflictException;
 import io.emergeos.adapters.postgres.AgentRunIntegrityException;
 import java.net.URI;
@@ -53,6 +54,15 @@ class ApiExceptionHandler {
     problem.setTitle("Action idempotency conflict");
     problem.setType(URI.create("urn:emergeos:problem:action-idempotency-conflict"));
     return problem;
+  }
+
+  @ExceptionHandler(ApprovalStaleException.class)
+  ResponseEntity<ProblemDetail> approvalStale() {
+    return privateProblem(
+        HttpStatus.PRECONDITION_FAILED,
+        "urn:emergeos:problem:approval-stale",
+        "Action approval stale",
+        "The approved action scope is not the current local scope.");
   }
 
   @ExceptionHandler(ArtifactRevisionConflictException.class)

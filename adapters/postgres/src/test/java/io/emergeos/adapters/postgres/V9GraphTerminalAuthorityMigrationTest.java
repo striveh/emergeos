@@ -589,7 +589,7 @@ class V9GraphTerminalAuthorityMigrationTest {
               "agent_graph_complete_parent_and_seal_v9:"
                   + "ac438c4b71c8f044c9189b8be35db918",
               "agent_graph_require_executor_v10:"
-                  + "d2e3f2e6ae39bdd92e45fde9338e6625",
+                  + "43a27e4878e7af5a5f7d5416e9f2518f",
               "agent_graph_require_executor_v9:"
                   + "90f8d826c5a2dbd8851f469322500d36",
               "agent_graph_require_row_shape_v9:"
@@ -1014,7 +1014,108 @@ class V9GraphTerminalAuthorityMigrationTest {
       executeAndCommit(dataSource, audit);
       assertFalse(provisioning.contains("PASSWORD '"));
       assertFalse(provisioning.contains("CREATE TABLE"));
-      assertFalse(provisioning.contains("flyway_schema_history"));
+      assertTrue(
+          provisioning.contains(
+              "FROM public.flyway_schema_history AS history"));
+      assertEquals(
+          1L,
+          scoped.sql(
+                  """
+                  SELECT count(*)
+                  FROM pg_catalog.pg_proc procedure
+                  JOIN pg_catalog.pg_namespace namespace
+                    ON namespace.oid = procedure.pronamespace
+                  JOIN pg_catalog.pg_roles owner
+                    ON owner.oid = procedure.proowner
+                  JOIN pg_catalog.pg_language language
+                    ON language.oid = procedure.prolang
+                  WHERE procedure.oid = pg_catalog.to_regprocedure(
+                    'public.emergeos_pack010_schema_version_v1()')
+                    AND namespace.nspname = 'public'
+                    AND pg_catalog.pg_get_function_identity_arguments(
+                          procedure.oid) = ''
+                    AND pg_catalog.pg_get_function_result(procedure.oid)
+                          = 'integer'
+                    AND procedure.prosecdef
+                    AND procedure.provolatile = 'v'
+                    AND procedure.proparallel = 'u'
+                    AND procedure.prokind = 'f'
+                    AND NOT procedure.proretset
+                    AND NOT procedure.proisstrict
+                    AND NOT procedure.proleakproof
+                    AND procedure.proconfig = ARRAY[
+                      'search_path=pg_catalog, pg_temp']::text[]
+                    AND language.lanname = 'plpgsql'
+                    AND owner.rolname = 'emergeos_pack010_schema_owner'
+                    AND pg_catalog.encode(
+                          pg_catalog.sha256(pg_catalog.convert_to(
+                            procedure.prosrc, 'UTF8')), 'hex')
+                          = '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143'
+                  """)
+              .query(Long.class)
+              .single());
+      assertEquals(
+          17,
+          scoped.sql(
+                  "SELECT public.emergeos_pack010_schema_version_v1()")
+              .query(Integer.class)
+              .single());
+      assertEquals(
+          List.of(
+              "emergeos_failure_resumer|EXECUTE|false",
+              "emergeos_graph_executor|EXECUTE|false",
+              "emergeos_provider_attestor|EXECUTE|false",
+              "emergeos_terminal_owner|EXECUTE|false"),
+          scoped.sql(
+                  """
+                  SELECT COALESCE(grantee.rolname, 'PUBLIC') || '|'
+                         || acl.privilege_type || '|'
+                         || acl.is_grantable::text
+                  FROM pg_catalog.pg_proc procedure
+                  CROSS JOIN LATERAL pg_catalog.aclexplode(
+                    COALESCE(
+                      procedure.proacl,
+                      pg_catalog.acldefault('f', procedure.proowner))) acl
+                  LEFT JOIN pg_catalog.pg_roles grantee
+                    ON grantee.oid = acl.grantee
+                  WHERE procedure.oid = pg_catalog.to_regprocedure(
+                    'public.emergeos_pack010_schema_version_v1()')
+                    AND acl.grantee <> procedure.proowner
+                  ORDER BY COALESCE(grantee.rolname, 'PUBLIC'),
+                           acl.privilege_type,
+                           acl.is_grantable
+                  """)
+              .query(String.class)
+              .list());
+      assertEquals(
+          0L,
+          scoped.sql(
+                  """
+                  SELECT count(*)
+                  FROM pg_catalog.pg_class relation
+                  JOIN pg_catalog.pg_namespace namespace
+                    ON namespace.oid = relation.relnamespace
+                  CROSS JOIN (VALUES
+                    ('emergeos_graph_executor'),
+                    ('emergeos_failure_resumer'),
+                    ('emergeos_provider_attestor')) runtime(role_name)
+                  WHERE namespace.nspname = 'public'
+                    AND relation.relname = 'flyway_schema_history'
+                    AND (
+                      relation.relowner = (
+                        SELECT role.oid
+                        FROM pg_catalog.pg_roles role
+                        WHERE role.rolname = runtime.role_name)
+                      OR pg_catalog.has_table_privilege(
+                        runtime.role_name, relation.oid,
+                        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,'
+                          || 'REFERENCES,TRIGGER,MAINTAIN')
+                      OR pg_catalog.has_any_column_privilege(
+                        runtime.role_name, relation.oid,
+                        'SELECT,INSERT,UPDATE,REFERENCES'))
+                  """)
+              .query(Long.class)
+              .single());
     } finally {
       clusterAdmin.sql(
               "SELECT pg_terminate_backend(pid) "

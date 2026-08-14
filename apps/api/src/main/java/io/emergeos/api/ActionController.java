@@ -4,6 +4,7 @@ import io.emergeos.core.application.ApproveLocalActionCommand;
 import io.emergeos.core.application.PlanLocalApprovalCommand;
 import io.emergeos.core.application.RecoverableActionService;
 import io.emergeos.core.domain.ActionAttempt;
+import io.emergeos.core.domain.ActionApprovalScope;
 import io.emergeos.core.domain.ActionReceipt;
 import io.emergeos.core.domain.ActionTransition;
 import java.net.URI;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -50,7 +52,9 @@ class ActionController {
                 artifactId,
                 request.approvedArtifactVersion(),
                 request.approvedArtifactHash(),
-                request.approvalNonce()));
+                request.approvalNonce(),
+                request.approvedScopeSchema(),
+                request.approvedScopeHash()));
     ApprovalActionResponse body = ApprovalActionResponse.from(approval.attempt());
     URI location = URI.create("/api/v1/action-approvals/" + approval.attempt().attemptId());
     return approval.created()
@@ -58,9 +62,18 @@ class ActionController {
         : ResponseEntity.ok().location(location).body(body);
   }
 
+  @GetMapping("/artifacts/{artifactId}/action-approval-scope")
+  ApprovalScopeResponse previewApprovalScope(
+      @PathVariable("artifactId") String artifactId,
+      @RequestParam("artifactVersion") int artifactVersion,
+      @RequestParam("artifactHash") String artifactHash) {
+    return ApprovalScopeResponse.from(
+        actions.previewApprovalScope(artifactId, artifactVersion, artifactHash));
+  }
+
   @GetMapping("/action-approvals/{attemptId}")
   ApprovalActionResponse getApproval(@PathVariable("attemptId") String attemptId) {
-    return ApprovalActionResponse.from(actions.get(attemptId));
+    return ApprovalActionResponse.from(actions.getPlannedExplicitApproval(attemptId));
   }
 
   @GetMapping("/actions/{attemptId}")
@@ -87,7 +100,9 @@ class ActionController {
   record PlanApprovalRequest(
       int approvedArtifactVersion,
       String approvedArtifactHash,
-      String approvalNonce) {}
+      String approvalNonce,
+      String approvedScopeSchema,
+      String approvedScopeHash) {}
 
   record ActionResponse(
       String attemptId,
@@ -123,9 +138,16 @@ class ActionController {
       String status,
       ActionPlanResponse plan,
       ApprovalResponse approval,
-      CapabilityResponse capability,
+      ApprovalCapabilityResponse capability,
       List<TransitionResponse> transitions,
-      ReceiptResponse receipt) {
+      ReceiptResponse receipt,
+      String scopeSchema,
+      String scopeHash,
+      ApprovalPrincipalResponse approvalPrincipal,
+      ProvenanceResponse provenance,
+      ApprovalActionDetailResponse action,
+      ApprovalArtifactResponse artifact,
+      String executionState) {
 
     static ApprovalActionResponse from(ActionAttempt attempt) {
       return new ApprovalActionResponse(
@@ -147,12 +169,80 @@ class ActionController {
               attempt.approval().planId(),
               attempt.approval().planHash(),
               attempt.approval().artifactHash()),
-          new CapabilityResponse(
+          new ApprovalCapabilityResponse(
               attempt.capability().capabilityId(),
+              attempt.approvalScope().connector(),
+              attempt.approvalScope().audience(),
+              attempt.approvalScope().accountRef(),
+              attempt.approvalScope().capabilityTtlMicros(),
               attempt.capabilityUsedCalls(),
               attempt.capability().maxCalls()),
           attempt.transitions().stream().map(TransitionResponse::from).toList(),
-          attempt.receipt() == null ? null : ReceiptResponse.from(attempt.receipt()));
+          attempt.receipt() == null ? null : ReceiptResponse.from(attempt.receipt()),
+          attempt.approvalScope().scopeSchema(),
+          attempt.approvalScope().scopeHash(),
+          ApprovalPrincipalResponse.from(attempt.approvalScope()),
+          ProvenanceResponse.from(attempt.approvalScope()),
+          ApprovalActionDetailResponse.from(attempt.approvalScope()),
+          ApprovalArtifactResponse.from(attempt.approvalScope()),
+          "NOT_EXECUTED");
+    }
+  }
+
+  record ApprovalScopeResponse(
+      String scopeSchema,
+      String scopeHash,
+      ApprovalPrincipalResponse approvalPrincipal,
+      ProvenanceResponse provenance,
+      ApprovalActionDetailResponse action,
+      ApprovalArtifactResponse artifact,
+      ApprovalScopeCapabilityResponse capability,
+      String executionState) {
+
+    static ApprovalScopeResponse from(ActionApprovalScope scope) {
+      return new ApprovalScopeResponse(
+          scope.scopeSchema(),
+          scope.scopeHash(),
+          ApprovalPrincipalResponse.from(scope),
+          ProvenanceResponse.from(scope),
+          ApprovalActionDetailResponse.from(scope),
+          ApprovalArtifactResponse.from(scope),
+          new ApprovalScopeCapabilityResponse(
+              scope.connector(),
+              scope.audience(),
+              scope.accountRef(),
+              scope.capabilityTtlMicros(),
+              scope.maxCalls(),
+              0),
+          "NOT_EXECUTED");
+    }
+  }
+
+  record ApprovalPrincipalResponse(String basis, String configuredPrincipalId) {
+    static ApprovalPrincipalResponse from(ActionApprovalScope scope) {
+      return new ApprovalPrincipalResponse(scope.principalBasis(), scope.configuredPrincipalId());
+    }
+  }
+
+  record ProvenanceResponse(String approvalOrigin, String executionRoute) {
+    static ProvenanceResponse from(ActionApprovalScope scope) {
+      return new ProvenanceResponse(scope.approvalOrigin(), scope.executionRoute());
+    }
+  }
+
+  record ApprovalActionDetailResponse(
+      String actionType, String targetRef, String risk, String policyVersion) {
+    static ApprovalActionDetailResponse from(ActionApprovalScope scope) {
+      return new ApprovalActionDetailResponse(
+          scope.actionType(), scope.targetRef(), scope.risk().name(), scope.policyVersion());
+    }
+  }
+
+  record ApprovalArtifactResponse(
+      String artifactId, int artifactVersion, String artifactHash) {
+    static ApprovalArtifactResponse from(ActionApprovalScope scope) {
+      return new ApprovalArtifactResponse(
+          scope.artifactId(), scope.artifactVersion(), scope.artifactHash());
     }
   }
 
@@ -174,8 +264,24 @@ class ActionController {
       String planHash,
       String artifactHash) {}
 
-  record CapabilityResponse(
-      String capabilityId, int usedCalls, int maxCalls) {}
+  record CapabilityResponse(String capabilityId, int usedCalls, int maxCalls) {}
+
+  record ApprovalCapabilityResponse(
+      String capabilityId,
+      String connector,
+      String audience,
+      String accountRef,
+      long capabilityTtlMicros,
+      int usedCalls,
+      int maxCalls) {}
+
+  record ApprovalScopeCapabilityResponse(
+      String connector,
+      String audience,
+      String accountRef,
+      long capabilityTtlMicros,
+      int maxCalls,
+      int usedCalls) {}
 
   record TransitionResponse(
       int sequence, String fromStatus, String toStatus, Instant occurredAt) {

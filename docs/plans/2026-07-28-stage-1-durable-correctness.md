@@ -811,6 +811,20 @@ do not count.
   S2 regressed green with PIDs `70074/70086/70097/70108`; S1 regressed green with
   PIDs `70133/70145/70147`.
 
+### Product-closure delta · 2026-08-14 · Exact local approval scope
+
+- Status：focused + root clean Engineering Green；commit / push / CI pending；overall Authority / Live Red。
+- Receipt：[Exact Local Action Approval Scope Build Note](../operations/build-notes/2026-08-14-s1-exact-local-approval-scope.md)。
+- Current Artifact先产生只读 canonical 16-field scope preview；页面重算hash并显示action/target/risk、
+  Artifact与授权边界后，POST才可精确绑定Artifact version/hash和scope schema/hash。
+- 成功只落`PLANNED / NOT_EXECUTED / usedCalls=0 / Receipt=null`；V17将旧行标为
+  `PRE_V17_UNPROVEN`并以service + SQL双fence禁止provider dispatch/reconcile。
+- Fresh root：`./mvnw --batch-mode --no-transfer-progress clean verify`于
+  `2026-08-14T12:41:04+08:00`完成11/11 reactor，`170 XML / 893 tests / 0`；shipping Live仍 disabled，
+  commit/push/CI pending。
+- 下一条产品 Acceptance是 Real Local Draftbox + Undo Receipt；founder dogfood、Human-learning与
+  Commercial evidence仍未开始，不由本 focused Green代替。
+
 ## Outcome and next hypothesis
 
 S1–S4 engineering slice Receipts are complete. Stage 1 remains active because ADR-0004 remains Proposed,

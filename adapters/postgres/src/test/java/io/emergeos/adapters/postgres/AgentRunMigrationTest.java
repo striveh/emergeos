@@ -35,7 +35,7 @@ class AgentRunMigrationTest {
   @Test
   void freshInstallCreatesTheCurrentGraphBoundAgentRunAggregate() {
     assertEquals(
-        "16",
+        "17",
         jdbc.sql(
                 """
                 SELECT version

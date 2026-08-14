@@ -90,9 +90,220 @@ DECLARE
         'agent_graph_exact_attempt_events_v16',
         'agent_graph_exact_attempt_heads_v16'
     ]::NAME[];
+    schema_version INTEGER;
+    expected_trigger_topology TEXT;
 BEGIN
     IF current_schema() IS DISTINCT FROM 'public' THEN
         RAISE EXCEPTION 'Pack010 audit requires exact public schema'
+            USING ERRCODE = '55000';
+    END IF;
+    IF (
+        SELECT count(*)
+        FROM pg_catalog.pg_proc procedure
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = procedure.pronamespace
+        JOIN pg_catalog.pg_roles owner
+          ON owner.oid = procedure.proowner
+        JOIN pg_catalog.pg_language language
+          ON language.oid = procedure.prolang
+        WHERE namespace.nspname = 'public'
+          AND procedure.proname
+                = 'emergeos_pack010_schema_version_v1'
+          AND pg_catalog.pg_get_function_identity_arguments(
+                procedure.oid) = ''
+          AND pg_catalog.pg_get_function_result(procedure.oid) = 'integer'
+          AND procedure.prosecdef
+          AND procedure.provolatile = 'v'
+          AND procedure.proparallel = 'u'
+          AND procedure.prokind = 'f'
+          AND NOT procedure.proretset
+          AND NOT procedure.proisstrict
+          AND NOT procedure.proleakproof
+          AND procedure.proconfig
+                = ARRAY['search_path=pg_catalog, pg_temp']::TEXT[]
+          AND language.lanname = 'plpgsql'
+          AND owner.rolname = 'emergeos_pack010_schema_owner'
+          AND pg_catalog.encode(
+                pg_catalog.sha256(pg_catalog.convert_to(
+                    procedure.prosrc, 'UTF8')), 'hex')
+                = '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143'
+          AND pg_catalog.has_function_privilege(
+                'emergeos_terminal_owner', procedure.oid, 'EXECUTE')
+          AND NOT pg_catalog.has_function_privilege(
+                'emergeos_terminal_owner', procedure.oid,
+                'EXECUTE WITH GRANT OPTION')
+          AND pg_catalog.has_function_privilege(
+                'emergeos_graph_executor', procedure.oid, 'EXECUTE')
+          AND NOT pg_catalog.has_function_privilege(
+                'emergeos_graph_executor', procedure.oid,
+                'EXECUTE WITH GRANT OPTION')
+          AND pg_catalog.has_function_privilege(
+                'emergeos_failure_resumer', procedure.oid, 'EXECUTE')
+          AND NOT pg_catalog.has_function_privilege(
+                'emergeos_failure_resumer', procedure.oid,
+                'EXECUTE WITH GRANT OPTION')
+          AND pg_catalog.has_function_privilege(
+                'emergeos_provider_attestor', procedure.oid, 'EXECUTE')
+          AND NOT pg_catalog.has_function_privilege(
+                'emergeos_provider_attestor', procedure.oid,
+                'EXECUTE WITH GRANT OPTION')
+    ) <> 1 OR (
+        SELECT count(*)
+        FROM pg_catalog.pg_proc procedure
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = procedure.pronamespace
+        WHERE namespace.nspname = 'public'
+          AND procedure.proname
+                = 'emergeos_pack010_schema_version_v1'
+    ) <> 1 OR (
+        SELECT count(*)
+        FROM pg_catalog.pg_proc procedure
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = procedure.pronamespace
+        CROSS JOIN LATERAL pg_catalog.aclexplode(
+            COALESCE(
+                procedure.proacl,
+                pg_catalog.acldefault('f', procedure.proowner))) acl
+        JOIN pg_catalog.pg_roles grantee
+          ON grantee.oid = acl.grantee
+        WHERE namespace.nspname = 'public'
+          AND procedure.proname
+                = 'emergeos_pack010_schema_version_v1'
+          AND acl.grantee <> procedure.proowner
+          AND acl.privilege_type = 'EXECUTE'
+          AND NOT acl.is_grantable
+          AND grantee.rolname IN (
+              'emergeos_terminal_owner',
+              'emergeos_graph_executor',
+              'emergeos_failure_resumer',
+              'emergeos_provider_attestor')
+    ) <> 4 OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_proc procedure
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = procedure.pronamespace
+        CROSS JOIN LATERAL pg_catalog.aclexplode(
+            COALESCE(
+                procedure.proacl,
+                pg_catalog.acldefault('f', procedure.proowner))) acl
+        LEFT JOIN pg_catalog.pg_roles grantee
+          ON grantee.oid = acl.grantee
+        WHERE namespace.nspname = 'public'
+          AND procedure.proname
+                = 'emergeos_pack010_schema_version_v1'
+          AND acl.grantee <> procedure.proowner
+          AND (
+              acl.privilege_type <> 'EXECUTE'
+              OR acl.is_grantable
+              OR grantee.rolname IS NULL
+              OR grantee.rolname NOT IN (
+                  'emergeos_terminal_owner',
+                  'emergeos_graph_executor',
+                  'emergeos_failure_resumer',
+                  'emergeos_provider_attestor')
+          )
+    ) THEN
+        RAISE EXCEPTION 'Pack010 schema-version helper drifted'
+            USING ERRCODE = '55000';
+    END IF;
+    schema_version := public.emergeos_pack010_schema_version_v1();
+    expected_trigger_topology := CASE schema_version
+        WHEN 16
+          THEN 'e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b'
+        WHEN 17
+          THEN '6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b'
+        ELSE NULL
+    END;
+    IF expected_trigger_topology IS NULL THEN
+        RAISE EXCEPTION 'Pack010 schema version is unsupported'
+            USING ERRCODE = '55000';
+    END IF;
+    IF (
+        SELECT count(*)
+        FROM pg_catalog.pg_proc procedure
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = procedure.pronamespace
+        JOIN pg_catalog.pg_roles owner
+          ON owner.oid = procedure.proowner
+        JOIN pg_catalog.pg_language language
+          ON language.oid = procedure.prolang
+        WHERE namespace.nspname = 'public'
+          AND procedure.proname IN (
+              'agent_graph_require_failure_resumer_v12',
+              'agent_graph_require_executor_v10')
+          AND pg_catalog.pg_get_function_identity_arguments(
+                procedure.oid) = 'expected_function regprocedure'
+          AND pg_catalog.pg_get_function_result(procedure.oid) = 'void'
+          AND pg_catalog.encode(
+                pg_catalog.sha256(pg_catalog.convert_to(
+                    procedure.prosrc, 'UTF8')), 'hex') =
+                CASE procedure.proname
+                  WHEN 'agent_graph_require_failure_resumer_v12'
+                    THEN '814c2d1a58013749d0441f07411e0065c14acc1d9523bc1ea8d8505218573920'
+                  WHEN 'agent_graph_require_executor_v10'
+                    THEN '794a126edf1b5a0812ac7feab6ea2be0acc8e808608c83b069b41bf4c6fb394e'
+                  ELSE NULL
+                END
+          AND NOT procedure.prosecdef
+          AND procedure.provolatile = 'v'
+          AND procedure.proparallel = 'u'
+          AND procedure.prokind = 'f'
+          AND NOT procedure.proretset
+          AND NOT procedure.proisstrict
+          AND NOT procedure.proleakproof
+          AND procedure.proconfig =
+                ARRAY['search_path=pg_catalog, pg_temp']::TEXT[]
+          AND language.lanname = 'plpgsql'
+          AND owner.rolname = 'emergeos_pack010_schema_owner'
+    ) <> 2 OR (
+        SELECT count(*)
+        FROM pg_catalog.pg_proc procedure
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = procedure.pronamespace
+        WHERE namespace.nspname = 'public'
+          AND procedure.proname IN (
+              'agent_graph_require_failure_resumer_v12',
+              'agent_graph_require_executor_v10')
+    ) <> 2 OR (
+        SELECT count(*)
+        FROM pg_catalog.pg_proc procedure
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = procedure.pronamespace
+        CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(
+            procedure.proacl,
+            pg_catalog.acldefault('f', procedure.proowner))) acl
+        JOIN pg_catalog.pg_roles grantee
+          ON grantee.oid = acl.grantee
+        WHERE namespace.nspname = 'public'
+          AND procedure.proname IN (
+              'agent_graph_require_failure_resumer_v12',
+              'agent_graph_require_executor_v10')
+          AND acl.grantee <> procedure.proowner
+          AND acl.privilege_type = 'EXECUTE'
+          AND NOT acl.is_grantable
+          AND grantee.rolname = 'emergeos_terminal_owner'
+    ) <> 2 OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_proc procedure
+        JOIN pg_catalog.pg_namespace namespace
+          ON namespace.oid = procedure.pronamespace
+        CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(
+            procedure.proacl,
+            pg_catalog.acldefault('f', procedure.proowner))) acl
+        LEFT JOIN pg_catalog.pg_roles grantee
+          ON grantee.oid = acl.grantee
+        WHERE namespace.nspname = 'public'
+          AND procedure.proname IN (
+              'agent_graph_require_failure_resumer_v12',
+              'agent_graph_require_executor_v10')
+          AND acl.grantee <> procedure.proowner
+          AND (
+              acl.privilege_type <> 'EXECUTE'
+              OR acl.is_grantable
+              OR grantee.rolname IS DISTINCT FROM
+                    'emergeos_terminal_owner')
+    ) THEN
+        RAISE EXCEPTION 'Pack010 live authority guards drifted'
             USING ERRCODE = '55000';
     END IF;
     IF (
@@ -1324,7 +1535,7 @@ BEGIN
                     procedure.prosrc, 'UTF8')), 'hex')
                 = CASE procedure.proname
               WHEN 'agent_graph_require_failure_resumer_v12'
-                THEN '18e4c45e18c348d21b13c9de8ce600859c3acd64892006c99f8f93cbbd42340e'
+                THEN '814c2d1a58013749d0441f07411e0065c14acc1d9523bc1ea8d8505218573920'
               WHEN 'agent_graph_assert_failure_terminal_resume_v12'
                 THEN 'fdad487040c702df9b58481e30158a96e1564963babd86b9d4a0d8e39bceebc3'
               ELSE NULL
@@ -1363,7 +1574,7 @@ BEGIN
             WHEN 'agent_graph_require_executor_v9'
                 THEN '90f8d826c5a2dbd8851f469322500d36'
             WHEN 'agent_graph_require_executor_v10'
-                THEN 'd2e3f2e6ae39bdd92e45fde9338e6625'
+                THEN '43a27e4878e7af5a5f7d5416e9f2518f'
             WHEN 'agent_graph_require_row_shape_v9'
               THEN '865db3bb7b9d040e21e7e67fa4592980'
             WHEN 'agent_graph_run_selector_guard_v10'
@@ -1560,7 +1771,7 @@ BEGIN
           ON constraint_row.oid = trigger.tgconstraint
         WHERE namespace.nspname = 'public'
           AND NOT trigger.tgisinternal
-    ) <> 'e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b'
+    ) <> expected_trigger_topology
     THEN
         RAISE EXCEPTION 'Pack010 full trigger topology drift'
             USING ERRCODE = '55000';
@@ -1640,7 +1851,7 @@ BEGIN
                             ',' ORDER BY procedure.proname),
                         'UTF8')),
                 'hex')
-             = '614e75833b1d785ce6333dafc0e13d1999f66b6fa63b651972c5c429569c9d8b'
+             = 'bb6f50aa547584083dfc2f7d797cc2a165161521f53cb6342084fcf0e0eab83b'
         FROM pg_catalog.pg_proc procedure
         JOIN pg_catalog.pg_namespace namespace
           ON namespace.oid = procedure.pronamespace
@@ -1834,7 +2045,14 @@ BEGIN
           AND pg_catalog.has_function_privilege(
                 runtime.role_name, procedure.oid, 'EXECUTE')
               <> (
-                (runtime.role_name = 'emergeos_graph_executor'
+                (runtime.role_name IN (
+                    'emergeos_terminal_owner',
+                    'emergeos_graph_executor',
+                    'emergeos_failure_resumer',
+                    'emergeos_provider_attestor')
+                 AND procedure.oid = pg_catalog.to_regprocedure(
+                   'public.emergeos_pack010_schema_version_v1()'))
+                OR (runtime.role_name = 'emergeos_graph_executor'
                  AND procedure.proname IN (
                       'agent_graph_complete_child_v10',
                       'agent_graph_complete_parent_and_seal_v10')
@@ -2127,7 +2345,14 @@ BEGIN
             acl.privilege_type = 'EXECUTE'
             AND NOT acl.is_grantable
             AND (
-              (grantee.rolname = 'emergeos_graph_executor'
+              (grantee.rolname IN (
+                  'emergeos_terminal_owner',
+                  'emergeos_graph_executor',
+                  'emergeos_failure_resumer',
+                  'emergeos_provider_attestor')
+               AND procedure.oid = pg_catalog.to_regprocedure(
+                 'public.emergeos_pack010_schema_version_v1()'))
+              OR (grantee.rolname = 'emergeos_graph_executor'
                AND procedure.proname IN (
                     'agent_graph_complete_child_v10',
                     'agent_graph_complete_parent_and_seal_v10')

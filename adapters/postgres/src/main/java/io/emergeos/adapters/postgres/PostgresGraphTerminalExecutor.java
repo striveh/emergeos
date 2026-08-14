@@ -237,6 +237,16 @@ final class PostgresGraphTerminalExecutor {
   }
 
   private ExecutorAuthority loadAuthority() {
+    try {
+      return queryAuthority();
+    } catch (GraphAttemptIntegrityException failure) {
+      throw failure;
+    } catch (RuntimeException failure) {
+      throw new GraphAttemptIntegrityException(failure);
+    }
+  }
+
+  private ExecutorAuthority queryAuthority() {
     ExecutorAuthority authority =
         jdbc.sql(
                 """
@@ -315,7 +325,8 @@ final class PostgresGraphTerminalExecutor {
                       'agent_graph_run_selector_guard_v10',
                       'agent_graph_terminal_run_valid_v8',
                       'agent_graph_utf16_length_v8',
-                      'agent_worker_graph_guard_v6'
+                      'agent_worker_graph_guard_v6',
+                      'emergeos_pack010_schema_version_v1'
                     )
                 ), effective_functions AS (
                   SELECT procedure.oid,
@@ -620,10 +631,47 @@ final class PostgresGraphTerminalExecutor {
                                       'agent_assert_graph_attempt_v8',
                                       'agent_assert_worker_graph_v6',
                                       'agent_graph_terminal_run_valid_v8'))
+                                OR helper.proname
+                                     = 'emergeos_pack010_schema_version_v1'
                               )
                             ))
                       )
                   ) AS helper_acl_violations,
+                  (
+                    SELECT count(*)
+                    FROM exact_helpers helper
+                    CROSS JOIN LATERAL pg_catalog.aclexplode(
+                      COALESCE(
+                        (SELECT proacl
+                         FROM pg_catalog.pg_proc
+                         WHERE oid = helper.oid),
+                        pg_catalog.acldefault('f', helper.proowner))
+                    ) acl
+                    WHERE helper.proname
+                            = 'emergeos_pack010_schema_version_v1'
+                      AND acl.grantee <> helper.proowner
+                  ) AS schema_version_helper_non_owner_acl_count,
+                  (
+                    SELECT COALESCE(
+                      bool_and(
+                        acl.grantee <> 0
+                        AND acl.privilege_type = 'EXECUTE'
+                        AND NOT acl.is_grantable),
+                      false)
+                    FROM exact_helpers helper
+                    CROSS JOIN LATERAL pg_catalog.aclexplode(
+                      COALESCE(
+                        (SELECT proacl
+                         FROM pg_catalog.pg_proc
+                         WHERE oid = helper.oid),
+                        pg_catalog.acldefault('f', helper.proowner))
+                    ) acl
+                    WHERE helper.proname
+                            = 'emergeos_pack010_schema_version_v1'
+                      AND acl.grantee <> helper.proowner
+                  ) AS schema_version_helper_non_owner_acl_safe,
+                  public.emergeos_pack010_schema_version_v1()
+                    AS schema_version,
                   (
                     SELECT count(*)
                     FROM exact_helpers helper
@@ -813,12 +861,17 @@ final class PostgresGraphTerminalExecutor {
                         resultSet.getString("helper_owner_oid"),
                         resultSet.getBoolean("helper_owner_safe"),
                         resultSet.getLong("helper_acl_violations"),
+                        resultSet.getLong(
+                            "schema_version_helper_non_owner_acl_count"),
+                        resultSet.getBoolean(
+                            "schema_version_helper_non_owner_acl_safe"),
                         resultSet.getLong("helper_terminal_grants"),
                         resultSet.getBoolean("prefix_role_exists"),
                         resultSet.getLong("helper_prefix_grants"),
                         resultSet.getLong("relation_owner_count"),
                         resultSet.getString("relation_owner_oid"),
                         resultSet.getBoolean("relation_owner_safe"),
+                        resultSet.getInt("schema_version"),
                         resultSet.getString("trigger_topology")))
             .single();
     return authority.requireExact();
@@ -869,17 +922,21 @@ final class PostgresGraphTerminalExecutor {
       String helperOwnerOid,
       boolean helperOwnerSafe,
       long helperAclViolations,
+      long schemaVersionHelperNonOwnerAclCount,
+      boolean schemaVersionHelperNonOwnerAclSafe,
       long helperTerminalGrants,
       boolean prefixRoleExists,
       long helperPrefixGrants,
       long relationOwnerCount,
       String relationOwnerOid,
       boolean relationOwnerSafe,
+      int schemaVersion,
       String triggerTopology) {
 
     private static final String EXACT_FUNCTION_SURFACE =
         "agent_graph_complete_child_v10(payload jsonb),"
-            + "agent_graph_complete_parent_and_seal_v10(payload jsonb)";
+            + "agent_graph_complete_parent_and_seal_v10(payload jsonb),"
+            + "emergeos_pack010_schema_version_v1()";
     private static final String EXACT_FUNCTION_BODY_FINGERPRINTS =
         "agent_graph_complete_child_v10:"
             + "db30bd2a5792296ba8659d68d9e665c341b9a841bc0abe319a9c1cbaaea401ae,"
@@ -896,16 +953,19 @@ final class PostgresGraphTerminalExecutor {
             + "agent_graph_assert_run_row_v7():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:a6af549b056f4719c666fe4cf756fa05bc0ba28e1b2175cffc882c51d7d5b11f,"
             + "agent_graph_authorize_terminal_v8(checked_principal character varying, checked_attempt character, checked_role character varying, checked_run character varying):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:d2bb778b5d916655c4cb5edaa336c3166afc8ace50ad803e428d5ec66a7b64e5,"
             + "agent_graph_head_transition_guard_v8():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:46a2a23112ec62c8eeb573905f096d1c6d30d1e0ba33d2f2c23d5af335001787,"
-            + "agent_graph_require_executor_v10(expected_function regprocedure):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:fa653be43cb040236f47a7198b75d0a2a7b856281199fc7bf4d17828406b27b4,"
+            + "agent_graph_require_executor_v10(expected_function regprocedure):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:794a126edf1b5a0812ac7feab6ea2be0acc8e808608c83b069b41bf4c6fb394e,"
             + "agent_graph_require_executor_v9(expected_function regprocedure):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:de848b7e1dbbee4ade31e6d28d4d654c2ac45cd7bb6ba0a4860413781bea3233,"
             + "agent_graph_require_row_shape_v9(supplied jsonb, expected_relation regclass, supplied_is_array boolean):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:55d34c4a2f030d396f2dfbd5a2d6864241156b2b4ba239622bc5a3353b16359d,"
             + "agent_graph_run_selector_guard_v10():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:561eaf8977811117ceb8357bfe002f98ab6eba2c52db38885777552454affb0b,"
             + "agent_graph_run_selector_guard_v8():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:1942e5f5f0ccd5e79e57e198d50e41e2af47520dd1947ed7ac7e95924b7bd235,"
             + "agent_graph_terminal_run_valid_v8(checked_principal character varying, checked_attempt character, checked_role character varying):boolean:false:s:u:f:false:false:false:sql:search_path=pg_catalog, public, pg_temp:1e6dc7088b526e77d369a725fbefeeb521284413916ad0073a4ed3699bc97db7,"
             + "agent_graph_utf16_length_v8(input text):integer:false:i:u:f:false:true:false:sql:search_path=pg_catalog, public, pg_temp:2767ad759736bcf480b24ffd451ebd04f4e322ba4d2a1c34c2a4c6007a36b4dc,"
-            + "agent_worker_graph_guard_v6():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:fe1ce19545179e98080d72037fc7f1ef6ce2f0f5b2d0d07eafa2e73e8c4a9ff3";
-    private static final String EXACT_TRIGGER_TOPOLOGY_FINGERPRINT =
+            + "agent_worker_graph_guard_v6():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:fe1ce19545179e98080d72037fc7f1ef6ce2f0f5b2d0d07eafa2e73e8c4a9ff3,"
+            + "emergeos_pack010_schema_version_v1():integer:true:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143";
+    private static final String V16_TRIGGER_TOPOLOGY_FINGERPRINT =
         "e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b";
+    private static final String V17_TRIGGER_TOPOLOGY_FINGERPRINT =
+        "6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b";
 
     private ExecutorAuthority {
       Objects.requireNonNull(sessionUser, "sessionUser");
@@ -925,6 +985,12 @@ final class PostgresGraphTerminalExecutor {
     }
 
     private ExecutorAuthority requireExact() {
+      String expectedTriggerTopology =
+          switch (schemaVersion) {
+            case 16 -> V16_TRIGGER_TOPOLOGY_FINGERPRINT;
+            case 17 -> V17_TRIGGER_TOPOLOGY_FINGERPRINT;
+            default -> throw new GraphAttemptIntegrityException();
+          };
       if (!sessionUser.equals(currentUser)
           || !login
           || inherit
@@ -944,7 +1010,7 @@ final class PostgresGraphTerminalExecutor {
           || schemaUsageGrantOption
           || schemaCreate
           || relationAuthorities != 0
-          || executableFunctions != 2
+          || executableFunctions != 3
           || !EXACT_FUNCTION_SURFACE.equals(functionSurface)
           || functionOids == null
           || exactFunctionCount != 2
@@ -958,14 +1024,16 @@ final class PostgresGraphTerminalExecutor {
           || functionOwnerRelations != 0
           || functionAclViolations != 0
           || executorFunctionGrants != 2
-          || exactHelperCount != 18
+          || exactHelperCount != 19
           || !EXACT_HELPER_DEFINITION_SURFACE.equals(
               helperDefinitionSurface)
           || helperOwnerCount != 1
           || helperOwnerOid == null
           || !helperOwnerSafe
           || helperAclViolations != 0
-          || helperTerminalGrants != 10
+          || schemaVersionHelperNonOwnerAclCount != 4
+          || !schemaVersionHelperNonOwnerAclSafe
+          || helperTerminalGrants != 11
           || helperPrefixGrants != (prefixRoleExists ? 4 : 0)
           || relationOwnerCount != 1
           || relationOwnerOid == null
@@ -973,7 +1041,7 @@ final class PostgresGraphTerminalExecutor {
           || relationOwnerOid.equals(functionOwnerOid)
           || !relationOwnerOid.equals(helperOwnerOid)
           || !relationOwnerSafe
-          || !EXACT_TRIGGER_TOPOLOGY_FINGERPRINT.equals(
+          || !expectedTriggerTopology.equals(
               triggerTopology)) {
         throw new GraphAttemptIntegrityException();
       }

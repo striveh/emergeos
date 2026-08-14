@@ -293,6 +293,7 @@ let captureIdMatch = 0;
 let outcomeTriggerDispatched = 0;
 let artifact = null;
 let artifactPath = null;
+let approvalScopePreview = null;
 let approvalPostCount = 0;
 let approvalStatus = 0;
 let approvalRequestExact = 1;
@@ -340,6 +341,15 @@ const exactApprovalResponse = async (response, request) => {
       body?.approval?.planId === body?.plan?.planId &&
       body?.approval?.planHash === body?.plan?.planHash &&
       body?.approval?.artifactHash === artifact?.currentHash &&
+      body?.scopeSchema === request.approvedScopeSchema &&
+      body?.scopeHash === request.approvedScopeHash &&
+      body?.approvalPrincipal?.basis === "CONFIGURED_LOCAL_PRINCIPAL" &&
+      body?.provenance?.approvalOrigin === "EXPLICIT_LOCAL_OWNER_INPUT" &&
+      body?.provenance?.executionRoute === "LOCAL_DRAFTBOX_V1" &&
+      body?.artifact?.artifactId === artifact?.artifactId &&
+      body?.artifact?.artifactVersion === artifact?.currentVersion &&
+      body?.artifact?.artifactHash === artifact?.currentHash &&
+      body?.executionState === "NOT_EXECUTED" &&
       body?.capability?.usedCalls === 0 &&
       Array.isArray(body?.transitions) &&
       body.transitions.length === 1 &&
@@ -356,7 +366,7 @@ const exactApprovalResponse = async (response, request) => {
 const syntheticProblemResponse = () => {
   const problem = {
     type: "urn:emergeos:problem:approval-stale",
-    title: "Approval stale",
+    title: "Action approval stale",
     status: 412,
     detail: "The exact approved Artifact is no longer current.",
   };
@@ -389,12 +399,16 @@ const captureActualProblemContract = async (response) => {
   actualProblemNoStore = response.headers.get("cache-control") === "private, no-store" ? 1 : 0;
   try {
     const problem = await response.clone().json();
-    const expectedType =
-      mode === "stale-409"
-        ? "urn:emergeos:problem:409"
-        : "urn:emergeos:problem:action-idempotency-conflict";
+    const expectedStatus = mode === "stale-409" ? 412 : 409;
+    const expectedType = mode === "stale-409"
+      ? "urn:emergeos:problem:approval-stale"
+      : "urn:emergeos:problem:action-idempotency-conflict";
     actualProblemTypeExact =
-      response.status === 409 && problem?.status === 409 && problem?.type === expectedType ? 1 : 0;
+      response.status === expectedStatus &&
+      problem?.status === expectedStatus &&
+      problem?.type === expectedType
+        ? 1
+        : 0;
   } catch (_failure) {
     actualProblemTypeExact = 0;
   }
@@ -427,12 +441,24 @@ const wrappedFetch = async (input, options = {}) => {
     } catch (_failure) {
       approvalRequestExact = 0;
     }
+    const currentApprovalCopy = approvalCopy();
+    const requestScopeExact =
+      request?.approvedScopeSchema === approvalScopePreview?.scopeSchema &&
+      request?.approvedScopeHash === approvalScopePreview?.scopeHash &&
+      currentApprovalCopy.includes(approvalScopePreview?.scopeSchema ?? "") &&
+      currentApprovalCopy.includes(approvalScopePreview?.scopeHash ?? "");
+    if (!requestScopeExact) {
+      cardScopeExact = 0;
+    }
     if (
       !request ||
       Object.keys(request).sort().join(",") !==
-        "approvalNonce,approvedArtifactHash,approvedArtifactVersion" ||
+        "approvalNonce,approvedArtifactHash,approvedArtifactVersion,approvedScopeHash,approvedScopeSchema" ||
       request.approvedArtifactVersion !== artifact?.currentVersion ||
       request.approvedArtifactHash !== artifact?.currentHash ||
+      request.approvedScopeSchema !== "emergeos.action-approval-scope.v1" ||
+      !/^[0-9a-f]{64}$/.test(request.approvedScopeHash ?? "") ||
+      !requestScopeExact ||
       request.approvalNonce !== approvalNonce
     ) {
       approvalRequestExact = 0;
@@ -523,6 +549,16 @@ const wrappedFetch = async (input, options = {}) => {
       // The actual UI must reject an invalid Artifact response.
     }
   }
+  if (
+    /^\/api\/v1\/artifacts\/[^/]+\/action-approval-scope\?/.test(input) &&
+    method === "GET"
+  ) {
+    try {
+      approvalScopePreview = await response.clone().json();
+    } catch (_failure) {
+      approvalScopePreview = null;
+    }
+  }
   return response;
 };
 
@@ -545,6 +581,7 @@ const context = vm.createContext({
   TextDecoder,
   TextEncoder,
   URL,
+  URLSearchParams,
   DOMException,
   Event: MinimalEvent,
   CustomEvent: MinimalCustomEvent,
@@ -610,6 +647,11 @@ const artifactCurrentExact =
     ? 1
     : 0;
 
+await waitFor(
+  () => elements.get("approval-card")?.dataset?.state === "READY",
+  "Approval scope preview did not reach READY",
+);
+
 const approvalElements = () =>
   [...elements.values()].filter((element) => /approval|approve/i.test(element.id));
 const approvalButtons = () =>
@@ -650,9 +692,14 @@ const cardStructureExact =
     ? 1
     : 0;
 const cardTargetRiskExact =
+  approvalScopePreview?.action?.targetRef === "local://drafts" &&
+  approvalScopePreview?.action?.risk === "REVERSIBLE" &&
+  typeof approvalScopePreview?.action?.policyVersion === "string" &&
   readyCopy.includes("Local Draftbox") &&
-  readyCopy.includes("REVERSIBLE") &&
-  readyCopy.includes("可撤销")
+  readyCopy.includes(approvalScopePreview.action.targetRef) &&
+  readyCopy.includes(approvalScopePreview.action.risk) &&
+  readyCopy.includes("可撤销") &&
+  readyCopy.includes(approvalScopePreview.action.policyVersion)
     ? 1
     : 0;
 const cardArtifactExact =
@@ -660,8 +707,27 @@ const cardArtifactExact =
     ? 1
     : 0;
 const cardBoundaryExact =
-  readyCopy.includes("批准只记录授权，尚未执行，不产生Receipt") &&
-  readyCopy.includes("当前为本机单用户原型，未验证真实身份")
+  readyCopy.includes("批准只记录授权") &&
+  readyCopy.includes("尚未执行") &&
+  /不产生\s*Receipt/.test(readyCopy) &&
+  readyCopy.includes("当前为本机单用户原型") &&
+  readyCopy.includes("未验证真实身份")
+    ? 1
+    : 0;
+let cardScopeExact =
+  approvalScopePreview?.scopeSchema === "emergeos.action-approval-scope.v1" &&
+  /^[0-9a-f]{64}$/.test(approvalScopePreview?.scopeHash ?? "") &&
+  readyCopy.includes(approvalScopePreview.scopeSchema) &&
+  readyCopy.includes(approvalScopePreview.scopeHash)
+    ? 1
+    : 0;
+const cardSensitiveRefsHidden =
+  typeof approvalScopePreview?.approvalPrincipal?.configuredPrincipalId === "string" &&
+  approvalScopePreview.approvalPrincipal.configuredPrincipalId.length > 0 &&
+  typeof approvalScopePreview?.capability?.accountRef === "string" &&
+  approvalScopePreview.capability.accountRef.length > 0 &&
+  !readyCopy.includes(approvalScopePreview.approvalPrincipal.configuredPrincipalId) &&
+  !readyCopy.includes(approvalScopePreview.capability.accountRef)
     ? 1
     : 0;
 
@@ -671,20 +737,30 @@ let approvalInvalidated = 0;
 let uuidCallsBeforeApproval = uuidCalls;
 
 const directApproval = async () => {
-  const response = await nativeFetch(new URL(`/api/v1/artifacts/${artifact.artifactId}/action-approvals`, appBaseUrl), {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({
-      approvedArtifactVersion: artifact.currentVersion,
-      approvedArtifactHash: artifact.currentHash,
-      approvalNonce,
-    }),
-  });
-  if (response.status !== 201 || !(await exactApprovalResponse(response, {
+  const preview = await nativeFetch(
+    new URL(
+      `/api/v1/artifacts/${artifact.artifactId}/action-approval-scope?artifactVersion=${artifact.currentVersion}&artifactHash=${artifact.currentHash}`,
+      appBaseUrl,
+    ),
+    { headers: { Accept: "application/json" }, cache: "no-store" },
+  );
+  if (preview.status !== 200) {
+    throw new Error("replay scenario could not preview the exact approval scope");
+  }
+  const scope = await preview.json();
+  const request = {
     approvedArtifactVersion: artifact.currentVersion,
     approvedArtifactHash: artifact.currentHash,
     approvalNonce,
-  }))) {
+    approvedScopeSchema: scope.scopeSchema,
+    approvedScopeHash: scope.scopeHash,
+  };
+  const response = await nativeFetch(new URL(`/api/v1/artifacts/${artifact.artifactId}/action-approvals`, appBaseUrl), {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (response.status !== 201 || !(await exactApprovalResponse(response, request))) {
     throw new Error("replay scenario could not seed one exact PLANNED approval");
   }
 };
@@ -739,6 +815,10 @@ if (trigger) {
             artifactHash: artifact.currentHash,
           }),
         }),
+      );
+      await waitFor(
+        () => elements.get("approval-card")?.dataset?.state === "READY",
+        "revised approval scope preview did not reach READY",
       );
     }
     if (mode === "stale-409") {
@@ -821,6 +901,8 @@ const output = {
   CARD_TARGET_RISK_EXACT: cardTargetRiskExact,
   CARD_ARTIFACT_EXACT: cardArtifactExact,
   CARD_BOUNDARY_EXACT: cardBoundaryExact,
+  CARD_SCOPE_EXACT: cardScopeExact,
+  CARD_SENSITIVE_REFS_HIDDEN: cardSensitiveRefsHidden,
   APPROVAL_CLICK_DISPATCHED: approvalClickDispatched,
   APPROVAL_POST_COUNT: approvalPostCount,
   APPROVAL_REQUEST_EXACT: approvalRequestExact,

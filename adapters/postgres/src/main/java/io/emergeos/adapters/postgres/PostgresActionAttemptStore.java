@@ -2,6 +2,7 @@ package io.emergeos.adapters.postgres;
 
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.domain.ActionAttempt;
+import io.emergeos.core.domain.ActionApprovalScope;
 import io.emergeos.core.domain.ActionAttemptStatus;
 import io.emergeos.core.domain.ActionCapability;
 import io.emergeos.core.domain.ActionPlan;
@@ -163,7 +164,8 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
             SELECT
                 principal_id, attempt_id, connector, account_ref, idempotency_key,
                 action_type, target_ref, artifact_id, artifact_version, artifact_hash,
-                risk, policy_version, capability_audience, capability_max_calls
+                risk, policy_version, capability_audience, capability_max_calls,
+                scope_schema, scope_hash
             FROM action_attempts
             WHERE connector = :connector
               AND account_ref = :accountRef
@@ -264,6 +266,8 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
                   AND a.artifact_hash = :artifactHash
                   AND a.risk = :risk
                   AND a.policy_version = :policyVersion
+                  AND a.approval_origin = :eligibleApprovalOrigin
+                  AND a.execution_route = :eligibleExecutionRoute
                   AND a.plan_expires_at = :expiresAt
                   AND a.capability_id = :capabilityId
                   AND a.capability_subject = :subject
@@ -311,6 +315,8 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
             .param("artifactHash", expected.plan().artifactHash())
             .param("risk", expected.plan().risk().name())
             .param("policyVersion", expected.plan().policyVersion())
+            .param("eligibleApprovalOrigin", ActionApprovalScope.LEGACY_SERVER_IMPLICIT)
+            .param("eligibleExecutionRoute", ActionApprovalScope.SIMULATED_PROVIDER_V1)
             .param("expiresAt", Timestamp.from(expected.plan().expiresAt()))
             .param("capabilityId", expected.capability().capabilityId())
             .param("subject", expected.capability().subject())
@@ -485,6 +491,29 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
             row.capabilityIdempotencyKey(),
             row.capabilityExpiresAt(),
             row.capabilityMaxCalls());
+    ActionApprovalScope scope =
+        new ActionApprovalScope(
+            row.approvalPrincipalBasis(),
+            row.configuredPrincipalId(),
+            row.approvalOrigin(),
+            row.executionRoute(),
+            row.actionType(),
+            row.targetRef(),
+            row.artifactId(),
+            row.artifactVersion(),
+            row.artifactHash(),
+            RiskLevel.valueOf(row.risk()),
+            row.policyVersion(),
+            row.capabilityConnector(),
+            row.capabilityAudience(),
+            row.capabilityAccountRef(),
+            row.scopeCapabilityTtlMicros(),
+            row.capabilityMaxCalls());
+    if (!ActionApprovalScope.SCHEMA.equals(row.scopeSchema())
+        || !scope.scopeHash().equals(row.scopeHash())) {
+      throw new ActionAttemptIntegrityException(
+          "Stored action approval scope cannot be verified");
+    }
     return new ActionAttempt(
         row.attemptId(),
         plan,
@@ -493,7 +522,8 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
         ActionAttemptStatus.valueOf(row.status()),
         row.capabilityUsedCalls(),
         transitions,
-        row.receipt());
+        row.receipt(),
+        scope);
   }
 
   private int insertAttempt(ActionAttempt attempt) {
@@ -513,6 +543,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
                 capability_audience, capability_account_ref,
                 capability_plan_id, capability_plan_hash, capability_artifact_hash,
                 capability_idempotency_key, capability_expires_at,
+                approval_principal_basis, configured_principal_id,
+                approval_origin, execution_route, scope_schema, scope_hash,
+                scope_capability_ttl_micros,
                 created_at, updated_at
             ) VALUES (
                 :principalId, :attemptId, :connector, :accountRef, :idempotencyKey,
@@ -525,6 +558,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
                 :audience, :capabilityAccountRef,
                 :capabilityPlanId, :capabilityPlanHash, :capabilityArtifactHash,
                 :capabilityIdempotencyKey, :capabilityExpiresAt,
+                :approvalPrincipalBasis, :configuredPrincipalId,
+                :approvalOrigin, :executionRoute, :scopeSchema, :scopeHash,
+                :scopeCapabilityTtlMicros,
                 :plannedAt, :plannedAt
             )
             ON CONFLICT DO NOTHING
@@ -557,6 +593,13 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
         .param("capabilityArtifactHash", capability.artifactHash())
         .param("capabilityIdempotencyKey", capability.idempotencyKey())
         .param("capabilityExpiresAt", Timestamp.from(capability.expiresAt()))
+        .param("approvalPrincipalBasis", attempt.approvalScope().principalBasis())
+        .param("configuredPrincipalId", attempt.approvalScope().configuredPrincipalId())
+        .param("approvalOrigin", attempt.approvalScope().approvalOrigin())
+        .param("executionRoute", attempt.approvalScope().executionRoute())
+        .param("scopeSchema", attempt.approvalScope().scopeSchema())
+        .param("scopeHash", attempt.approvalScope().scopeHash())
+        .param("scopeCapabilityTtlMicros", attempt.approvalScope().capabilityTtlMicros())
         .param("plannedAt", Timestamp.from(plannedAt))
         .update();
   }
@@ -629,7 +672,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
         resultSet.getString("risk"),
         resultSet.getString("policy_version"),
         resultSet.getString("capability_audience"),
-        resultSet.getInt("capability_max_calls"));
+        resultSet.getInt("capability_max_calls"),
+        resultSet.getString("scope_schema"),
+        resultSet.getString("scope_hash"));
   }
 
   private static ArtifactHead mapArtifactHead(ResultSet resultSet, int rowNumber)
@@ -684,6 +729,13 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
             resultSet.getString("capability_artifact_hash"),
             resultSet.getString("capability_idempotency_key"),
             resultSet.getTimestamp("capability_expires_at").toInstant(),
+            resultSet.getString("approval_principal_basis"),
+            resultSet.getString("configured_principal_id"),
+            resultSet.getString("approval_origin"),
+            resultSet.getString("execution_route"),
+            resultSet.getString("scope_schema"),
+            resultSet.getString("scope_hash"),
+            resultSet.getLong("scope_capability_ttl_micros"),
             receipt);
     String from = resultSet.getString("transition_from_status");
     ActionTransition transition =
@@ -709,7 +761,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
       String risk,
       String policyVersion,
       String audience,
-      int maxCalls) {
+      int maxCalls,
+      String scopeSchema,
+      String scopeHash) {
 
     private boolean sameSemanticRequest(ActionAttempt proposed) {
       return principalId.equals(proposed.plan().principalId())
@@ -724,7 +778,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
           && risk.equals(proposed.plan().risk().name())
           && policyVersion.equals(proposed.plan().policyVersion())
           && audience.equals(proposed.audience())
-          && maxCalls == proposed.capability().maxCalls();
+          && maxCalls == proposed.capability().maxCalls()
+          && scopeSchema.equals(proposed.approvalScope().scopeSchema())
+          && scopeHash.equals(proposed.approvalScope().scopeHash());
     }
   }
 
@@ -757,6 +813,13 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
       String capabilityArtifactHash,
       String capabilityIdempotencyKey,
       Instant capabilityExpiresAt,
+      String approvalPrincipalBasis,
+      String configuredPrincipalId,
+      String approvalOrigin,
+      String executionRoute,
+      String scopeSchema,
+      String scopeHash,
+      long scopeCapabilityTtlMicros,
       ActionReceipt receipt) {}
 
   private record AttemptReadRow(

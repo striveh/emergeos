@@ -1300,23 +1300,50 @@ class PostgresGraphAttemptStoreTest {
 
     String nonce =
         UUID.randomUUID().toString().replace("-", "");
-    String tableOwner = "v9_table_owner_" + nonce;
-    String terminalOwner = "v9_terminal_owner_" + nonce;
+    String tableOwner = "emergeos_pack010_schema_owner";
+    String terminalOwner = "emergeos_terminal_owner";
     String executorRole = "emergeos_graph_executor";
+    String failureResumerRole = "emergeos_failure_resumer";
+    String providerAttestorRole = "emergeos_provider_attestor";
+    String schemaVersionDecoyRole = "v10_schema_helper_decoy_" + nonce;
     String writerRole = "v9_api_writer_" + nonce;
     String readerRole = "v9_graph_reader_" + nonce;
     String executorPassword = UUID.randomUUID().toString();
+    String failureResumerPassword = UUID.randomUUID().toString();
+    String providerAttestorPassword = UUID.randomUUID().toString();
     String writerPassword = UUID.randomUUID().toString();
     String readerPassword = UUID.randomUUID().toString();
+    String originalFailureGuardDefinition =
+        jdbc.sql(
+                "SELECT pg_catalog.pg_get_functiondef("
+                    + "'public.agent_graph_require_failure_resumer_v12("
+                    + "regprocedure)'::regprocedure)")
+            .query(String.class)
+            .single();
+    String originalExecutorGuardDefinition =
+        jdbc.sql(
+                "SELECT pg_catalog.pg_get_functiondef("
+                    + "'public.agent_graph_require_executor_v10("
+                    + "regprocedure)'::regprocedure)")
+            .query(String.class)
+            .single();
     createNoLoginRole(tableOwner);
     createNoLoginRole(terminalOwner);
     createRuntimeRole(executorRole, executorPassword);
+    createRuntimeRole(failureResumerRole, failureResumerPassword);
+    createRuntimeRole(providerAttestorRole, providerAttestorPassword);
+    createNoLoginRole(schemaVersionDecoyRole);
     createRuntimeRole(writerRole, writerPassword);
     createRestrictedReaderRole(readerRole, readerPassword);
     try {
       transferPublicRelationOwnership(tableOwner);
       provisionV10Authority(
-          tableOwner, terminalOwner, executorRole, writerRole);
+          tableOwner,
+          terminalOwner,
+          executorRole,
+          failureResumerRole,
+          providerAttestorRole,
+          writerRole);
       DataSource executorDataSource =
           dataSource(executorRole, executorPassword);
       DataSource writerDataSource =
@@ -1355,6 +1382,83 @@ class PostgresGraphAttemptStoreTest {
               .param("reader", readerRole)
               .query(Long.class)
               .single());
+      assertEquals(
+          0L,
+          jdbc.sql(
+                  """
+                  SELECT count(*)
+                  FROM pg_catalog.pg_roles role
+                  CROSS JOIN pg_catalog.pg_class relation
+                  JOIN pg_catalog.pg_namespace namespace
+                    ON namespace.oid = relation.relnamespace
+                  WHERE role.rolname IN (
+                    :terminalOwner,
+                    :executor,
+                    :failureResumer,
+                    :providerAttestor)
+                    AND namespace.nspname = 'public'
+                    AND relation.relname = 'flyway_schema_history'
+                    AND (
+                      relation.relowner = role.oid
+                      OR pg_catalog.has_table_privilege(
+                        role.rolname, relation.oid,
+                        'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,'
+                          || 'REFERENCES,TRIGGER,MAINTAIN')
+                      OR pg_catalog.has_any_column_privilege(
+                        role.rolname, relation.oid,
+                        'SELECT,INSERT,UPDATE,REFERENCES'))
+                  """)
+              .param("terminalOwner", terminalOwner)
+              .param("executor", executorRole)
+              .param("failureResumer", failureResumerRole)
+              .param("providerAttestor", providerAttestorRole)
+              .query(Long.class)
+              .single());
+      assertEquals(
+          tableOwner,
+          jdbc.sql(
+                  """
+                  SELECT owner.rolname
+                  FROM pg_catalog.pg_proc procedure
+                  JOIN pg_catalog.pg_roles owner
+                    ON owner.oid = procedure.proowner
+                  WHERE procedure.oid = pg_catalog.to_regprocedure(
+                    'public.emergeos_pack010_schema_version_v1()')
+                    AND procedure.prosecdef
+                    AND pg_catalog.encode(
+                      pg_catalog.sha256(pg_catalog.convert_to(
+                        procedure.prosrc, 'UTF8')), 'hex')
+                      = '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143'
+                  """)
+              .query(String.class)
+              .single());
+      assertEquals(
+          List.of(
+              "emergeos_failure_resumer|EXECUTE|false",
+              "emergeos_graph_executor|EXECUTE|false",
+              "emergeos_provider_attestor|EXECUTE|false",
+              "emergeos_terminal_owner|EXECUTE|false"),
+          jdbc.sql(
+                  """
+                  SELECT COALESCE(grantee.rolname, 'PUBLIC') || '|'
+                         || acl.privilege_type || '|'
+                         || acl.is_grantable::text
+                  FROM pg_catalog.pg_proc procedure
+                  CROSS JOIN LATERAL pg_catalog.aclexplode(
+                    COALESCE(
+                      procedure.proacl,
+                      pg_catalog.acldefault('f', procedure.proowner))) acl
+                  LEFT JOIN pg_catalog.pg_roles grantee
+                    ON grantee.oid = acl.grantee
+                  WHERE procedure.oid = pg_catalog.to_regprocedure(
+                    'public.emergeos_pack010_schema_version_v1()')
+                    AND acl.grantee <> procedure.proowner
+                  ORDER BY COALESCE(grantee.rolname, 'PUBLIC'),
+                           acl.privilege_type,
+                           acl.is_grantable
+                  """)
+              .query(String.class)
+              .list());
       assertEquals(
           terminalOwner,
           jdbc.sql(
@@ -1416,6 +1520,14 @@ class PostgresGraphAttemptStoreTest {
       assertThrows(
           GraphAttemptIntegrityException.class,
           () -> new PostgresGraphTerminalExecutor(writerDataSource));
+      assertEquals(
+          14,
+          assertInstanceOf(
+                  GraphAttemptVerification.Valid.class,
+                  store().findVerified(fixture.manifest()))
+              .snapshot()
+              .cursor()
+              .lastSequence());
 
       String startupChildDefinition =
           jdbc.sql(
@@ -1534,8 +1646,174 @@ class PostgresGraphAttemptStoreTest {
             .update();
       }
 
+      assertGraphExecutorFunctionSurface(executorDataSource);
       PostgresGraphTerminalExecutor executor =
           new PostgresGraphTerminalExecutor(executorDataSource);
+      String schemaVersionHelper =
+          "public.emergeos_pack010_schema_version_v1()";
+
+      jdbc.sql(
+              "GRANT EXECUTE ON FUNCTION "
+                  + schemaVersionHelper
+                  + " TO "
+                  + schemaVersionDecoyRole)
+          .update();
+      try {
+        assertThrows(
+            GraphAttemptIntegrityException.class,
+            () -> new PostgresGraphTerminalExecutor(executorDataSource),
+            "GRAPH_SCHEMA_HELPER_FIFTH_GRANTEE_NOT_REJECTED");
+      } finally {
+        jdbc.sql(
+                "REVOKE EXECUTE ON FUNCTION "
+                    + schemaVersionHelper
+                    + " FROM "
+                    + schemaVersionDecoyRole)
+            .update();
+      }
+
+      jdbc.sql(
+              "GRANT EXECUTE ON FUNCTION "
+                  + schemaVersionHelper
+                  + " TO PUBLIC")
+          .update();
+      try {
+        assertThrows(
+            GraphAttemptIntegrityException.class,
+            () -> new PostgresGraphTerminalExecutor(executorDataSource),
+            "GRAPH_SCHEMA_HELPER_PUBLIC_EXECUTE_NOT_REJECTED");
+      } finally {
+        jdbc.sql(
+                "REVOKE EXECUTE ON FUNCTION "
+                    + schemaVersionHelper
+                    + " FROM PUBLIC")
+            .update();
+      }
+
+      jdbc.sql(
+              "GRANT EXECUTE ON FUNCTION "
+                  + schemaVersionHelper
+                  + " TO "
+                  + providerAttestorRole
+                  + " WITH GRANT OPTION")
+          .update();
+      try {
+        assertThrows(
+            GraphAttemptIntegrityException.class,
+            () -> new PostgresGraphTerminalExecutor(executorDataSource),
+            "GRAPH_SCHEMA_HELPER_GRANT_OPTION_NOT_REJECTED");
+      } finally {
+        jdbc.sql(
+                "REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION "
+                    + schemaVersionHelper
+                    + " FROM "
+                    + providerAttestorRole)
+            .update();
+      }
+
+      jdbc.sql(
+              "REVOKE EXECUTE ON FUNCTION "
+                  + schemaVersionHelper
+                  + " FROM "
+                  + providerAttestorRole)
+          .update();
+      try {
+        assertThrows(
+            GraphAttemptIntegrityException.class,
+            () -> new PostgresGraphTerminalExecutor(executorDataSource),
+            "GRAPH_SCHEMA_HELPER_COUNT_DRIFT_NOT_REJECTED");
+      } finally {
+        jdbc.sql(
+                "GRANT EXECUTE ON FUNCTION "
+                    + schemaVersionHelper
+                    + " TO "
+                    + providerAttestorRole)
+            .update();
+      }
+
+      GraphAttemptSnapshot beforeProviderSwap =
+          assertInstanceOf(
+                  GraphAttemptVerification.Valid.class,
+                  store().findVerified(fixture.manifest()))
+              .snapshot();
+      long eventsBeforeProviderSwap =
+          countForAttempt(
+              "agent_graph_attempt_events", fixture.manifest());
+      AtomicBoolean providerSwapAuthorityRechecked =
+          new AtomicBoolean();
+      AtomicBoolean providerSwapSemanticReturned =
+          new AtomicBoolean();
+      PostgresGraphTerminalExecutor providerSwapGuarded =
+          new PostgresGraphTerminalExecutor(
+              executorDataSource,
+              point -> {
+                if (point
+                    == PostgresGraphTerminalExecutor.ProbePoint
+                        .AFTER_AUTHORITY_RECHECK) {
+                  providerSwapAuthorityRechecked.set(true);
+                }
+                if (point
+                    == PostgresGraphTerminalExecutor.ProbePoint
+                        .AFTER_SEMANTIC_FUNCTION) {
+                  providerSwapSemanticReturned.set(true);
+                }
+              });
+      jdbc.sql(
+              "REVOKE EXECUTE ON FUNCTION "
+                  + schemaVersionHelper
+                  + " FROM "
+                  + providerAttestorRole)
+          .update();
+      jdbc.sql(
+              "GRANT EXECUTE ON FUNCTION "
+                  + schemaVersionHelper
+                  + " TO "
+                  + schemaVersionDecoyRole)
+          .update();
+      try {
+        GraphAttemptIntegrityException providerSwapRejection =
+            assertThrows(
+                GraphAttemptIntegrityException.class,
+                () ->
+                    PostgresGraphTerminalExecutorTestAccess.completeChild(
+                        providerSwapGuarded, childPayload.get()),
+                "GRAPH_SCHEMA_HELPER_PROVIDER_SWAP_NOT_REJECTED");
+        assertEquals(
+            "42501",
+            postgresFailure(providerSwapRejection).getSQLState(),
+            "GRAPH_SCHEMA_HELPER_PROVIDER_SWAP_NOT_REJECTED_BY_EXACT_GUARD");
+        assertTrue(
+            providerSwapAuthorityRechecked.get(),
+            "GRAPH_SCHEMA_HELPER_PROVIDER_SWAP_AUTHORITY_RECHECK_NOT_REACHED");
+        assertFalse(
+            providerSwapSemanticReturned.get(),
+            "GRAPH_SCHEMA_HELPER_PROVIDER_SWAP_SEMANTIC_RETURNED");
+        assertEquals(
+            beforeProviderSwap,
+            assertInstanceOf(
+                    GraphAttemptVerification.Valid.class,
+                    store().findVerified(fixture.manifest()))
+                .snapshot(),
+            "GRAPH_SCHEMA_HELPER_PROVIDER_SWAP_MUTATED_STATE");
+        assertEquals(
+            eventsBeforeProviderSwap,
+            countForAttempt(
+                "agent_graph_attempt_events", fixture.manifest()),
+            "GRAPH_SCHEMA_HELPER_PROVIDER_SWAP_MUTATED_EVENTS");
+      } finally {
+        jdbc.sql(
+                "REVOKE EXECUTE ON FUNCTION "
+                    + schemaVersionHelper
+                    + " FROM "
+                    + schemaVersionDecoyRole)
+            .update();
+        jdbc.sql(
+                "GRANT EXECUTE ON FUNCTION "
+                    + schemaVersionHelper
+                    + " TO "
+                    + providerAttestorRole)
+            .update();
+      }
       String escapedTracePayload =
           jdbc.sql(
                   """
@@ -2118,9 +2396,30 @@ class PostgresGraphAttemptStoreTest {
           .update();
       restoreV10FunctionOwner();
       transferV10HelperFunctionOwnership(POSTGRES.getUsername());
+      jdbc.sql(originalFailureGuardDefinition).update();
+      jdbc.sql(originalExecutorGuardDefinition).update();
+      jdbc.sql(
+              "DROP FUNCTION IF EXISTS "
+                  + "public.emergeos_pack010_schema_version_v1()")
+          .update();
       transferPublicRelationOwnership(POSTGRES.getUsername());
+      jdbc.sql(
+              "REASSIGN OWNED BY "
+                  + terminalOwner
+                  + " TO "
+                  + POSTGRES.getUsername())
+          .update();
+      jdbc.sql(
+              "REASSIGN OWNED BY "
+                  + tableOwner
+                  + " TO "
+                  + POSTGRES.getUsername())
+          .update();
       dropEphemeralRole(readerRole);
       dropEphemeralRole(writerRole);
+      dropEphemeralRole(schemaVersionDecoyRole);
+      dropEphemeralRole(providerAttestorRole);
+      dropEphemeralRole(failureResumerRole);
       dropEphemeralRole(executorRole);
       dropEphemeralRole(terminalOwner);
       dropEphemeralRole(tableOwner);
@@ -7494,10 +7793,44 @@ class PostgresGraphAttemptStoreTest {
         .update();
   }
 
+  private static void assertGraphExecutorFunctionSurface(
+      DataSource executorDataSource) {
+    List<String> effectiveFunctions =
+        JdbcClient.create(executorDataSource)
+            .sql(
+                """
+                SELECT procedure.proname || '('
+                         || pg_catalog.pg_get_function_identity_arguments(
+                           procedure.oid) || ')'
+                FROM pg_catalog.pg_proc procedure
+                JOIN pg_catalog.pg_namespace namespace
+                  ON namespace.oid = procedure.pronamespace
+                WHERE namespace.nspname = 'public'
+                  AND pg_catalog.has_function_privilege(
+                    current_user, procedure.oid, 'EXECUTE')
+                ORDER BY procedure.proname
+                """)
+            .query(String.class)
+            .list();
+    assertEquals(
+        3,
+        effectiveFunctions.size(),
+        "GRAPH_AUTH_PROBE_EFFECTIVE_FUNCTION_COUNT");
+    assertEquals(
+        List.of(
+            "agent_graph_complete_child_v10(payload jsonb)",
+            "agent_graph_complete_parent_and_seal_v10(payload jsonb)",
+            "emergeos_pack010_schema_version_v1()"),
+        effectiveFunctions,
+        "GRAPH_AUTH_PROBE_EFFECTIVE_FUNCTION_SURFACE");
+  }
+
   private static void provisionV10Authority(
       String tableOwner,
       String terminalOwner,
       String executorRole,
+      String failureResumerRole,
+      String providerAttestorRole,
       String writerRole) {
     jdbc.sql(
             "REVOKE TEMPORARY ON DATABASE "
@@ -7513,7 +7846,26 @@ class PostgresGraphAttemptStoreTest {
                 + "IN SCHEMA public TO "
                 + terminalOwner)
         .update();
+    jdbc.sql(
+            "REVOKE ALL ON TABLE public.flyway_schema_history FROM "
+                + terminalOwner)
+        .update();
+    executeExactPack010SchemaVersionAndGuardUpgrade();
     transferV10HelperFunctionOwnership(tableOwner);
+    jdbc.sql(
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC")
+        .update();
+    jdbc.sql(
+            "GRANT EXECUTE ON FUNCTION "
+                + "public.emergeos_pack010_schema_version_v1() TO "
+                + terminalOwner
+                + ", "
+                + executorRole
+                + ", "
+                + failureResumerRole
+                + ", "
+                + providerAttestorRole)
+        .update();
     jdbc.sql(
             "GRANT EXECUTE ON FUNCTION "
                 + "public.agent_graph_run_selector_guard_v10(), "
@@ -7624,7 +7976,8 @@ class PostgresGraphAttemptStoreTest {
                     'agent_graph_run_selector_guard_v10',
                     'agent_graph_terminal_run_valid_v8',
                     'agent_graph_utf16_length_v8',
-                    'agent_worker_graph_guard_v6')
+                    'agent_worker_graph_guard_v6',
+                    'emergeos_pack010_schema_version_v1')
                   AND procedure.proowner <> (
                     SELECT oid FROM pg_catalog.pg_roles
                     WHERE rolname = :owner)
@@ -7634,6 +7987,50 @@ class PostgresGraphAttemptStoreTest {
             .query(String.class)
             .list();
     transfers.forEach(statement -> jdbc.sql(statement).update());
+  }
+
+  private static void executeExactPack010SchemaVersionAndGuardUpgrade() {
+    String startMarker =
+        "CREATE OR REPLACE FUNCTION "
+            + "public.emergeos_pack010_schema_version_v1()";
+    String endMarker = "\nDO $authority$\n";
+    String provisioning;
+    try (var resource =
+        PostgresGraphAttemptStoreTest.class.getResourceAsStream(
+            "/db/provisioning/pack010_runtime_roles.sql")) {
+      if (resource == null) {
+        throw new IllegalStateException(
+            "Pack010 provisioning resource is unavailable");
+      }
+      provisioning =
+          new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+    } catch (java.io.IOException failure) {
+      throw new IllegalStateException(
+          "Pack010 provisioning resource is unreadable", failure);
+    }
+    int start = provisioning.indexOf(startMarker);
+    int end = provisioning.indexOf(endMarker, start);
+    if (start < 0
+        || end <= start
+        || provisioning.indexOf(startMarker, start + 1) >= 0) {
+      throw new IllegalStateException(
+          "Pack010 schema-version authority slice is not exact");
+    }
+    String exactAuthoritySlice = provisioning.substring(start, end);
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
+      connection.setAutoCommit(false);
+      try {
+        statement.execute(exactAuthoritySlice);
+        connection.commit();
+      } catch (java.sql.SQLException failure) {
+        connection.rollback();
+        throw failure;
+      }
+    } catch (java.sql.SQLException failure) {
+      throw new IllegalStateException(
+          "Pack010 schema-version authority slice failed", failure);
+    }
   }
 
   private static void transferPublicRelationOwnership(String owner) {
