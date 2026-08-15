@@ -837,8 +837,8 @@ do not count.
 ### Product-closure delta · 2026-08-15 · Real Local Draftbox
 
 - Status：focused UI/API、PostgreSQL integration、crash/fresh-JVM与late-review P1 focused/combined
-  Gate及post-P1 fresh root Engineering Green；final independent review/release pending；overall
-  Authority / Live Red。
+  Gate、post-P1 fresh root、final independent review及exact code-head CI Engineering Green；Draft PR #7；
+  docs-only head/release pending；overall Authority / Live Red。
 - Receipt：[Real Local Draftbox Engineering Receipt](../operations/build-notes/2026-08-15-real-local-draftbox.md)。
 - `LOCAL_DRAFTBOX_V2`把exact approval与provider route分离；第二个明确手势才在一个PostgreSQL事务内
   形成`ACTIVE` local Draft、`PLANNED → SUCCEEDED`与
@@ -857,8 +857,8 @@ do not count.
   第11个module跳过，终态为`164 XML / 820 tests / 1F + 3E / 0S`。PostgreSQL`188/188`、DB-time
   `6/6`、API `33 + 20`、Crash/Real UI与eval `88/88`局部Green不能覆盖aggregate Red。recovery额度
   耗尽后没有继续重跑；随后先静态修正Pack010 TRUNCATE与Pack009 exact catalog fixture，再开启新的
-  root cycle。当前dirty bytes未stage/commit/push，无新PR/CI，旧Draft PR #6与CI run 31771125144只
-  绑定前一exact approval code head。
+  root cycle。在该pre-release历史时点，这些bytes仍未stage/commit/push且无新PR/CI；旧Draft PR #6与
+  CI run 31771125144只绑定前一exact approval code head。
 - 两个fixture经最小静态修正后，新的root verification cycle一次`11/11 SUCCESS`，耗时`32m02s`，
   fresh aggregate为`175 XML / 904 tests / 0 failures / 0 errors / 0 skipped / 0 flakes`；XML manifest
   为`b43cc1d0e7694a995922e72f52c3fb6cc87c4f9aed839f23fb526d0cc6dd5c8`，12 JAR manifest为
@@ -880,8 +880,20 @@ do not count.
   `bd4ac24ef8a8dcfdae51e6ce62eb39f6b166a76a02421afac40bd34aaaf4ad20`。packaged
   `approval-card.js`与source同为`a1cc455829d0015e873c26889af3eec6a72d104154cdf55448e4f02ff4231f9a`；
   Exact harness source/target同为`be588523917cc656e85ad6ffc48c7d4480f9b7207023dd7b6b5a7f025643eccc`。
-  当前仍未stage/commit/push，无新PR/CI；下一步为final independent review、Receipt freeze、DCO
-  commit/non-force push与code-head CI。
+  final release-candidate independent review独立复现root、manifests及54-file scope，确认无secret、
+  `CLAUDE.md`、production test hook或out-of-scope文件，结论为`GO / P0=0 / P1=0 / P2=0`。
+- DCO code-bearing commit
+  [`195c15683f8ddadcf17ec313771b5e66c4c7ec37`](https://github.com/striveh/emergeos/commit/195c15683f8ddadcf17ec313771b5e66c4c7ec37)
+  （tree `c79110f483434bab2d8983bb850bfecce96c3ab2`）已普通push到
+  `origin/agent/real-local-draftbox-undo`；exact 54-path manifest为
+  `8ed8b20d19f0abdb7a531737300baa5ecb5946c23e2fd433b674a7f4c14d874d`。
+  [Draft PR #7](https://github.com/striveh/emergeos/pull/7)为`OPEN / Draft / CLEAN`，base `main`、
+  head exact `195c156…`；绑定该head的
+  [CI run 31872883333](https://github.com/striveh/emergeos/actions/runs/31872883333)为
+  `completed / success`，job `94984100618`耗时`18m43s`，Maven于`17:59`报告`BUILD SUCCESS`。
+  非阻断Actions v4 Node20/setup-java deprecation warning不是功能失败。
+- 本Receipt docs-only更新在code-bearing commit之后形成；其DCO commit/push会产生新的PR head，必须
+  再等待该head自己的CI。当前Green仅绑定`195c156…`；PR不得转Ready，且无merge/release/deploy。
 - Undo未实现，owner仍需选择A logical undo（推荐）、B isolate retention或C permanent forget；
   ReflectionCandidate与founder dogfood未执行，shipping disabled，无merge/release/deploy。
 
@@ -892,8 +904,9 @@ PostgreSQL and crash/fresh-JVM evidence for one exact provider-free local Draft 
 Receipt. Its two stale V1 assertions and two V18 graph-eval fixture gaps remain recorded as bounded Red
 history; the pre-late-review root cycle was `904/904` Green. A later independent review P1 about misleading
 Undo copy is now focused/combined Green, and the separate post-P1 fresh root is also `904/904` Green. Final
-post-fix review, release and Undo are not complete. Stage 1 remains active because ADR-0004 remains Proposed,
-the real Connector Gate remains blocked,
+post-fix review and the exact code-bearing head CI are Green; Draft PR #7 remains open and Draft, while the
+later Receipt docs-only head still needs its own CI. Release and Undo are not complete. Stage 1 remains active
+because ADR-0004 remains Proposed, the real Connector Gate remains blocked,
 owner must choose Undo semantics, and owner-led Teach-back/transfer/unknown-fault exercises plus founder
 dogfood/Lane B market evidence are incomplete. The older S3/S4 result remains exactly one recoverable
 simulated provider object after durable `UNKNOWN`; the new local Draft result is a database effect, but
