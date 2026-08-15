@@ -953,7 +953,7 @@ final class PostgresGraphTerminalExecutor {
             + "agent_graph_assert_run_row_v7():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:a6af549b056f4719c666fe4cf756fa05bc0ba28e1b2175cffc882c51d7d5b11f,"
             + "agent_graph_authorize_terminal_v8(checked_principal character varying, checked_attempt character, checked_role character varying, checked_run character varying):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:d2bb778b5d916655c4cb5edaa336c3166afc8ace50ad803e428d5ec66a7b64e5,"
             + "agent_graph_head_transition_guard_v8():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:46a2a23112ec62c8eeb573905f096d1c6d30d1e0ba33d2f2c23d5af335001787,"
-            + "agent_graph_require_executor_v10(expected_function regprocedure):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:794a126edf1b5a0812ac7feab6ea2be0acc8e808608c83b069b41bf4c6fb394e,"
+            + "agent_graph_require_executor_v10(expected_function regprocedure):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:d3bbadacfea777b9d0a5e590ab7e068babc9594a2e50fb5600a7c2438b32777a,"
             + "agent_graph_require_executor_v9(expected_function regprocedure):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:de848b7e1dbbee4ade31e6d28d4d654c2ac45cd7bb6ba0a4860413781bea3233,"
             + "agent_graph_require_row_shape_v9(supplied jsonb, expected_relation regclass, supplied_is_array boolean):void:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:55d34c4a2f030d396f2dfbd5a2d6864241156b2b4ba239622bc5a3353b16359d,"
             + "agent_graph_run_selector_guard_v10():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:561eaf8977811117ceb8357bfe002f98ab6eba2c52db38885777552454affb0b,"
@@ -961,11 +961,13 @@ final class PostgresGraphTerminalExecutor {
             + "agent_graph_terminal_run_valid_v8(checked_principal character varying, checked_attempt character, checked_role character varying):boolean:false:s:u:f:false:false:false:sql:search_path=pg_catalog, public, pg_temp:1e6dc7088b526e77d369a725fbefeeb521284413916ad0073a4ed3699bc97db7,"
             + "agent_graph_utf16_length_v8(input text):integer:false:i:u:f:false:true:false:sql:search_path=pg_catalog, public, pg_temp:2767ad759736bcf480b24ffd451ebd04f4e322ba4d2a1c34c2a4c6007a36b4dc,"
             + "agent_worker_graph_guard_v6():trigger:false:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, public, pg_temp:fe1ce19545179e98080d72037fc7f1ef6ce2f0f5b2d0d07eafa2e73e8c4a9ff3,"
-            + "emergeos_pack010_schema_version_v1():integer:true:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143";
+            + "emergeos_pack010_schema_version_v1():integer:true:v:u:f:false:false:false:plpgsql:search_path=pg_catalog, pg_temp:8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3";
     private static final String V16_TRIGGER_TOPOLOGY_FINGERPRINT =
         "e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b";
     private static final String V17_TRIGGER_TOPOLOGY_FINGERPRINT =
         "6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b";
+    private static final String V18_TRIGGER_TOPOLOGY_FINGERPRINT =
+        "0f2cdc12cb4dc587eb0f5bd648fcb3778401b99e1fdd5aa9a0cc4252ba108afb";
 
     private ExecutorAuthority {
       Objects.requireNonNull(sessionUser, "sessionUser");
@@ -989,6 +991,7 @@ final class PostgresGraphTerminalExecutor {
           switch (schemaVersion) {
             case 16 -> V16_TRIGGER_TOPOLOGY_FINGERPRINT;
             case 17 -> V17_TRIGGER_TOPOLOGY_FINGERPRINT;
+            case 18 -> V18_TRIGGER_TOPOLOGY_FINGERPRINT;
             default -> throw new GraphAttemptIntegrityException();
           };
       if (!sessionUser.equals(currentUser)

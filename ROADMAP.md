@@ -33,7 +33,7 @@ S3 回执：[Recoverable local Action Build Note](./docs/operations/build-notes/
 
 S4 回执：[Operating and Gate-Closure Build Note](./docs/operations/build-notes/2026-07-29-s4-operating-gate-closure.md)
 
-当前产品闭环增量：**Exact Local Action Approval Scope focused + root clean + exact code-head CI
+前一产品闭环增量：**Exact Local Action Approval Scope focused + root clean + exact code-head CI
 Engineering Green；overall Authority / Live Red。** DCO commit
 `27da843dcb9deb9ae4008f1812dafd537a748cf3`的
 [Draft PR #6](https://github.com/striveh/emergeos/pull/6)在回执截止时为`Draft / Open / CLEAN`；
@@ -41,9 +41,29 @@ Engineering Green；overall Authority / Live Red。** DCO commit
 `SUCCESS / BUILD SUCCESS`（`24m42s`）。Fresh local root为11/11 reactor、170 XML、893 tests全绿；
 shipping Live仍 disabled，PR未merge/release。该证据绑定上述code-bearing commit/run；后续docs-only
 head不改变它，PR当前check状态以GitHub为准。
-用户可核验并精确批准 current Artifact 的本地草稿计划，
-但结果仍为 `PLANNED / NOT_EXECUTED`，没有 execute、Undo Receipt、真实 provider或用户/商业证据。
 回执：[Exact Local Action Approval Scope Build Note](./docs/operations/build-notes/2026-08-14-s1-exact-local-approval-scope.md)
+
+当前dirty feature worktree的产品闭环增量：**Real Local Draftbox focused、PostgreSQL integration、
+crash/fresh-JVM、late-review P1 focused/combined Gate及post-P1 fresh root Engineering Green；final
+independent review/release pending；overall Authority / Live Red。** 用户现在可在
+exact approval后以第二个明确手势写入provider-free本地Draft，并取得
+`LOCAL_DRAFT_CREATED_V1 / simulated=false` typed Receipt；response loss只允许显式GET恢复，fresh JVM
+返回同一canonical truth，历史`LOCAL_DRAFTBOX_V1`仍fail closed。Undo尚未实现，owner需选择
+A logical undo（推荐）、B isolate retention或C permanent forget；ReflectionCandidate与founder
+dogfood尚未执行。本增量尚未stage/commit/push，没有绑定的新PR/CI，shipping仍disabled，旧PR #6/CI
+不能证明这些dirty bytes，也没有merge/release/deploy。首轮两条stale V1 Acceptance已修复并Green；
+recovery在graph-eval-runner暴露两个V18 test fixture兼容性缺口，以
+`164 XML / 820 tests / 1F + 3E`终止。两个fixture经最小静态修正后，新的root cycle一次完成
+`11/11 reactor / 175 XML / 904 tests / 0`；该结果只绑定late P1修复前的bytes。随后独立终审发现唯一
+P1：READY卡片把`REVERSIBLE`误译为“可撤销”，但Undo尚未实现；outside-in Acceptance以
+`EXACT_LOCAL_APPROVAL_UI_TARGET_RISK_MISSING`精确Red，minimum copy修复后focused Exact与
+PostgreSQL 6 + 三个指定IT的combined Gate均Green。production UI bytes已变化，因此新的post-P1
+`clean verify`另起一次fresh cycle并一次完成`11/11 reactor / 175 XML / 904 tests / 0`；XML/JAR
+manifests分别为`7d0d98716ec45efc85aa5ffb635f12cc0f5500db3218ae226862cd0e6bd4ba95`与
+`bd4ac24ef8a8dcfdae51e6ce62eb39f6b166a76a02421afac40bd34aaaf4ad20`。旧`904/904`仍只作为
+pre-P1历史，不能替代这轮post-P1 evidence。下一步为独立post-fix review、Receipt、DCO
+commit/non-force push与code-head CI；任何Engineering Green都不改变Authority/Live Red。
+回执：[Real Local Draftbox Engineering Receipt](./docs/operations/build-notes/2026-08-15-real-local-draftbox.md)
 
 产品/工程：
 

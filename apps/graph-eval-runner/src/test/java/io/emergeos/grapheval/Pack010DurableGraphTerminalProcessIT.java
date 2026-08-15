@@ -114,7 +114,9 @@ class Pack010DurableGraphTerminalProcessIT {
           "artifact_versions",
           "artifacts",
           "captures",
-          "flyway_schema_history");
+          "flyway_schema_history",
+          "local_draft_creation_receipts",
+          "local_drafts");
 
   @Container
   private static final PostgreSQLContainer POSTGRES =
@@ -687,6 +689,8 @@ class Pack010DurableGraphTerminalProcessIT {
               agent_graph_attributed_failure_outcomes,
               action_attempt_transitions,
               action_receipts,
+              local_draft_creation_receipts,
+              local_drafts,
               action_attempts,
               agent_graph_attempt_terminal_bindings,
               agent_graph_attempt_candidates,

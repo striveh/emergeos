@@ -84,7 +84,9 @@ class Pack009DurableGraphCrashProcessIT {
           "artifact_versions",
           "artifacts",
           "captures",
-          "flyway_schema_history");
+          "flyway_schema_history",
+          "local_draft_creation_receipts",
+          "local_drafts");
 
   @Container
   private static final PostgreSQLContainer POSTGRES =
@@ -451,6 +453,12 @@ class Pack009DurableGraphCrashProcessIT {
       assertEquals(
           0, count(connection, "action_attempt_transitions"));
       assertEquals(0, count(connection, "action_receipts"));
+      assertEquals(
+          0,
+          count(
+              connection,
+              "local_draft_creation_receipts"));
+      assertEquals(0, count(connection, "local_drafts"));
       assertEquals(2, count(connection, "agent_runs"));
       assertEquals(0, count(connection, "agent_trace_events"));
       assertEquals(
@@ -486,7 +494,7 @@ class Pack009DurableGraphCrashProcessIT {
           count(
               connection,
               "agent_graph_attempt_terminal_bindings"));
-      assertEquals(17, count(connection, "flyway_schema_history"));
+      assertEquals(18, count(connection, "flyway_schema_history"));
 
       try (PreparedStatement statement =
           connection.prepareStatement(

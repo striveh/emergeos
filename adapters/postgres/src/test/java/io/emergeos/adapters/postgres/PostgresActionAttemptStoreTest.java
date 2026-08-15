@@ -101,6 +101,7 @@ class PostgresActionAttemptStoreTest {
                 + "agent_graph_attempt_run_bindings, agent_graph_attempts, "
                 + "agent_trace_events, agent_run_resource_bindings, "
                 + "agent_worker_results, agent_runs, "
+                + "local_draft_creation_receipts, local_drafts, "
                 + "action_receipts, action_attempt_transitions, action_attempts, "
                 + "artifact_versions, artifacts, captures")
         .update();
@@ -171,41 +172,41 @@ class PostgresActionAttemptStoreTest {
 
   @Test
   void providerClaimsRejectUnprovenAndExplicitScopesWithoutMutationButAllowLegacy() {
-    ActionAttempt preV17Unknown =
-        persistUnknownWithoutProviderClaim(
+    ActionAttempt preV17Planned =
+        persistPlanned(
             asPreV17Unproven(
                 planned(
-                    "attempt-pre-v17-unknown",
-                    "plan-pre-v17-unknown",
-                    "capability-pre-v17-unknown",
-                    "approval-pre-v17-unknown",
-                    ownArtifact(OWNER, "artifact-pre-v17-unknown"),
-                    "pre-v17-unknown-key",
+                    "attempt-pre-v17-planned",
+                    "plan-pre-v17-planned",
+                    "capability-pre-v17-planned",
+                    "approval-pre-v17-planned",
+                    ownArtifact(OWNER, "artifact-pre-v17-planned"),
+                    "pre-v17-planned-key",
                     CONNECTOR,
                     AUDIENCE,
                     ACCOUNT,
                     NOW)));
     assertEquals(
         ActionApprovalScope.PRE_V17_UNPROVEN,
-        preV17Unknown.approvalScope().approvalOrigin());
+        preV17Planned.approvalScope().approvalOrigin());
     assertEquals(
         ActionApprovalScope.SIMULATED_PROVIDER_V1,
-        preV17Unknown.approvalScope().executionRoute());
-    assertEquals(ActionAttemptStatus.UNKNOWN, preV17Unknown.status());
-    assertEquals(1, preV17Unknown.capabilityUsedCalls());
-    assertNull(preV17Unknown.receipt());
-    ClaimSnapshot preV17Before = claimSnapshot(preV17Unknown.attemptId());
+        preV17Planned.approvalScope().executionRoute());
+    assertEquals(ActionAttemptStatus.PLANNED, preV17Planned.status());
+    assertEquals(0, preV17Planned.capabilityUsedCalls());
+    assertNull(preV17Planned.receipt());
+    ClaimSnapshot preV17Before = claimSnapshot(preV17Planned.attemptId());
 
-    ActionAttemptStore.ClaimResult preV17Reconciliation =
-        store().claimReconciliation(preV17Unknown, NOW.plusSeconds(3));
+    ActionAttemptStore.ClaimResult preV17Dispatch =
+        store().claimDispatch(preV17Planned, NOW.plusSeconds(1));
 
     assertTrue(
-        preV17Reconciliation instanceof ActionAttemptStore.ClaimResult.Rejected,
-        "PRE_V17_UNPROVEN_RECONCILE_CLAIMED");
+        preV17Dispatch instanceof ActionAttemptStore.ClaimResult.Rejected,
+        "PRE_V17_UNPROVEN_DISPATCH_CLAIMED");
     assertEquals(
         preV17Before,
-        claimSnapshot(preV17Unknown.attemptId()),
-        "PRE_V17_UNPROVEN_RECONCILE_MUTATED");
+        claimSnapshot(preV17Planned.attemptId()),
+        "PRE_V17_UNPROVEN_DISPATCH_MUTATED");
 
     ActionAttempt explicitPlanned =
         persistPlanned(
@@ -242,44 +243,6 @@ class PostgresActionAttemptStoreTest {
         explicitPlannedBefore,
         claimSnapshot(explicitPlanned.attemptId()),
         "EXPLICIT_LOCAL_APPROVAL_DISPATCH_MUTATED");
-
-    ActionAttempt explicitUnknown =
-        persistUnknownWithoutProviderClaim(
-            withScope(
-                planned(
-                    "attempt-explicit-unknown",
-                    "plan-explicit-unknown",
-                    "capability-explicit-unknown",
-                    "approval-explicit-unknown",
-                    ownArtifact(OWNER, "artifact-explicit-unknown"),
-                    "explicit-unknown-key",
-                    CONNECTOR,
-                    AUDIENCE,
-                    ACCOUNT,
-                    NOW),
-                ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
-                ActionApprovalScope.LOCAL_DRAFTBOX_V1));
-    assertEquals(
-        ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
-        explicitUnknown.approvalScope().approvalOrigin());
-    assertEquals(
-        ActionApprovalScope.LOCAL_DRAFTBOX_V1,
-        explicitUnknown.approvalScope().executionRoute());
-    assertEquals(ActionAttemptStatus.UNKNOWN, explicitUnknown.status());
-    assertEquals(1, explicitUnknown.capabilityUsedCalls());
-    assertNull(explicitUnknown.receipt());
-    ClaimSnapshot explicitUnknownBefore = claimSnapshot(explicitUnknown.attemptId());
-
-    ActionAttemptStore.ClaimResult explicitReconciliation =
-        store().claimReconciliation(explicitUnknown, NOW.plusSeconds(3));
-
-    assertTrue(
-        explicitReconciliation instanceof ActionAttemptStore.ClaimResult.Rejected,
-        "EXPLICIT_LOCAL_APPROVAL_RECONCILE_CLAIMED");
-    assertEquals(
-        explicitUnknownBefore,
-        claimSnapshot(explicitUnknown.attemptId()),
-        "EXPLICIT_LOCAL_APPROVAL_RECONCILE_MUTATED");
 
     ActionAttempt legacyPlanned =
         persistPlanned(
@@ -397,6 +360,7 @@ class PostgresActionAttemptStoreTest {
             artifact.artifactId(),
             artifact.current().version(),
             artifact.current().contentHash());
+    assertEquals(ActionApprovalScope.LOCAL_DRAFTBOX_V2, preview.executionRoute());
     ActionAttempt planned =
         service
             .planApproval(
@@ -411,7 +375,7 @@ class PostgresActionAttemptStoreTest {
 
     assertEquals(ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT,
         planned.approvalScope().approvalOrigin());
-    assertEquals(ActionApprovalScope.LOCAL_DRAFTBOX_V1,
+    assertEquals(ActionApprovalScope.LOCAL_DRAFTBOX_V2,
         planned.approvalScope().executionRoute());
     assertEquals(preview.scopeHash(), planned.approvalScope().scopeHash());
     assertEquals(
@@ -1160,51 +1124,6 @@ class PostgresActionAttemptStoreTest {
             store().planOrFind(proposed),
             "DIRECT_CLAIM_FIXTURE_PLAN_NOT_PERSISTED")
         .attempt();
-  }
-
-  private static ActionAttempt persistUnknownWithoutProviderClaim(ActionAttempt proposed) {
-    ActionAttempt persisted = persistPlanned(proposed);
-    int transitionsInserted =
-        jdbc.sql(
-                """
-                INSERT INTO action_attempt_transitions (
-                    principal_id, attempt_id, sequence, from_status, to_status,
-                    capability_use_delta, occurred_at
-                ) VALUES
-                    (:principalId, :attemptId, 2, 'PLANNED', 'DISPATCHING', 1, :dispatchAt),
-                    (:principalId, :attemptId, 3, 'DISPATCHING', 'UNKNOWN', 0, :unknownAt)
-                """)
-            .param("principalId", persisted.plan().principalId())
-            .param("attemptId", persisted.attemptId())
-            .param("dispatchAt", java.sql.Timestamp.from(NOW.plusSeconds(1)))
-            .param("unknownAt", java.sql.Timestamp.from(NOW.plusSeconds(2)))
-            .update();
-    assertEquals(
-        2,
-        transitionsInserted,
-        "DIRECT_CLAIM_FIXTURE_UNKNOWN_TRANSITIONS_NOT_PERSISTED");
-    int attemptUpdated =
-        jdbc.sql(
-                """
-                UPDATE action_attempts
-                SET status = 'UNKNOWN',
-                    state_version = 3,
-                    capability_used_calls = 1,
-                    updated_at = :unknownAt
-                WHERE principal_id = :principalId
-                  AND attempt_id = :attemptId
-                  AND status = 'PLANNED'
-                  AND state_version = 1
-                  AND capability_used_calls = 0
-                """)
-            .param("unknownAt", java.sql.Timestamp.from(NOW.plusSeconds(2)))
-            .param("principalId", persisted.plan().principalId())
-            .param("attemptId", persisted.attemptId())
-            .update();
-    assertEquals(1, attemptUpdated, "DIRECT_CLAIM_FIXTURE_UNKNOWN_ATTEMPT_NOT_PERSISTED");
-    return secondStore()
-        .findOwned(persisted.plan().principalId(), persisted.attemptId())
-        .orElseThrow();
   }
 
   private static ClaimSnapshot claimSnapshot(String attemptId) {

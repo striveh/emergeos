@@ -1,12 +1,15 @@
 package io.emergeos.api;
 
 import io.emergeos.core.application.ApproveLocalActionCommand;
+import io.emergeos.core.application.ExecuteLocalDraftCommand;
+import io.emergeos.core.application.LocalDraftboxService;
 import io.emergeos.core.application.PlanLocalApprovalCommand;
 import io.emergeos.core.application.RecoverableActionService;
 import io.emergeos.core.domain.ActionAttempt;
 import io.emergeos.core.domain.ActionApprovalScope;
 import io.emergeos.core.domain.ActionReceipt;
 import io.emergeos.core.domain.ActionTransition;
+import io.emergeos.core.domain.LocalDraftCreationReceipt;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
@@ -24,9 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 class ActionController {
 
   private final RecoverableActionService actions;
+  private final LocalDraftboxService drafts;
 
-  ActionController(RecoverableActionService actions) {
+  ActionController(RecoverableActionService actions, LocalDraftboxService drafts) {
     this.actions = actions;
+    this.drafts = drafts;
   }
 
   @PostMapping("/artifacts/{artifactId}/actions")
@@ -73,12 +78,27 @@ class ActionController {
 
   @GetMapping("/action-approvals/{attemptId}")
   ApprovalActionResponse getApproval(@PathVariable("attemptId") String attemptId) {
-    return ApprovalActionResponse.from(actions.getPlannedExplicitApproval(attemptId));
+    return ApprovalActionResponse.from(actions.getExplicitApproval(attemptId));
+  }
+
+  @PostMapping("/action-approvals/{attemptId}/execute")
+  ResponseEntity<ApprovalActionResponse> executeApproval(
+      @PathVariable("attemptId") String attemptId,
+      @RequestBody ExecuteApprovalRequest request) {
+    LocalDraftboxService.Execution execution =
+        drafts.execute(
+            new ExecuteLocalDraftCommand(
+                attemptId, request.scopeSchema(), request.scopeHash()));
+    ApprovalActionResponse body = ApprovalActionResponse.from(execution.attempt());
+    URI location = URI.create("/api/v1/action-approvals/" + attemptId);
+    return execution.created()
+        ? ResponseEntity.created(location).body(body)
+        : ResponseEntity.ok().location(location).body(body);
   }
 
   @GetMapping("/actions/{attemptId}")
   ActionResponse get(@PathVariable("attemptId") String attemptId) {
-    return ActionResponse.from(actions.get(attemptId));
+    return ActionResponse.from(actions.getSimulatedProviderAction(attemptId));
   }
 
   @PostMapping("/actions/{attemptId}/reconcile")
@@ -103,6 +123,8 @@ class ActionController {
       String approvalNonce,
       String approvedScopeSchema,
       String approvedScopeHash) {}
+
+  record ExecuteApprovalRequest(String scopeSchema, String scopeHash) {}
 
   record ActionResponse(
       String attemptId,
@@ -140,7 +162,8 @@ class ActionController {
       ApprovalResponse approval,
       ApprovalCapabilityResponse capability,
       List<TransitionResponse> transitions,
-      ReceiptResponse receipt,
+      ApprovalReceiptResponse receipt,
+      LocalDraftResponse localDraft,
       String scopeSchema,
       String scopeHash,
       ApprovalPrincipalResponse approvalPrincipal,
@@ -178,14 +201,22 @@ class ActionController {
               attempt.capabilityUsedCalls(),
               attempt.capability().maxCalls()),
           attempt.transitions().stream().map(TransitionResponse::from).toList(),
-          attempt.receipt() == null ? null : ReceiptResponse.from(attempt.receipt()),
+          approvalReceipt(attempt),
+          LocalDraftResponse.from(attempt),
           attempt.approvalScope().scopeSchema(),
           attempt.approvalScope().scopeHash(),
           ApprovalPrincipalResponse.from(attempt.approvalScope()),
           ProvenanceResponse.from(attempt.approvalScope()),
           ApprovalActionDetailResponse.from(attempt.approvalScope()),
           ApprovalArtifactResponse.from(attempt.approvalScope()),
-          "NOT_EXECUTED");
+          attempt.localDraftReceipt() == null ? "NOT_EXECUTED" : "EXECUTED");
+    }
+
+    private static ApprovalReceiptResponse approvalReceipt(ActionAttempt attempt) {
+      if (attempt.localDraftReceipt() != null) {
+        return LocalDraftReceiptResponse.from(attempt.localDraftReceipt());
+      }
+      return attempt.receipt() == null ? null : ReceiptResponse.from(attempt.receipt());
     }
   }
 
@@ -295,6 +326,9 @@ class ActionController {
     }
   }
 
+  sealed interface ApprovalReceiptResponse
+      permits ReceiptResponse, LocalDraftReceiptResponse {}
+
   record ReceiptResponse(
       String receiptId,
       String outcome,
@@ -303,7 +337,7 @@ class ActionController {
       String providerRequestId,
       String rawResponseRef,
       Instant occurredAt,
-      boolean simulated) {
+      boolean simulated) implements ApprovalReceiptResponse {
 
     static ReceiptResponse from(ActionReceipt receipt) {
       return new ReceiptResponse(
@@ -315,6 +349,50 @@ class ActionController {
           receipt.rawResponseRef(),
           receipt.occurredAt(),
           receipt.simulated());
+    }
+  }
+
+  record LocalDraftReceiptResponse(
+      String receiptType,
+      String receiptId,
+      String attemptId,
+      String draftId,
+      String outcome,
+      Instant occurredAt,
+      boolean simulated) implements ApprovalReceiptResponse {
+
+    static LocalDraftReceiptResponse from(LocalDraftCreationReceipt receipt) {
+      return new LocalDraftReceiptResponse(
+          receipt.receiptType(),
+          receipt.receiptId(),
+          receipt.attemptId(),
+          receipt.draftId(),
+          receipt.outcome().name(),
+          receipt.occurredAt(),
+          receipt.simulated());
+    }
+  }
+
+  record LocalDraftResponse(
+      String draftId,
+      String state,
+      String artifactId,
+      int artifactVersion,
+      String artifactHash,
+      Instant createdAt) {
+
+    static LocalDraftResponse from(ActionAttempt attempt) {
+      LocalDraftCreationReceipt receipt = attempt.localDraftReceipt();
+      if (receipt == null) {
+        return null;
+      }
+      return new LocalDraftResponse(
+          receipt.draftId(),
+          "ACTIVE",
+          attempt.plan().artifactId(),
+          attempt.plan().artifactVersion(),
+          attempt.plan().artifactHash(),
+          receipt.occurredAt());
     }
   }
 }

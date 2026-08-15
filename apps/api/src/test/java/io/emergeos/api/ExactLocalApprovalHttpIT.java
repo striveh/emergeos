@@ -598,8 +598,17 @@ class ExactLocalApprovalHttpIT {
         "EXPLICIT_LOCAL_OWNER_INPUT",
         JsonPath.read(response.body(), "$.provenance.approvalOrigin"));
     assertEquals(
-        "LOCAL_DRAFTBOX_V1",
+        "LOCAL_DRAFTBOX_V2",
         JsonPath.read(response.body(), "$.provenance.executionRoute"));
+    assertEquals("local-action-v2", JsonPath.read(response.body(), "$.action.policyVersion"));
+    assertEquals(
+        "emergeos.local-draftbox", JsonPath.read(response.body(), "$.capability.connector"));
+    assertEquals(
+        "emergeos:local-draftbox", JsonPath.read(response.body(), "$.capability.audience"));
+    assertEquals(
+        "local-draftbox:" + expectedActor,
+        JsonPath.read(response.body(), "$.capability.accountRef"));
+    assertEquals(1, number(response.body(), "$.capability.maxCalls"));
     assertEquals(expected.artifactId(), JsonPath.read(response.body(), "$.artifact.artifactId"));
     assertEquals(expected.version(), number(response.body(), "$.artifact.artifactVersion"));
     assertEquals(expected.hash(), JsonPath.read(response.body(), "$.artifact.artifactHash"));
@@ -645,7 +654,7 @@ class ExactLocalApprovalHttpIT {
             OWNER,
             attemptId));
     assertEquals(
-        "LOCAL_DRAFTBOX_V1",
+        "LOCAL_DRAFTBOX_V2",
         queryString(
             "SELECT execution_route FROM action_attempts WHERE principal_id = ? AND attempt_id = ?",
             OWNER,
@@ -740,6 +749,17 @@ class ExactLocalApprovalHttpIT {
     assertPrivateNoStore(response);
     assertEquals(
         "emergeos.action-approval-scope.v1", JsonPath.read(response.body(), "$.scopeSchema"));
+    assertEquals(
+        "LOCAL_DRAFTBOX_V2",
+        JsonPath.read(response.body(), "$.provenance.executionRoute"));
+    assertEquals("local-action-v2", JsonPath.read(response.body(), "$.action.policyVersion"));
+    assertEquals(
+        "emergeos.local-draftbox", JsonPath.read(response.body(), "$.capability.connector"));
+    assertEquals(
+        "emergeos:local-draftbox", JsonPath.read(response.body(), "$.capability.audience"));
+    assertEquals(
+        "local-draftbox:" + OWNER, JsonPath.read(response.body(), "$.capability.accountRef"));
+    assertEquals(1, number(response.body(), "$.capability.maxCalls"));
     String scopeHash = JsonPath.read(response.body(), "$.scopeHash");
     assertTrue(scopeHash.matches("[0-9a-f]{64}"));
     assertEquals(artifact.artifactId(), JsonPath.read(response.body(), "$.artifact.artifactId"));

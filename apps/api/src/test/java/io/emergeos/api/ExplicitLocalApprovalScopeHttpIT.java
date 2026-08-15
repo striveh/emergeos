@@ -161,7 +161,7 @@ class ExplicitLocalApprovalScopeHttpIT {
               approvalRequest(artifact, "explicit-local-approval-scope-stale", exactScope));
       assertApprovalStale(stale);
 
-      assertEquals(1, queryInt("SELECT count(*) FROM action_attempts WHERE approval_origin='EXPLICIT_LOCAL_OWNER_INPUT' AND execution_route='LOCAL_DRAFTBOX_V1' AND status='PLANNED' AND capability_used_calls=0"));
+      assertEquals(1, queryInt("SELECT count(*) FROM action_attempts WHERE approval_origin='EXPLICIT_LOCAL_OWNER_INPUT' AND execution_route='LOCAL_DRAFTBOX_V2' AND status='PLANNED' AND capability_used_calls=0"));
       assertEquals(1, queryInt("SELECT count(*) FROM action_attempt_transitions"));
       assertEquals(0, queryInt("SELECT count(*) FROM action_receipts"));
       assertEquals(exactScope.hash(), queryString("SELECT scope_hash FROM action_attempts WHERE attempt_id=?", attemptId));
@@ -257,13 +257,21 @@ class ExplicitLocalApprovalScopeHttpIT {
     assertEquals("CONFIGURED_LOCAL_PRINCIPAL", JsonPath.read(response.body(), "$.approvalPrincipal.basis"));
     assertEquals(OWNER, JsonPath.read(response.body(), "$.approvalPrincipal.configuredPrincipalId"));
     assertEquals("EXPLICIT_LOCAL_OWNER_INPUT", JsonPath.read(response.body(), "$.provenance.approvalOrigin"));
-    assertEquals("LOCAL_DRAFTBOX_V1", JsonPath.read(response.body(), "$.provenance.executionRoute"));
+    assertEquals("LOCAL_DRAFTBOX_V2", JsonPath.read(response.body(), "$.provenance.executionRoute"));
     assertEquals("CREATE_LOCAL_DRAFT", JsonPath.read(response.body(), "$.action.actionType"));
     assertEquals("local://drafts", JsonPath.read(response.body(), "$.action.targetRef"));
     assertEquals("REVERSIBLE", JsonPath.read(response.body(), "$.action.risk"));
+    assertEquals("local-action-v2", JsonPath.read(response.body(), "$.action.policyVersion"));
     assertEquals(artifact.artifactId(), JsonPath.read(response.body(), "$.artifact.artifactId"));
     assertEquals(artifact.version(), number(response.body(), "$.artifact.artifactVersion"));
     assertEquals(artifact.hash(), JsonPath.read(response.body(), "$.artifact.artifactHash"));
+    assertEquals(
+        "emergeos.local-draftbox", JsonPath.read(response.body(), "$.capability.connector"));
+    assertEquals(
+        "emergeos:local-draftbox", JsonPath.read(response.body(), "$.capability.audience"));
+    assertEquals(
+        "local-draftbox:" + OWNER, JsonPath.read(response.body(), "$.capability.accountRef"));
+    assertEquals(1, number(response.body(), "$.capability.maxCalls"));
     assertEquals(0, number(response.body(), "$.capability.usedCalls"));
     assertEquals("NOT_EXECUTED", JsonPath.read(response.body(), "$.executionState"));
     String hash = JsonPath.read(response.body(), "$.scopeHash");
@@ -323,10 +331,15 @@ class ExplicitLocalApprovalScopeHttpIT {
     assertEquals(scope.schema(), JsonPath.read(json, "$.scopeSchema"));
     assertEquals(scope.hash(), JsonPath.read(json, "$.scopeHash"));
     assertEquals("EXPLICIT_LOCAL_OWNER_INPUT", JsonPath.read(json, "$.provenance.approvalOrigin"));
-    assertEquals("LOCAL_DRAFTBOX_V1", JsonPath.read(json, "$.provenance.executionRoute"));
+    assertEquals("LOCAL_DRAFTBOX_V2", JsonPath.read(json, "$.provenance.executionRoute"));
+    assertEquals("local-action-v2", JsonPath.read(json, "$.action.policyVersion"));
     assertEquals(artifact.artifactId(), JsonPath.read(json, "$.artifact.artifactId"));
     assertEquals(artifact.version(), number(json, "$.artifact.artifactVersion"));
     assertEquals(artifact.hash(), JsonPath.read(json, "$.artifact.artifactHash"));
+    assertEquals("emergeos.local-draftbox", JsonPath.read(json, "$.capability.connector"));
+    assertEquals("emergeos:local-draftbox", JsonPath.read(json, "$.capability.audience"));
+    assertEquals("local-draftbox:" + OWNER, JsonPath.read(json, "$.capability.accountRef"));
+    assertEquals(1, number(json, "$.capability.maxCalls"));
     assertEquals(0, number(json, "$.capability.usedCalls"));
     assertEquals("NOT_EXECUTED", JsonPath.read(json, "$.executionState"));
     assertEquals(1, number(json, "$.transitions.length()"));

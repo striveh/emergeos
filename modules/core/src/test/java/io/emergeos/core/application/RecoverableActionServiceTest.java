@@ -78,17 +78,20 @@ class RecoverableActionServiceTest {
     assertEquals(
         created.attempt(),
         service.getPlannedExplicitApproval(created.attempt().attemptId()));
-    attempts.current =
-        transitioned(
-            created.attempt(),
-            ActionAttemptStatus.DISPATCHING,
-            1,
-            null,
-            NOW.plusSeconds(1));
     assertThrows(
-        java.util.NoSuchElementException.class,
-        () -> service.getPlannedExplicitApproval(created.attempt().attemptId()));
-    attempts.current = created.attempt();
+        IllegalArgumentException.class,
+        () ->
+            transitioned(
+                created.attempt(),
+                ActionAttemptStatus.DISPATCHING,
+                1,
+                null,
+                NOW.plusSeconds(1)));
+    assertEquals(ActionAttemptStatus.PLANNED, attempts.current.status());
+    assertEquals(created.attempt(), attempts.current);
+    assertEquals(
+        created.attempt(),
+        service.getPlannedExplicitApproval(created.attempt().attemptId()));
     assertThrows(
         ApprovalStaleException.class,
         () ->
@@ -180,8 +183,37 @@ class RecoverableActionServiceTest {
                     scope.scopeSchema(),
                     scope.scopeHash()))
             .attempt();
+    ActionApprovalScope legacyProvenScope =
+        new ActionApprovalScope(
+            ActionApprovalScope.CONFIGURED_LOCAL_PRINCIPAL,
+            planned.plan().principalId(),
+            ActionApprovalScope.LEGACY_SERVER_IMPLICIT,
+            ActionApprovalScope.SIMULATED_PROVIDER_V1,
+            planned.plan().actionType(),
+            planned.plan().targetRef(),
+            planned.plan().artifactId(),
+            planned.plan().artifactVersion(),
+            planned.plan().artifactHash(),
+            planned.plan().risk(),
+            planned.plan().policyVersion(),
+            planned.capability().connector(),
+            planned.capability().audience(),
+            planned.capability().accountRef(),
+            planned.approvalScope().capabilityTtlMicros(),
+            planned.capability().maxCalls());
+    ActionAttempt legacyPlanned =
+        new ActionAttempt(
+            planned.attemptId(),
+            planned.plan(),
+            planned.approval(),
+            planned.capability(),
+            planned.status(),
+            planned.capabilityUsedCalls(),
+            planned.transitions(),
+            planned.receipt(),
+            legacyProvenScope);
     ActionAttempt dispatching =
-        transitioned(planned, ActionAttemptStatus.DISPATCHING, 1, null, NOW);
+        transitioned(legacyPlanned, ActionAttemptStatus.DISPATCHING, 1, null, NOW);
     ActionAttempt provenUnknown =
         transitioned(dispatching, ActionAttemptStatus.UNKNOWN, 1, null, NOW);
     ActionAttempt historicalUnknown =

@@ -560,7 +560,7 @@ public final class PostgresProviderValidationAttestor
                                WHEN 'agent_graph_assert_provider_validation_v13'
                                  THEN '49b95c2e4cb9f9de7de818bbe8bcaae196ade855ab179d38a8657dc0ca63521a'
                                WHEN 'emergeos_pack010_schema_version_v1'
-                                 THEN '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143'
+                                 THEN '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3'
                                ELSE NULL
                              END
                              AND procedure.prosecdef =
@@ -880,6 +880,8 @@ public final class PostgresProviderValidationAttestor
                                  THEN 'e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b'
                                WHEN 17
                                  THEN '6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b'
+                               WHEN 18
+                                 THEN '0f2cdc12cb4dc587eb0f5bd648fcb3778401b99e1fdd5aa9a0cc4252ba108afb'
                                ELSE NULL
                              END
                            FROM pg_catalog.pg_trigger trigger

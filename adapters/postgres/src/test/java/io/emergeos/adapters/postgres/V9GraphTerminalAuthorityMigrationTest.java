@@ -41,6 +41,39 @@ class V9GraphTerminalAuthorityMigrationTest {
 
   private static final Instant V8_STARTED =
       Instant.parse("2026-07-31T06:00:00Z");
+  private static final String PACK010_SCHEMA_HELPER_SHA =
+      "8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3";
+  private static final String PACK010_FAILURE_GUARD_SHA =
+      "2ec9d651a84a1db7b414cbe86a2e2f8b13793114bb1e29662783eea03245a3e0";
+  private static final String PACK010_EXECUTOR_GUARD_SHA =
+      "d3bbadacfea777b9d0a5e590ab7e068babc9594a2e50fb5600a7c2438b32777a";
+  private static final String PACK010_HELPER_CLOSURE_SHA =
+      "3711ff2b89dba5b36e564a8a74a5399d80be8d04178434c74503b688e5f49b9f";
+  private static final String PACK010_V16_TRIGGER_TOPOLOGY =
+      "e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b";
+  private static final String PACK010_V17_TRIGGER_TOPOLOGY =
+      "6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b";
+  private static final String PACK010_V18_TRIGGER_TOPOLOGY =
+      "0f2cdc12cb4dc587eb0f5bd648fcb3778401b99e1fdd5aa9a0cc4252ba108afb";
+  private static final String LEGACY_PACK010_SCHEMA_HELPER_SHA =
+      "1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143";
+  private static final String LEGACY_PACK010_FAILURE_GUARD_SHA =
+      "814c2d1a58013749d0441f07411e0065c14acc1d9523bc1ea8d8505218573920";
+  private static final String LEGACY_PACK010_EXECUTOR_GUARD_SHA =
+      "794a126edf1b5a0812ac7feab6ea2be0acc8e808608c83b069b41bf4c6fb394e";
+  private static final List<String> PACK010_RUNTIME_ROLES =
+      List.of(
+          "emergeos_pack010_schema_owner",
+          "emergeos_terminal_owner",
+          "emergeos_graph_executor",
+          "emergeos_failure_resumer",
+          "emergeos_provider_attestor",
+          "emergeos_provider_attestor_v14",
+          "emergeos_provider_attestor_v15",
+          "emergeos_provider_attestor_v16",
+          "emergeos_graph_prefix_writer",
+          "emergeos_graph_reader",
+          "emergeos_exact_overlay_reader_v19");
   private static final List<String> V8_TRUTH_TABLES =
       List.of(
           "agent_graph_attempts",
@@ -524,6 +557,129 @@ class V9GraphTerminalAuthorityMigrationTest {
   }
 
   @Test
+  void pack010SchemaVersionAuthorityAcceptsOnlyExactV16ThroughV18()
+      throws Exception {
+    String nonce = UUID.randomUUID().toString().replace("-", "");
+    String provisioning =
+        resourceText("/db/provisioning/pack010_runtime_roles.sql");
+    String audit =
+        resourceText("/db/provisioning/pack010_runtime_roles_check.sql");
+    JdbcClient clusterAdmin = JdbcClient.create(baseDataSource());
+    Map<Integer, String> databases = new LinkedHashMap<>();
+    Map<Integer, DataSource> dataSources = new LinkedHashMap<>();
+
+    try {
+      for (int version : List.of(16, 17, 18)) {
+        String database = "pack010_v" + version + "_matrix_" + nonce;
+        databases.put(version, database);
+        DataSource dataSource = databaseDataSource(database);
+        dataSources.put(version, dataSource);
+        Flyway flyway = flywayAt(dataSource, version);
+        flyway.migrate();
+        assertEquals(
+            MigrationVersion.fromVersion(String.valueOf(version)),
+            flyway.info().current().getVersion(),
+            "PACK010_SCHEMA_VERSION_MATRIX_MIGRATION_V" + version);
+
+        executeAndCommit(dataSource, provisioning);
+        executeAndCommit(dataSource, provisioning);
+        executeAndCommit(dataSource, audit);
+        assertPack010SchemaAuthority(
+            JdbcClient.create(dataSource),
+            version,
+            expectedTriggerTopology(version),
+            "PACK010_SCHEMA_VERSION_MATRIX_V" + version);
+      }
+
+      DataSource v17DataSource = dataSources.get(17);
+      JdbcClient v17 = JdbcClient.create(v17DataSource);
+      installLegacyV17ProvisionedGuardFixture(v17DataSource);
+      assertEquals(
+          List.of(
+              "agent_graph_require_executor_v10:"
+                  + LEGACY_PACK010_EXECUTOR_GUARD_SHA,
+              "agent_graph_require_failure_resumer_v12:"
+                  + LEGACY_PACK010_FAILURE_GUARD_SHA,
+              "emergeos_pack010_schema_version_v1:"
+                  + LEGACY_PACK010_SCHEMA_HELPER_SHA),
+          pack010AuthorityFunctionHashes(v17),
+          "PACK010_V17_PROVISIONED_GUARD_FIXTURE_NOT_EXACT");
+      executeAndCommit(v17DataSource, provisioning);
+      executeAndCommit(v17DataSource, provisioning);
+      executeAndCommit(v17DataSource, audit);
+      assertPack010SchemaAuthority(
+          v17,
+          17,
+          PACK010_V17_TRIGGER_TOPOLOGY,
+          "PACK010_V17_PROVISIONED_GUARD_UPGRADE_NOT_GREEN");
+
+      DataSource v18DataSource = dataSources.get(18);
+      assertProvisioningRejectedWithoutMutation(
+          v18DataSource,
+          """
+          UPDATE public.flyway_schema_history
+          SET version = '19'
+          WHERE installed_rank = (
+            SELECT max(installed_rank)
+            FROM public.flyway_schema_history
+          )
+          """,
+          provisioning,
+          "PACK010_FUTURE_SCHEMA_NOT_REJECTED");
+      assertProvisioningRejectedWithoutMutation(
+          v18DataSource,
+          """
+          UPDATE public.flyway_schema_history
+          SET success = false
+          WHERE installed_rank = (
+            SELECT max(installed_rank)
+            FROM public.flyway_schema_history
+          )
+          """,
+          provisioning,
+          "PACK010_FAILED_LATEST_NOT_REJECTED");
+      assertProvisioningRejectedWithoutMutation(
+          v18DataSource,
+          "ALTER TABLE public.flyway_schema_history "
+              + "RENAME TO flyway_schema_history_missing_test",
+          provisioning,
+          "PACK010_MISSING_HISTORY_NOT_REJECTED");
+      assertProvisioningRejectedWithoutMutation(
+          v18DataSource,
+          """
+          CREATE OR REPLACE FUNCTION
+            public.emergeos_pack010_schema_version_v1()
+          RETURNS INTEGER
+          LANGUAGE plpgsql
+          VOLATILE
+          PARALLEL UNSAFE
+          SECURITY DEFINER
+          SET search_path = pg_catalog, pg_temp
+          AS $function$
+          BEGIN
+            RETURN 18;
+          END;
+          $function$
+          """,
+          provisioning,
+          "PACK010_HELPER_DRIFT_NOT_REJECTED");
+    } finally {
+      List<String> databaseNames =
+          new java.util.ArrayList<>(databases.values());
+      java.util.Collections.reverse(databaseNames);
+      databaseNames.forEach(database -> dropDatabase(clusterAdmin, database));
+      List<String> roles =
+          new java.util.ArrayList<>(PACK010_RUNTIME_ROLES);
+      java.util.Collections.reverse(roles);
+      for (String role : roles) {
+        if (roleCount(clusterAdmin, List.of(role)) == 1L) {
+          dropRole(clusterAdmin, role);
+        }
+      }
+    }
+  }
+
+  @Test
   void independentProvisioningIsTransactionalIdempotentAndFailsOnDrift()
       throws Exception {
     String database =
@@ -589,13 +745,17 @@ class V9GraphTerminalAuthorityMigrationTest {
               "agent_graph_complete_parent_and_seal_v9:"
                   + "ac438c4b71c8f044c9189b8be35db918",
               "agent_graph_require_executor_v10:"
-                  + "43a27e4878e7af5a5f7d5416e9f2518f",
+                  + "990d8d29e187ffa5f09e76c09ff0818b",
               "agent_graph_require_executor_v9:"
                   + "90f8d826c5a2dbd8851f469322500d36",
+              "agent_graph_require_failure_resumer_v12:"
+                  + "2bcdf5ca7c13d22fe46d0979cc23d4d5",
               "agent_graph_require_row_shape_v9:"
                   + "865db3bb7b9d040e21e7e67fa4592980",
               "agent_graph_run_selector_guard_v10:"
-                  + "19e62fb3f842ec2b3ea3df3a174df34c"),
+                  + "19e62fb3f842ec2b3ea3df3a174df34c",
+              "emergeos_pack010_schema_version_v1:"
+                  + "03d284a2970c2085fbb94c91acde26d2"),
           scoped.sql(
                   """
                   SELECT procedure.proname || ':'
@@ -609,10 +769,12 @@ class V9GraphTerminalAuthorityMigrationTest {
                       'agent_graph_require_row_shape_v9',
                       'agent_graph_require_executor_v9',
                       'agent_graph_require_executor_v10',
+                      'agent_graph_require_failure_resumer_v12',
                       'agent_graph_complete_child_v9',
                       'agent_graph_complete_child_v10',
                       'agent_graph_complete_parent_and_seal_v9',
-                      'agent_graph_complete_parent_and_seal_v10')
+                      'agent_graph_complete_parent_and_seal_v10',
+                      'emergeos_pack010_schema_version_v1')
                   ORDER BY procedure.proname
                   """)
               .query(String.class)
@@ -1050,12 +1212,12 @@ class V9GraphTerminalAuthorityMigrationTest {
                     AND pg_catalog.encode(
                           pg_catalog.sha256(pg_catalog.convert_to(
                             procedure.prosrc, 'UTF8')), 'hex')
-                          = '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143'
+                          = '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3'
                   """)
               .query(Long.class)
               .single());
       assertEquals(
-          17,
+          18,
           scoped.sql(
                   "SELECT public.emergeos_pack010_schema_version_v1()")
               .query(Integer.class)
@@ -1147,6 +1309,347 @@ class V9GraphTerminalAuthorityMigrationTest {
         clusterAdmin.sql("DROP ROLE " + unknownGrantee).update();
       }
     }
+  }
+
+  private static void assertPack010SchemaAuthority(
+      JdbcClient jdbc,
+      int expectedVersion,
+      String expectedTopology,
+      String marker) {
+    assertEquals(
+        expectedVersion,
+        jdbc.sql("SELECT public.emergeos_pack010_schema_version_v1()")
+            .query(Integer.class)
+            .single(),
+        marker + "_HELPER_RESULT");
+    assertEquals(
+        List.of(
+            "agent_graph_require_executor_v10:"
+                + PACK010_EXECUTOR_GUARD_SHA,
+            "agent_graph_require_failure_resumer_v12:"
+                + PACK010_FAILURE_GUARD_SHA,
+            "emergeos_pack010_schema_version_v1:"
+                + PACK010_SCHEMA_HELPER_SHA),
+        pack010AuthorityFunctionHashes(jdbc),
+        marker + "_FUNCTION_HASHES");
+    assertEquals(
+        "19:" + PACK010_HELPER_CLOSURE_SHA,
+        pack010HelperClosure(jdbc),
+        marker + "_HELPER_CLOSURE");
+    assertEquals(
+        List.of(
+            "emergeos_failure_resumer|EXECUTE|false",
+            "emergeos_graph_executor|EXECUTE|false",
+            "emergeos_provider_attestor|EXECUTE|false",
+            "emergeos_terminal_owner|EXECUTE|false"),
+        pack010SchemaHelperAcl(jdbc),
+        marker + "_HELPER_ACL");
+    assertEquals(
+        expectedTopology,
+        pack010TriggerTopology(jdbc),
+        marker + "_FULL_TRIGGER_TOPOLOGY");
+  }
+
+  private static List<String> pack010AuthorityFunctionHashes(
+      JdbcClient jdbc) {
+    return jdbc.sql(
+            """
+            SELECT procedure.proname || ':' || pg_catalog.encode(
+                     pg_catalog.sha256(pg_catalog.convert_to(
+                       procedure.prosrc, 'UTF8')), 'hex')
+            FROM pg_catalog.pg_proc procedure
+            JOIN pg_catalog.pg_namespace namespace
+              ON namespace.oid = procedure.pronamespace
+            WHERE namespace.nspname = 'public'
+              AND procedure.proname IN (
+                'agent_graph_require_executor_v10',
+                'agent_graph_require_failure_resumer_v12',
+                'emergeos_pack010_schema_version_v1')
+            ORDER BY procedure.proname
+            """)
+        .query(String.class)
+        .list();
+  }
+
+  private static String pack010HelperClosure(JdbcClient jdbc) {
+    return jdbc.sql(
+            """
+            SELECT count(*)::text || ':' || pg_catalog.encode(
+                     pg_catalog.sha256(pg_catalog.convert_to(
+                       pg_catalog.string_agg(
+                         procedure.proname || '('
+                           || pg_catalog.pg_get_function_identity_arguments(
+                                procedure.oid)
+                           || ')' || ':'
+                           || pg_catalog.pg_get_function_result(procedure.oid)
+                           || ':' || procedure.prosecdef::text
+                           || ':' || procedure.provolatile::text
+                           || ':' || procedure.proparallel::text
+                           || ':' || procedure.prokind::text
+                           || ':' || procedure.proretset::text
+                           || ':' || procedure.proisstrict::text
+                           || ':' || procedure.proleakproof::text
+                           || ':' || language.lanname
+                           || ':' || pg_catalog.array_to_string(
+                                procedure.proconfig, ';')
+                           || ':' || pg_catalog.encode(
+                                pg_catalog.sha256(pg_catalog.convert_to(
+                                  procedure.prosrc, 'UTF8')), 'hex'),
+                         ',' ORDER BY procedure.proname),
+                       'UTF8')), 'hex')
+            FROM pg_catalog.pg_proc procedure
+            JOIN pg_catalog.pg_namespace namespace
+              ON namespace.oid = procedure.pronamespace
+            JOIN pg_catalog.pg_language language
+              ON language.oid = procedure.prolang
+            WHERE namespace.nspname = 'public'
+              AND procedure.proname IN (
+                'agent_assert_graph_attempt_v7',
+                'agent_assert_graph_attempt_v8',
+                'agent_assert_worker_graph_v6',
+                'agent_graph_assert_failure_terminal_resume_v12',
+                'agent_graph_assert_row_v7',
+                'agent_graph_assert_row_v8',
+                'agent_graph_assert_run_dependency_v8',
+                'agent_graph_assert_run_row_v7',
+                'agent_graph_authorize_terminal_v8',
+                'agent_graph_head_transition_guard_v8',
+                'agent_graph_require_executor_v9',
+                'agent_graph_require_executor_v10',
+                'agent_graph_require_failure_resumer_v12',
+                'agent_graph_require_row_shape_v9',
+                'agent_graph_run_selector_guard_v8',
+                'agent_graph_run_selector_guard_v10',
+                'agent_graph_terminal_run_valid_v8',
+                'agent_graph_utf16_length_v8',
+                'agent_worker_graph_guard_v6')
+            """)
+        .query(String.class)
+        .single();
+  }
+
+  private static List<String> pack010SchemaHelperAcl(JdbcClient jdbc) {
+    return jdbc.sql(
+            """
+            SELECT COALESCE(grantee.rolname, 'PUBLIC') || '|'
+                   || acl.privilege_type || '|'
+                   || acl.is_grantable::text
+            FROM pg_catalog.pg_proc procedure
+            CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE(
+              procedure.proacl,
+              pg_catalog.acldefault('f', procedure.proowner))) acl
+            LEFT JOIN pg_catalog.pg_roles grantee
+              ON grantee.oid = acl.grantee
+            WHERE procedure.oid = pg_catalog.to_regprocedure(
+              'public.emergeos_pack010_schema_version_v1()')
+              AND acl.grantee <> procedure.proowner
+            ORDER BY COALESCE(grantee.rolname, 'PUBLIC'),
+                     acl.privilege_type,
+                     acl.is_grantable
+            """)
+        .query(String.class)
+        .list();
+  }
+
+  private static String pack010TriggerTopology(JdbcClient jdbc) {
+    return jdbc.sql(
+            """
+            SELECT pg_catalog.encode(pg_catalog.sha256(
+                     pg_catalog.convert_to(COALESCE(
+                       pg_catalog.string_agg(pg_catalog.concat_ws('|',
+                         relation.relname,
+                         trigger.tgname,
+                         trigger.tgenabled,
+                         trigger.tgtype::text,
+                         trigger.tgattr::text,
+                         COALESCE(pg_catalog.pg_get_expr(
+                           trigger.tgqual, trigger.tgrelid), ''),
+                         pg_catalog.encode(trigger.tgargs, 'hex'),
+                         (trigger.tgconstraint <> 0)::text,
+                         COALESCE(constraint_row.condeferrable, false)::text,
+                         COALESCE(constraint_row.condeferred, false)::text,
+                         guard.proname || '('
+                           || pg_catalog.pg_get_function_identity_arguments(
+                                guard.oid) || ')'),
+                       ',' ORDER BY relation.relname, trigger.tgname), ''),
+                     'UTF8')), 'hex')
+            FROM pg_catalog.pg_trigger trigger
+            JOIN pg_catalog.pg_class relation
+              ON relation.oid = trigger.tgrelid
+            JOIN pg_catalog.pg_namespace namespace
+              ON namespace.oid = relation.relnamespace
+            JOIN pg_catalog.pg_proc guard
+              ON guard.oid = trigger.tgfoid
+            LEFT JOIN pg_catalog.pg_constraint constraint_row
+              ON constraint_row.oid = trigger.tgconstraint
+            WHERE namespace.nspname = 'public'
+              AND NOT trigger.tgisinternal
+            """)
+        .query(String.class)
+        .single();
+  }
+
+  private static void installLegacyV17ProvisionedGuardFixture(
+      DataSource dataSource) throws SQLException {
+    String fixture =
+        """
+        DO $fixture$
+        DECLARE
+          helper_body TEXT;
+          guard_body TEXT;
+          guard_name NAME;
+          observed_hash TEXT;
+        BEGIN
+          SELECT procedure.prosrc
+          INTO helper_body
+          FROM pg_catalog.pg_proc procedure
+          JOIN pg_catalog.pg_namespace namespace
+            ON namespace.oid = procedure.pronamespace
+          WHERE namespace.nspname = 'public'
+            AND procedure.proname =
+                  'emergeos_pack010_schema_version_v1';
+          helper_body := pg_catalog.replace(
+            helper_body,
+            'NOT IN (''16'', ''17'', ''18'')',
+            'NOT IN (''16'', ''17'')');
+          IF pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+               helper_body, 'UTF8')), 'hex') <>
+               '__OLD_HELPER_SHA__' THEN
+            RAISE EXCEPTION 'legacy V17 helper fixture drifted';
+          END IF;
+          EXECUTE pg_catalog.format(
+            'CREATE OR REPLACE FUNCTION '
+              || 'public.emergeos_pack010_schema_version_v1() '
+              || 'RETURNS INTEGER LANGUAGE plpgsql VOLATILE '
+              || 'PARALLEL UNSAFE SECURITY DEFINER '
+              || 'SET search_path = pg_catalog, pg_temp AS %L',
+            helper_body);
+
+          FOREACH guard_name IN ARRAY ARRAY[
+            'agent_graph_require_failure_resumer_v12',
+            'agent_graph_require_executor_v10']::NAME[] LOOP
+            SELECT procedure.prosrc
+            INTO guard_body
+            FROM pg_catalog.pg_proc procedure
+            JOIN pg_catalog.pg_namespace namespace
+              ON namespace.oid = procedure.pronamespace
+            WHERE namespace.nspname = 'public'
+              AND procedure.proname = guard_name
+              AND pg_catalog.pg_get_function_identity_arguments(
+                    procedure.oid) = 'expected_function regprocedure';
+            guard_body := pg_catalog.replace(
+              guard_body,
+              '__NEW_HELPER_SHA__',
+              '__OLD_HELPER_SHA__');
+            observed_hash := pg_catalog.encode(pg_catalog.sha256(
+              pg_catalog.convert_to(guard_body, 'UTF8')), 'hex');
+            IF observed_hash <> (CASE guard_name
+              WHEN 'agent_graph_require_failure_resumer_v12'
+                THEN '__OLD_FAILURE_SHA__'
+              WHEN 'agent_graph_require_executor_v10'
+                THEN '__OLD_EXECUTOR_SHA__'
+              ELSE NULL
+            END) THEN
+              RAISE EXCEPTION 'legacy V17 guard fixture drifted';
+            END IF;
+            EXECUTE pg_catalog.format(
+              'CREATE OR REPLACE FUNCTION public.%I('
+                || 'expected_function REGPROCEDURE) RETURNS VOID '
+                || 'LANGUAGE plpgsql VOLATILE PARALLEL UNSAFE '
+                || 'SECURITY INVOKER '
+                || 'SET search_path = pg_catalog, pg_temp AS %L',
+              guard_name,
+              guard_body);
+          END LOOP;
+        END;
+        $fixture$;
+        """
+            .replace("__NEW_HELPER_SHA__", PACK010_SCHEMA_HELPER_SHA)
+            .replace("__OLD_HELPER_SHA__", LEGACY_PACK010_SCHEMA_HELPER_SHA)
+            .replace("__OLD_FAILURE_SHA__", LEGACY_PACK010_FAILURE_GUARD_SHA)
+            .replace("__OLD_EXECUTOR_SHA__", LEGACY_PACK010_EXECUTOR_GUARD_SHA);
+    executeAndCommit(dataSource, fixture);
+  }
+
+  private static void assertProvisioningRejectedWithoutMutation(
+      DataSource dataSource,
+      String setup,
+      String provisioning,
+      String marker) throws SQLException {
+    JdbcClient jdbc = JdbcClient.create(dataSource);
+    List<String> historyBefore = history(jdbc);
+    List<String> hashesBefore = pack010AuthorityFunctionHashes(jdbc);
+    List<String> aclBefore = pack010SchemaHelperAcl(jdbc);
+    String topologyBefore = pack010TriggerTopology(jdbc);
+    long rolesBefore = roleCount(jdbc, PACK010_RUNTIME_ROLES);
+
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
+      connection.setAutoCommit(false);
+      try {
+        statement.execute(setup);
+        SQLException rejection =
+            assertThrows(
+                SQLException.class,
+                () -> statement.execute(provisioning),
+                marker);
+        assertEquals("55000", rejection.getSQLState(), marker + "_SQLSTATE");
+      } finally {
+        connection.rollback();
+      }
+    }
+
+    assertEquals(historyBefore, history(jdbc), marker + "_HISTORY_MUTATED");
+    assertEquals(
+        hashesBefore,
+        pack010AuthorityFunctionHashes(jdbc),
+        marker + "_FUNCTIONS_MUTATED");
+    assertEquals(
+        aclBefore,
+        pack010SchemaHelperAcl(jdbc),
+        marker + "_ACL_MUTATED");
+    assertEquals(
+        topologyBefore,
+        pack010TriggerTopology(jdbc),
+        marker + "_TOPOLOGY_MUTATED");
+    assertEquals(
+        rolesBefore,
+        roleCount(jdbc, PACK010_RUNTIME_ROLES),
+        marker + "_ROLES_MUTATED");
+  }
+
+  private static String expectedTriggerTopology(int version) {
+    return switch (version) {
+      case 16 -> PACK010_V16_TRIGGER_TOPOLOGY;
+      case 17 -> PACK010_V17_TRIGGER_TOPOLOGY;
+      case 18 -> PACK010_V18_TRIGGER_TOPOLOGY;
+      default -> throw new IllegalArgumentException(
+          "unsupported Pack010 schema version");
+    };
+  }
+
+  private static String resourceText(String path) throws IOException {
+    try (var resource =
+        V9GraphTerminalAuthorityMigrationTest.class
+            .getResourceAsStream(path)) {
+      if (resource == null) {
+        throw new IOException("missing test resource: " + path);
+      }
+      return new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+    }
+  }
+
+  private static void dropDatabase(JdbcClient admin, String database) {
+    requireSafeRole(database);
+    admin.sql(
+            "SELECT pg_terminate_backend(pid) "
+                + "FROM pg_stat_activity "
+                + "WHERE datname = :database "
+                + "AND pid <> pg_backend_pid()")
+        .param("database", database)
+        .query(Boolean.class)
+        .list();
+    admin.sql("DROP DATABASE IF EXISTS " + database).update();
   }
 
   private static final class AlternatingDataSource

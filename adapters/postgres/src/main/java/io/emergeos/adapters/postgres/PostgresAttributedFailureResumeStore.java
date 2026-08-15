@@ -566,7 +566,7 @@ public final class PostgresAttributedFailureResumeStore {
                                WHEN 'agent_graph_complete_claimed_failure_parent_and_seal_v12'
                                  THEN '8ed2cb0c6fec62169c868097decfa9ddf577b1a0316f6e8f0772bb49af88abb0'
                                WHEN 'emergeos_pack010_schema_version_v1'
-                                 THEN '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143'
+                                 THEN '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3'
                                ELSE NULL
                              END
                              AND owner.rolname = CASE
@@ -646,11 +646,11 @@ public final class PostgresAttributedFailureResumeStore {
                                  procedure.prosrc, 'UTF8')), 'hex') =
                                CASE procedure.proname
                                WHEN 'agent_graph_require_failure_resumer_v12'
-                                 THEN '814c2d1a58013749d0441f07411e0065c14acc1d9523bc1ea8d8505218573920'
+                                 THEN '2ec9d651a84a1db7b414cbe86a2e2f8b13793114bb1e29662783eea03245a3e0'
                                WHEN 'agent_graph_assert_failure_terminal_resume_v12'
                                  THEN 'fdad487040c702df9b58481e30158a96e1564963babd86b9d4a0d8e39bceebc3'
                                WHEN 'agent_graph_require_executor_v10'
-                                 THEN '794a126edf1b5a0812ac7feab6ea2be0acc8e808608c83b069b41bf4c6fb394e'
+                                 THEN 'd3bbadacfea777b9d0a5e590ab7e068babc9594a2e50fb5600a7c2438b32777a'
                                WHEN 'agent_graph_complete_child_v10'
                                  THEN 'db30bd2a5792296ba8659d68d9e665c341b9a841bc0abe319a9c1cbaaea401ae'
                                WHEN 'agent_graph_complete_parent_and_seal_v10'
@@ -702,6 +702,8 @@ public final class PostgresAttributedFailureResumeStore {
                              THEN 'e9caa6b45389c919bb7b71afde34b5443afd0189d63721c99602c2b1772f304b'
                            WHEN 17
                              THEN '6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b'
+                           WHEN 18
+                             THEN '0f2cdc12cb4dc587eb0f5bd648fcb3778401b99e1fdd5aa9a0cc4252ba108afb'
                            ELSE NULL
                          END
                          AS exact

@@ -1428,7 +1428,7 @@ class PostgresGraphAttemptStoreTest {
                     AND pg_catalog.encode(
                       pg_catalog.sha256(pg_catalog.convert_to(
                         procedure.prosrc, 'UTF8')), 'hex')
-                      = '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143'
+                      = '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3'
                   """)
               .query(String.class)
               .single());
@@ -1651,6 +1651,59 @@ class PostgresGraphAttemptStoreTest {
           new PostgresGraphTerminalExecutor(executorDataSource);
       String schemaVersionHelper =
           "public.emergeos_pack010_schema_version_v1()";
+
+      GraphAttemptSnapshot beforeSchemaHelperBodyDrift =
+          assertInstanceOf(
+                  GraphAttemptVerification.Valid.class,
+                  store().findVerified(fixture.manifest()))
+              .snapshot();
+      long eventsBeforeSchemaHelperBodyDrift =
+          countForAttempt(
+              "agent_graph_attempt_events", fixture.manifest());
+      String schemaVersionHelperDefinition =
+          jdbc.sql(
+                  "SELECT pg_catalog.pg_get_functiondef("
+                      + "'public.emergeos_pack010_schema_version_v1()'"
+                      + "::regprocedure)")
+              .query(String.class)
+              .single();
+      jdbc.sql(
+              """
+              CREATE OR REPLACE FUNCTION
+                public.emergeos_pack010_schema_version_v1()
+              RETURNS integer
+              LANGUAGE plpgsql
+              VOLATILE
+              PARALLEL UNSAFE
+              SECURITY DEFINER
+              SET search_path = pg_catalog, pg_temp
+              AS $replacement$
+              BEGIN
+                RETURN 18;
+              END;
+              $replacement$
+              """)
+          .update();
+      try {
+        assertThrows(
+            GraphAttemptIntegrityException.class,
+            () -> new PostgresGraphTerminalExecutor(executorDataSource),
+            "GRAPH_SCHEMA_HELPER_BODY_DRIFT_NOT_REJECTED");
+        assertEquals(
+            beforeSchemaHelperBodyDrift,
+            assertInstanceOf(
+                    GraphAttemptVerification.Valid.class,
+                    store().findVerified(fixture.manifest()))
+                .snapshot(),
+            "GRAPH_SCHEMA_HELPER_BODY_DRIFT_MUTATED_STATE");
+        assertEquals(
+            eventsBeforeSchemaHelperBodyDrift,
+            countForAttempt(
+                "agent_graph_attempt_events", fixture.manifest()),
+            "GRAPH_SCHEMA_HELPER_BODY_DRIFT_MUTATED_EVENTS");
+      } finally {
+        jdbc.sql(schemaVersionHelperDefinition).update();
+      }
 
       jdbc.sql(
               "GRANT EXECUTE ON FUNCTION "
@@ -4095,7 +4148,7 @@ class PostgresGraphAttemptStoreTest {
           authorityCatalog("case-" + mode, "owner-" + mode);
       GraphAttemptManifest manifest = catalog.getFirst();
       long ttlMs =
-          mode.equals("session-intent-expired") ? 3_000 : 30_000;
+          mode.equals("session-intent-expired") ? 10_000 : 30_000;
       ProcessResult result =
           runOwnerAuthorityProcess(
               catalog,
@@ -4112,8 +4165,17 @@ class PostgresGraphAttemptStoreTest {
             result.output().contains("PROVIDER_SESSION_INTENT_DURABLE"),
             result.output());
         assertTrue(
+            result.output().contains("PROVIDER_SESSION_DB_TIME_EXPIRED"),
+            result.output());
+        assertTrue(
             result.output().indexOf("PROVIDER_SESSION_INTENT_DURABLE")
-                < result.output().indexOf("REJECTED owner capability expired"),
+                < result.output().indexOf(
+                    "PROVIDER_SESSION_DB_TIME_EXPIRED"),
+            result.output());
+        assertTrue(
+            result.output().indexOf("PROVIDER_SESSION_DB_TIME_EXPIRED")
+                < result.output().indexOf(
+                    "REJECTED owner capability expired"),
             result.output());
       } else if (mode.equals("kill-during-session-intent")) {
         assertEquals(93, result.exitCode(), result.output());
@@ -7119,15 +7181,48 @@ class PostgresGraphAttemptStoreTest {
         if ("kill-after-egress".equals(args[2])) {
           Runtime.getRuntime().halt(90);
         }
+        if ("session-intent-expired".equals(args[2])
+            || "kill-during-session-intent".equals(args[2])
+            || "kill-after-session-intent".equals(args[2])) {
+          Fixture sessionFixture =
+              terminalFixture(
+                  manifests[0].executionSlotId(),
+                  manifests[0].caseId(),
+                  manifests[0].principalId(),
+                  manifests[0].experiment().repetition());
+          GraphProviderIntent firstRequest =
+              firstProviderIntent(sessionFixture);
+          OwnerTtyGraphAuthority.ProviderSessionIntent sessionIntent =
+              authority.claimProviderSessionIntent(
+                  adopted.get(),
+                  coordinator,
+                  egress,
+                  OwnerTtyGraphAuthority.Pack010Revision.R1,
+                  firstRequest);
+          System.out.println("PROVIDER_SESSION_INTENT_DURABLE");
+          if ("kill-during-session-intent".equals(args[2])) {
+            throw new AssertionError(
+                "provider session insert probe unexpectedly returned");
+          }
+          if ("kill-after-session-intent".equals(args[2])) {
+            Runtime.getRuntime().halt(92);
+          }
+          awaitProviderSessionDatabaseExpiry(source, manifests[0]);
+          System.out.println("PROVIDER_SESSION_DB_TIME_EXPIRED");
+          authority.consumeProviderSessionIntent(
+              sessionIntent,
+              adopted.get(),
+              coordinator,
+              egress);
+          throw new AssertionError(
+              "expired provider session intent unexpectedly consumed");
+        }
         GraphAttemptCoordinator.EgressAuthority wrongEgress =
             unrelatedEgress(
                 new GraphAttemptCoordinator(
                     new PostgresGraphAttemptStore(source)),
                 manifests[0]);
-        if ("provider-session-capability".equals(args[2])
-            || "session-intent-expired".equals(args[2])
-            || "kill-during-session-intent".equals(args[2])
-            || "kill-after-session-intent".equals(args[2])) {
+        if ("provider-session-capability".equals(args[2])) {
           Fixture sessionFixture =
               terminalFixture(
                   manifests[0].executionSlotId(),
@@ -7278,26 +7373,6 @@ class PostgresGraphAttemptStoreTest {
               System.out.println(
                   "PROVIDER_SESSION_REPLAY_REJECTED");
             }
-          } else {
-            OwnerTtyGraphAuthority.ProviderSessionIntent sessionIntent =
-                authority.claimProviderSessionIntent(
-                    adopted.get(),
-                    coordinator,
-                    egress,
-                    OwnerTtyGraphAuthority.Pack010Revision.R1,
-                    firstRequest);
-            System.out.println("PROVIDER_SESSION_INTENT_DURABLE");
-            if ("kill-after-session-intent".equals(args[2])) {
-              Runtime.getRuntime().halt(92);
-            }
-            Thread.sleep(Long.parseLong(args[1]) + 150L);
-            authority.consumeProviderSessionIntent(
-                sessionIntent,
-                adopted.get(),
-                coordinator,
-                egress);
-            throw new AssertionError(
-                "expired provider session intent unexpectedly consumed");
           }
         }
         if ("egress-expired".equals(args[2])) {
@@ -7487,6 +7562,53 @@ class PostgresGraphAttemptStoreTest {
 
     private static Instant postgresPrecisionNow() {
       return Instant.now().truncatedTo(ChronoUnit.MICROS);
+    }
+
+    private static void awaitProviderSessionDatabaseExpiry(
+        PGSimpleDataSource source, GraphAttemptManifest manifest)
+        throws Exception {
+      long deadlineNanos =
+          System.nanoTime() + TimeUnit.SECONDS.toNanos(12);
+      try (Connection connection = source.getConnection();
+          PreparedStatement expiryCheck =
+              connection.prepareStatement(
+                  """
+                  SELECT pg_catalog.clock_timestamp()
+                           >= intent.expires_at AS expired
+                  FROM public.agent_graph_provider_session_intents AS intent
+                  WHERE intent.principal_id = ?
+                    AND intent.attempt_id = ?
+                    AND intent.manifest_hash = ?
+                  """)) {
+        expiryCheck.setString(1, manifest.principalId());
+        expiryCheck.setString(2, manifest.attemptId());
+        expiryCheck.setString(3, manifest.manifestHash());
+        while (true) {
+          boolean expired;
+          try (ResultSet result = expiryCheck.executeQuery()) {
+            if (!result.next()) {
+              throw new AssertionError(
+                  "durable provider session intent was not found");
+            }
+            expired = result.getBoolean("expired");
+            if (result.next()) {
+              throw new AssertionError(
+                  "provider session intent identity was not exact");
+            }
+          }
+          if (expired) {
+            return;
+          }
+          long remainingNanos = deadlineNanos - System.nanoTime();
+          if (remainingNanos <= 0L) {
+            throw new AssertionError(
+                "PostgreSQL provider session expiry wait exceeded bound");
+          }
+          TimeUnit.NANOSECONDS.sleep(
+              Math.min(
+                  TimeUnit.MILLISECONDS.toNanos(50), remainingNanos));
+        }
+      }
     }
 
     private static GraphAttemptCoordinator.EgressAuthority

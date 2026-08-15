@@ -4,6 +4,10 @@
   const SCOPE_SCHEMA = "emergeos.action-approval-scope.v1";
   const MAX_RESPONSE_BYTES = 262144;
   const APPROVAL_TIMEOUT_MILLIS = 10000;
+  const EXECUTION_ROUTE = "LOCAL_DRAFTBOX_V2";
+  const POLICY_VERSION = "local-action-v2";
+  const CONNECTOR = "emergeos.local-draftbox";
+  const AUDIENCE = "emergeos:local-draftbox";
   const HASH_PATTERN = /^[0-9a-f]{64}$/;
   const JSON_MEDIA_TYPE = /^application\/json(?:\s*;|$)/i;
   const PROBLEM_MEDIA_TYPE = /^application\/problem\+json(?:\s*;|$)/i;
@@ -42,7 +46,16 @@
   const boundaryText = document.querySelector("#approval-boundary");
   const submit = document.querySelector("#approval-submit");
   const retry = document.querySelector("#approval-retry");
+  const execute = document.querySelector("#approval-execute");
+  const checkExecution = document.querySelector("#approval-check-execution");
   const status = document.querySelector("#approval-status");
+  const result = document.querySelector("#approval-result");
+  const resultContext = document.querySelector("#approval-result-context");
+  const localDraft = document.querySelector("#approval-local-draft");
+  const draftSummary = document.querySelector("#approval-draft-summary");
+  const receipt = document.querySelector("#approval-receipt");
+  const receiptSummary = document.querySelector("#approval-receipt-summary");
+  const undoBoundary = document.querySelector("#approval-undo-boundary");
 
   if (
     !card ||
@@ -56,7 +69,16 @@
     !boundaryText ||
     !submit ||
     !retry ||
-    !status
+    !execute ||
+    !checkExecution ||
+    !status ||
+    !result ||
+    !resultContext ||
+    !localDraft ||
+    !draftSummary ||
+    !receipt ||
+    !receiptSummary ||
+    !undoBoundary
   ) {
     return;
   }
@@ -64,9 +86,16 @@
   let trustedArtifact = null;
   let trustedScope = null;
   let frozenApproval = null;
+  let plannedExecution = null;
+  let recoverableExecution = null;
+  let recoverableExecutionHistorical = false;
+  let terminalResult = null;
   let requestPending = false;
   let artifactEpoch = 0;
   let requestController = null;
+
+  const hasUnresolvedHistoricalExecution = () =>
+    recoverableExecutionHistorical && recoverableExecution !== null;
 
   const setState = (state, message, alert = false) => {
     card.dataset.state = state;
@@ -81,9 +110,85 @@
 
   const setBusy = (busy) => {
     requestPending = busy;
-    submit.disabled = busy || !trustedArtifact || !trustedScope;
-    retry.disabled = busy || !frozenApproval;
+    submit.disabled =
+      busy ||
+      hasUnresolvedHistoricalExecution() ||
+      !trustedArtifact ||
+      !trustedScope;
+    retry.disabled =
+      busy ||
+      !frozenApproval ||
+      plannedExecution !== null ||
+      card.dataset.state !== "UNKNOWN";
+    execute.disabled =
+      busy ||
+      hasUnresolvedHistoricalExecution() ||
+      !plannedExecution ||
+      card.dataset.state !== "PLANNED";
+    checkExecution.disabled =
+      busy ||
+      !recoverableExecution ||
+      (!recoverableExecutionHistorical && card.dataset.state !== "UNKNOWN");
     card.setAttribute?.("aria-busy", String(busy));
+  };
+
+  const hideExecutionControls = () => {
+    execute.hidden = true;
+    execute.disabled = true;
+    checkExecution.hidden = true;
+    checkExecution.disabled = true;
+  };
+
+  const hideResult = () => {
+    result.hidden = true;
+    result.removeAttribute?.("data-context");
+    resultContext.hidden = true;
+    localDraft.hidden = true;
+    draftSummary.hidden = true;
+    receipt.hidden = true;
+    receiptSummary.hidden = true;
+    undoBoundary.hidden = true;
+    resultContext.textContent = "历史执行结果；不授权当前 Artifact";
+    draftSummary.textContent = "";
+    receiptSummary.textContent = "";
+    if (!draftSummary.parentElement) {
+      localDraft.textContent = "";
+    }
+    if (!receiptSummary.parentElement) {
+      receipt.textContent = "";
+    }
+  };
+
+  const markTerminalResultHistorical = () => {
+    if (!terminalResult) {
+      return;
+    }
+    result.hidden = false;
+    result.setAttribute?.("data-context", "HISTORICAL");
+    resultContext.textContent = "历史执行结果；不授权当前 Artifact";
+    resultContext.hidden = false;
+  };
+
+  const showHistoricalExecutionUnknown = () => {
+    submit.hidden = true;
+    submit.disabled = true;
+    retry.hidden = true;
+    retry.disabled = true;
+    execute.hidden = true;
+    execute.disabled = true;
+    checkExecution.hidden = false;
+    checkExecution.disabled = !recoverableExecution;
+    if (terminalResult) {
+      markTerminalResultHistorical();
+    } else {
+      hideResult();
+    }
+    card.hidden = false;
+    setState(
+      "UNKNOWN",
+      "历史 attempt 的执行结果未知。旧批准已永久禁止再次执行；只能由你明确查询同一 attempt 的持久状态。",
+      true,
+    );
   };
 
   const resetScopeFacts = () => {
@@ -98,23 +203,46 @@
   };
 
   const invalidate = () => {
+    const preserveHistoricalResult = terminalResult !== null;
+    const preserveAmbiguousExecution =
+      hasUnresolvedHistoricalExecution() ||
+      (recoverableExecution !== null &&
+        ["EXECUTING", "UNKNOWN"].includes(card.dataset.state));
     artifactEpoch += 1;
     requestController?.abort?.();
     requestController = null;
     trustedArtifact = null;
     trustedScope = null;
     frozenApproval = null;
+    plannedExecution = null;
     requestPending = false;
+    card.setAttribute?.("aria-busy", "false");
     submit.hidden = true;
     submit.disabled = true;
     retry.hidden = true;
     retry.disabled = true;
+    hideExecutionControls();
+    if (!preserveHistoricalResult) {
+      hideResult();
+    }
     artifactText.textContent = "当前 Artifact 已失效；请重新保存可信版本";
     resetScopeFacts();
     card.hidden = false;
+    if (preserveAmbiguousExecution) {
+      recoverableExecutionHistorical = true;
+      showHistoricalExecutionUnknown();
+      return;
+    }
+    recoverableExecution = null;
+    recoverableExecutionHistorical = false;
+    if (preserveHistoricalResult) {
+      markTerminalResultHistorical();
+    }
     setState(
       "INVALIDATED",
-      "批准卡已失效。请先重新保存 Outcome Canvas，再核对并批准新的精确版本。",
+      preserveHistoricalResult
+        ? "当前 Artifact 已编辑；上次执行的草稿与 Receipt 仅作为历史只读结果，不授权当前版本。"
+        : "批准卡已失效。请先重新保存 Outcome Canvas，再核对并批准新的精确版本。",
       false,
     );
   };
@@ -125,12 +253,6 @@
     value.length <= 200 &&
     !value.includes("\0") &&
     !/[/?#]/.test(value);
-
-  const safeScopeText = (value) =>
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 1000 &&
-    !value.includes("\0");
 
   const hasExactKeys = (value, expected) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -340,21 +462,21 @@
       body.approvalPrincipal.basis !== "CONFIGURED_LOCAL_PRINCIPAL" ||
       !safeIdentifier(body.approvalPrincipal.configuredPrincipalId) ||
       body.provenance.approvalOrigin !== "EXPLICIT_LOCAL_OWNER_INPUT" ||
-      body.provenance.executionRoute !== "LOCAL_DRAFTBOX_V1" ||
+      body.provenance.executionRoute !== EXECUTION_ROUTE ||
       body.action.actionType !== "CREATE_LOCAL_DRAFT" ||
       body.action.targetRef !== "local://drafts" ||
       body.action.risk !== "REVERSIBLE" ||
-      !safeScopeText(body.action.policyVersion) ||
+      body.action.policyVersion !== POLICY_VERSION ||
       body.artifact.artifactId !== artifact.artifactId ||
       body.artifact.artifactVersion !== artifact.artifactVersion ||
       body.artifact.artifactHash !== artifact.artifactHash ||
-      !safeScopeText(body.capability.connector) ||
-      !safeScopeText(body.capability.audience) ||
-      !safeScopeText(body.capability.accountRef) ||
+      body.capability.connector !== CONNECTOR ||
+      body.capability.audience !== AUDIENCE ||
+      body.capability.accountRef !==
+        `local-draftbox:${body.approvalPrincipal.configuredPrincipalId}` ||
       !Number.isSafeInteger(body.capability.capabilityTtlMicros) ||
       body.capability.capabilityTtlMicros < 1 ||
-      !Number.isSafeInteger(body.capability.maxCalls) ||
-      body.capability.maxCalls < 1 ||
+      body.capability.maxCalls !== 1 ||
       body.capability.usedCalls !== 0 ||
       body.executionState !== "NOT_EXECUTED"
     ) {
@@ -375,7 +497,9 @@
     actionText.textContent = scope.action.actionType;
     targetText.textContent = `Local Draftbox · ${scope.action.targetRef}`;
     riskText.textContent =
-      `${scope.action.risk}（可撤销） · Policy ${scope.action.policyVersion}`;
+      terminalResult
+        ? `${scope.action.risk} · Policy ${scope.action.policyVersion}`
+        : `${scope.action.risk}（风险分类；撤销暂未开放） · Policy ${scope.action.policyVersion}`;
     artifactText.textContent =
       `v${artifact.artifactVersion} · SHA-256 ${artifact.artifactHash}`;
     scopeText.textContent = `${scope.scopeSchema} · SHA-256 ${scope.scopeHash}`;
@@ -387,11 +511,20 @@
     trustedArtifact = null;
     trustedScope = null;
     frozenApproval = null;
+    plannedExecution = null;
     resetScopeFacts();
     submit.hidden = true;
     submit.disabled = true;
     retry.hidden = true;
     retry.disabled = true;
+    hideExecutionControls();
+    if (recoverableExecutionHistorical && recoverableExecution) {
+      showHistoricalExecutionUnknown();
+      return;
+    }
+    if (!terminalResult) {
+      hideResult();
+    }
     card.hidden = false;
     const reason =
       kind === "CLIENT_UNAVAILABLE"
@@ -458,11 +591,20 @@
       trustedArtifact = artifact;
       trustedScope = scope;
       frozenApproval = null;
+      plannedExecution = null;
       displayVerifiedScope(artifact, scope);
       card.hidden = false;
-      submit.hidden = false;
+      submit.hidden = hasUnresolvedHistoricalExecution();
+      submit.disabled = hasUnresolvedHistoricalExecution();
       submit.textContent = "记录本次批准";
       retry.hidden = true;
+      hideExecutionControls();
+      if (recoverableExecutionHistorical && recoverableExecution) {
+        checkExecution.hidden = false;
+        if (terminalResult) {
+          markTerminalResultHistorical();
+        }
+      }
       setState("READY", "scope 已在本地复算验证；请核对全部边界后记录精确批准。");
     } catch (failure) {
       if (artifactEpoch !== epoch || requestController !== controller) {
@@ -501,8 +643,13 @@
     trustedArtifact = null;
     trustedScope = null;
     frozenApproval = null;
+    plannedExecution = null;
     requestPending = false;
     card.hidden = true;
+    hideExecutionControls();
+    if (!terminalResult) {
+      hideResult();
+    }
     resetScopeFacts();
     artifactText.textContent =
       `正在验证 v${candidate.artifactVersion} · SHA-256 ${candidate.artifactHash}`;
@@ -559,6 +706,7 @@
         "capability",
         "transitions",
         "receipt",
+        "localDraft",
         "scopeSchema",
         "scopeHash",
         "approvalPrincipal",
@@ -626,6 +774,7 @@
       transition.toStatus === "PLANNED" &&
       validInstant(transition.occurredAt) &&
       body.receipt === null &&
+      body.localDraft === null &&
       body.scopeSchema === scope.scopeSchema &&
       body.scopeHash === scope.scopeHash &&
       samePrincipal(body.approvalPrincipal, scope.approvalPrincipal) &&
@@ -633,6 +782,248 @@
       sameAction(body.action, scope.action) &&
       sameArtifact(body.artifact, scope.artifact) &&
       body.executionState === scope.executionState
+    );
+  };
+
+  const samePlan = (actual, expected) =>
+    hasExactKeys(actual, [
+      "planId",
+      "planHash",
+      "artifactId",
+      "artifactVersion",
+      "artifactHash",
+      "idempotencyKey",
+      "expiresAt",
+    ]) &&
+    actual.planId === expected.planId &&
+    actual.planHash === expected.planHash &&
+    actual.artifactId === expected.artifactId &&
+    actual.artifactVersion === expected.artifactVersion &&
+    actual.artifactHash === expected.artifactHash &&
+    actual.idempotencyKey === expected.idempotencyKey &&
+    actual.expiresAt === expected.expiresAt &&
+    validInstant(actual.expiresAt);
+
+  const sameApproval = (actual, expected) =>
+    hasExactKeys(actual, [
+      "decisionId",
+      "decision",
+      "actor",
+      "decidedAt",
+      "planId",
+      "planHash",
+      "artifactHash",
+    ]) &&
+    actual.decisionId === expected.decisionId &&
+    actual.decision === expected.decision &&
+    actual.actor === expected.actor &&
+    actual.decidedAt === expected.decidedAt &&
+    actual.planId === expected.planId &&
+    actual.planHash === expected.planHash &&
+    actual.artifactHash === expected.artifactHash &&
+    validInstant(actual.decidedAt);
+
+  const sameCapability = (actual, expected, usedCalls) =>
+    hasExactKeys(actual, [
+      "capabilityId",
+      "connector",
+      "audience",
+      "accountRef",
+      "capabilityTtlMicros",
+      "usedCalls",
+      "maxCalls",
+    ]) &&
+    actual.capabilityId === expected.capabilityId &&
+    actual.connector === expected.connector &&
+    actual.audience === expected.audience &&
+    actual.accountRef === expected.accountRef &&
+    actual.capabilityTtlMicros === expected.capabilityTtlMicros &&
+    actual.usedCalls === usedCalls &&
+    actual.maxCalls === expected.maxCalls;
+
+  const sameTransition = (actual, expected) =>
+    hasExactKeys(actual, ["sequence", "fromStatus", "toStatus", "occurredAt"]) &&
+    actual.sequence === expected.sequence &&
+    actual.fromStatus === expected.fromStatus &&
+    actual.toStatus === expected.toStatus &&
+    actual.occurredAt === expected.occurredAt &&
+    validInstant(actual.occurredAt);
+
+  const freezePlannedExecution = (body, attempt) =>
+    Object.freeze({
+      epoch: attempt.epoch,
+      artifact: attempt.artifact,
+      scope: attempt.scope,
+      attemptId: body.attemptId,
+      plan: Object.freeze({ ...body.plan }),
+      approval: Object.freeze({ ...body.approval }),
+      capability: Object.freeze({ ...body.capability }),
+      plannedTransition: Object.freeze({ ...body.transitions[0] }),
+      executeBody: JSON.stringify({
+        scopeSchema: attempt.scope.scopeSchema,
+        scopeHash: attempt.scope.scopeHash,
+      }),
+    });
+
+  const hasBoundApprovalEnvelope = (body, execution) =>
+    hasExactKeys(body, [
+      "attemptId",
+      "status",
+      "plan",
+      "approval",
+      "capability",
+      "transitions",
+      "receipt",
+      "localDraft",
+      "scopeSchema",
+      "scopeHash",
+      "approvalPrincipal",
+      "provenance",
+      "action",
+      "artifact",
+      "executionState",
+    ]) &&
+    body.attemptId === execution.attemptId &&
+    samePlan(body.plan, execution.plan) &&
+    sameApproval(body.approval, execution.approval) &&
+    body.scopeSchema === execution.scope.scopeSchema &&
+    body.scopeHash === execution.scope.scopeHash &&
+    samePrincipal(body.approvalPrincipal, execution.scope.approvalPrincipal) &&
+    sameProvenance(body.provenance, execution.scope.provenance) &&
+    sameAction(body.action, execution.scope.action) &&
+    sameArtifact(body.artifact, execution.scope.artifact);
+
+  const validatePersistedPlanned = (body, execution) =>
+    hasBoundApprovalEnvelope(body, execution) &&
+    body.status === "PLANNED" &&
+    body.executionState === "NOT_EXECUTED" &&
+    sameCapability(body.capability, execution.capability, 0) &&
+    Array.isArray(body.transitions) &&
+    body.transitions.length === 1 &&
+    sameTransition(body.transitions[0], execution.plannedTransition) &&
+    body.receipt === null &&
+    body.localDraft === null;
+
+  const validateTerminalExecution = (body, execution) => {
+    const completed = body?.transitions?.[1];
+    return (
+      hasBoundApprovalEnvelope(body, execution) &&
+      body.status === "SUCCEEDED" &&
+      body.executionState === "EXECUTED" &&
+      sameCapability(body.capability, execution.capability, 1) &&
+      Array.isArray(body.transitions) &&
+      body.transitions.length === 2 &&
+      sameTransition(body.transitions[0], execution.plannedTransition) &&
+      hasExactKeys(completed, ["sequence", "fromStatus", "toStatus", "occurredAt"]) &&
+      completed.sequence === 2 &&
+      completed.fromStatus === "PLANNED" &&
+      completed.toStatus === "SUCCEEDED" &&
+      validInstant(completed.occurredAt) &&
+      hasExactKeys(body.localDraft, [
+        "draftId",
+        "state",
+        "artifactId",
+        "artifactVersion",
+        "artifactHash",
+        "createdAt",
+      ]) &&
+      safeIdentifier(body.localDraft.draftId) &&
+      body.localDraft.state === "ACTIVE" &&
+      body.localDraft.artifactId === execution.artifact.artifactId &&
+      body.localDraft.artifactVersion === execution.artifact.artifactVersion &&
+      body.localDraft.artifactHash === execution.artifact.artifactHash &&
+      validInstant(body.localDraft.createdAt) &&
+      hasExactKeys(body.receipt, [
+        "receiptType",
+        "receiptId",
+        "attemptId",
+        "draftId",
+        "outcome",
+        "occurredAt",
+        "simulated",
+      ]) &&
+      body.receipt.receiptType === "LOCAL_DRAFT_CREATED_V1" &&
+      safeIdentifier(body.receipt.receiptId) &&
+      body.receipt.attemptId === execution.attemptId &&
+      body.receipt.draftId === body.localDraft.draftId &&
+      body.receipt.outcome === "SUCCEEDED" &&
+      validInstant(body.receipt.occurredAt) &&
+      body.receipt.occurredAt === body.localDraft.createdAt &&
+      body.receipt.simulated === false
+    );
+  };
+
+  const setSummaryText = (container, summary, value) => {
+    summary.textContent = value;
+    if (!summary.parentElement) {
+      container.textContent = value;
+    }
+  };
+
+  const hasDifferentCurrentArtifact = (execution) =>
+    trustedArtifact !== null &&
+    (trustedArtifact.artifactId !== execution.artifact.artifactId ||
+      trustedArtifact.artifactVersion !== execution.artifact.artifactVersion ||
+      trustedArtifact.artifactHash !== execution.artifact.artifactHash);
+
+  const renderTerminalExecution = (body, execution) => {
+    const preserveDifferentCurrentArtifact = hasDifferentCurrentArtifact(execution);
+    const historicalResult =
+      recoverableExecutionHistorical || preserveDifferentCurrentArtifact;
+    const draft = Object.freeze({ ...body.localDraft });
+    const durableReceipt = Object.freeze({ ...body.receipt });
+    terminalResult = Object.freeze({
+      draft,
+      receipt: durableReceipt,
+      artifact: execution.artifact,
+    });
+    plannedExecution = null;
+    recoverableExecution = null;
+    recoverableExecutionHistorical = false;
+    if (!preserveDifferentCurrentArtifact) {
+      submit.hidden = true;
+    }
+    retry.hidden = true;
+    hideExecutionControls();
+    result.hidden = false;
+    result.setAttribute?.(
+      "data-context",
+      historicalResult ? "HISTORICAL" : "CURRENT",
+    );
+    resultContext.hidden = !historicalResult;
+    localDraft.hidden = false;
+    draftSummary.hidden = false;
+    receipt.hidden = false;
+    receiptSummary.hidden = false;
+    undoBoundary.hidden = false;
+    setSummaryText(
+      localDraft,
+      draftSummary,
+      `本地草稿已创建 · 状态 ${draft.state} · Draft ID ${draft.draftId} · Artifact v${draft.artifactVersion} · SHA-256 ${draft.artifactHash}`,
+    );
+    setSummaryText(
+      receipt,
+      receiptSummary,
+      `Receipt ${durableReceipt.receiptType} · Receipt ID ${durableReceipt.receiptId} · Attempt ID ${durableReceipt.attemptId} · Draft ID ${durableReceipt.draftId} · Outcome ${durableReceipt.outcome} · simulated=false`,
+    );
+    if (historicalResult) {
+      markTerminalResultHistorical();
+    }
+    if (preserveDifferentCurrentArtifact) {
+      riskText.textContent =
+        `${trustedScope.action.risk} · Policy ${trustedScope.action.policyVersion}`;
+      submit.hidden = false;
+      submit.disabled =
+        requestPending || !trustedArtifact || !trustedScope;
+      return;
+    }
+    riskText.textContent =
+      `${execution.scope.action.risk} · Policy ${execution.scope.action.policyVersion}`;
+    boundaryText.textContent =
+      "已执行精确批准；下方仅展示本地草稿与独立 Receipt 的安全摘要。";
+    setState(
+      "SUCCEEDED",
+      "持久化结果已核验 · 状态 SUCCEEDED · executionState EXECUTED。",
     );
   };
 
@@ -663,9 +1054,15 @@
   };
 
   const showUnknown = (kind = "TRANSPORT_UNKNOWN") => {
+    if (hasUnresolvedHistoricalExecution()) {
+      showHistoricalExecutionUnknown();
+      return;
+    }
+    plannedExecution = null;
     submit.hidden = true;
     retry.hidden = false;
     retry.disabled = false;
+    hideExecutionControls();
     const reason =
       kind === "INVALID_RESPONSE"
         ? "服务端回执或错误响应不满足可信协议，"
@@ -716,7 +1113,8 @@
     setBusy(true);
     submit.hidden = true;
     retry.hidden = true;
-    setState("SUBMITTING", "正在记录精确批准；尚未执行，也尚无 Receipt。");
+    hideExecutionControls();
+    setState("APPROVING", "正在记录精确批准；尚未执行，也尚无 Receipt。");
     try {
       timeoutId = globalThis.setTimeout(() => controller.abort(), APPROVAL_TIMEOUT_MILLIS);
       const response = await fetch(
@@ -744,8 +1142,10 @@
           trustedArtifact = null;
           trustedScope = null;
           frozenApproval = null;
+          plannedExecution = null;
           submit.disabled = true;
           retry.hidden = true;
+          hideExecutionControls();
           artifactText.textContent = "服务端 Artifact 或批准 scope 已变化；原批准已失效";
           setState(
             "STALE",
@@ -764,8 +1164,11 @@
       if (!validateApprovalReceipt(response, body, attempt)) {
         throw invalidResponse("APPROVAL_RECEIPT_INVALID");
       }
+      plannedExecution = freezePlannedExecution(body, attempt);
       submit.hidden = true;
       retry.hidden = true;
+      execute.hidden = false;
+      checkExecution.hidden = true;
       setState(
         "PLANNED",
         "批准已记录 · 状态 PLANNED · executionState NOT_EXECUTED · Receipt：无。",
@@ -793,14 +1196,303 @@
         if (card.dataset.state === "PLANNED") {
           submit.disabled = true;
           retry.disabled = true;
+          execute.disabled = false;
         }
+      }
+    }
+  };
+
+  const executionStillCurrent = (execution) =>
+    plannedExecution === execution &&
+    artifactEpoch === execution.epoch &&
+    trustedArtifact === execution.artifact &&
+    trustedScope === execution.scope;
+
+  const showExecutionUnknown = (kind = "TRANSPORT_UNKNOWN") => {
+    submit.hidden = true;
+    retry.hidden = true;
+    execute.hidden = true;
+    execute.disabled = true;
+    checkExecution.hidden = false;
+    checkExecution.disabled = requestPending || !recoverableExecution;
+    const reason =
+      kind === "INVALID_RESPONSE"
+        ? "服务端执行回执不满足可信协议，"
+        : kind === "CLIENT_UNAVAILABLE"
+          ? "当前浏览器缺少安全超时能力，执行请求没有发出，"
+          : "执行请求超时、连接中断或响应丢失，";
+    setState(
+      "UNKNOWN",
+      `${reason}执行结果未知。页面不会自动 POST 或重试；只能由你明确查询同一 attempt 的持久状态。`,
+      true,
+    );
+  };
+
+  const showExecutionStale = () => {
+    trustedArtifact = null;
+    trustedScope = null;
+    frozenApproval = null;
+    plannedExecution = null;
+    recoverableExecution = null;
+    recoverableExecutionHistorical = false;
+    submit.hidden = true;
+    retry.hidden = true;
+    hideExecutionControls();
+    artifactText.textContent = "服务端 Artifact 或执行 scope 已变化；原批准已失效";
+    setState(
+      "STALE",
+      "精确版本或执行 scope 已变化，原批准已失效。没有写入本地草稿，也没有产生本次 Receipt。",
+      true,
+    );
+  };
+
+  const showPersistedPlanned = (execution) => {
+    if (
+      recoverableExecution !== execution ||
+      recoverableExecutionHistorical
+    ) {
+      showHistoricalExecutionUnknown();
+      return;
+    }
+    if (!executionStillCurrent(execution)) {
+      invalidate();
+      return;
+    }
+    submit.hidden = true;
+    retry.hidden = true;
+    checkExecution.hidden = true;
+    checkExecution.disabled = true;
+    execute.hidden = false;
+    execute.disabled = requestPending;
+    setState(
+      "PLANNED",
+      "持久状态仍为 PLANNED · executionState NOT_EXECUTED · Receipt：无。只有新的明确执行手势才会写入本地草稿。",
+    );
+  };
+
+  const executePlannedApproval = async (execution) => {
+    if (
+      requestPending ||
+      card.dataset.state !== "PLANNED" ||
+      !executionStillCurrent(execution)
+    ) {
+      return;
+    }
+
+    const AbortControllerConstructor = globalThis.AbortController;
+    if (
+      typeof AbortControllerConstructor !== "function" ||
+      typeof globalThis.fetch !== "function" ||
+      typeof globalThis.setTimeout !== "function" ||
+      typeof globalThis.clearTimeout !== "function"
+    ) {
+      showExecutionUnknown("CLIENT_UNAVAILABLE");
+      return;
+    }
+
+    const controller = new AbortControllerConstructor();
+    requestController = controller;
+    recoverableExecution = execution;
+    recoverableExecutionHistorical = false;
+    let timeoutId = null;
+    setBusy(true);
+    execute.hidden = true;
+    checkExecution.hidden = true;
+    setState(
+      "EXECUTING",
+      "正在执行这一次精确批准；在可信终态回执到达前不会宣称成功。",
+    );
+    try {
+      timeoutId = globalThis.setTimeout(() => controller.abort(), APPROVAL_TIMEOUT_MILLIS);
+      const path =
+        `/api/v1/action-approvals/${encodeURIComponent(execution.attemptId)}`;
+      const response = await fetch(`${path}/execute`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: execution.executeBody,
+        signal: controller.signal,
+        credentials: "same-origin",
+        cache: "no-store",
+        redirect: "error",
+      });
+      if (!executionStillCurrent(execution) || requestController !== controller) {
+        await cancelResponseBody(response);
+        return;
+      }
+      if (response.status === 409 || response.status === 412) {
+        const problem = await readStrictProblem(response);
+        if (problem.stale) {
+          showExecutionStale();
+          return;
+        }
+        throw invalidResponse("EXECUTION_CONFLICT_NOT_PROVEN_STALE");
+      }
+      if (
+        ![200, 201].includes(response.status) ||
+        response.headers.get("cache-control") !== "private, no-store" ||
+        response.headers.get("location") !== path
+      ) {
+        await cancelResponseBody(response);
+        throw invalidResponse("EXECUTION_RESPONSE_HEADERS_INVALID");
+      }
+      const body = await readBoundedJson(response, JSON_MEDIA_TYPE);
+      if (!validateTerminalExecution(body, execution)) {
+        throw invalidResponse("EXECUTION_RESPONSE_BINDING_INVALID");
+      }
+      renderTerminalExecution(body, execution);
+    } catch (failure) {
+      if (
+        artifactEpoch !== execution.epoch ||
+        requestController !== controller ||
+        plannedExecution !== execution
+      ) {
+        return;
+      }
+      const typedFailure =
+        failure instanceof ApprovalClientError
+          ? failure
+          : transportUnknown(
+              controller.signal.aborted
+                ? "EXECUTION_TIMEOUT_OR_ABORT"
+                : "EXECUTION_TRANSPORT_UNKNOWN",
+            );
+      showExecutionUnknown(typedFailure.kind);
+    } finally {
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+      if (requestController === controller) {
+        requestController = null;
+        setBusy(false);
+      }
+    }
+  };
+
+  const recoverExecution = async (execution) => {
+    const preserveDifferentCurrentArtifact =
+      recoverableExecutionHistorical && hasDifferentCurrentArtifact(execution);
+    if (
+      requestPending ||
+      recoverableExecution !== execution ||
+      (!recoverableExecutionHistorical && card.dataset.state !== "UNKNOWN")
+    ) {
+      return;
+    }
+
+    const AbortControllerConstructor = globalThis.AbortController;
+    if (
+      typeof AbortControllerConstructor !== "function" ||
+      typeof globalThis.fetch !== "function" ||
+      typeof globalThis.setTimeout !== "function" ||
+      typeof globalThis.clearTimeout !== "function"
+    ) {
+      if (recoverableExecutionHistorical) {
+        showHistoricalExecutionUnknown();
+      } else {
+        showExecutionUnknown("CLIENT_UNAVAILABLE");
+      }
+      return;
+    }
+
+    const controller = new AbortControllerConstructor();
+    requestController = controller;
+    let timeoutId = null;
+    setBusy(true);
+    checkExecution.disabled = true;
+    if (!preserveDifferentCurrentArtifact) {
+      setState(
+        "UNKNOWN",
+        "正在查询同一 attempt 的持久状态；不会再次发送执行 POST。",
+      );
+    }
+    try {
+      timeoutId = globalThis.setTimeout(() => controller.abort(), APPROVAL_TIMEOUT_MILLIS);
+      const response = await fetch(
+        `/api/v1/action-approvals/${encodeURIComponent(execution.attemptId)}`,
+        {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+          credentials: "same-origin",
+          cache: "no-store",
+          redirect: "error",
+        },
+      );
+      if (
+        recoverableExecution !== execution ||
+        requestController !== controller
+      ) {
+        await cancelResponseBody(response);
+        return;
+      }
+      if (response.status === 409 || response.status === 412) {
+        const problem = await readStrictProblem(response);
+        if (problem.stale) {
+          showExecutionStale();
+          return;
+        }
+        throw invalidResponse("EXECUTION_LOOKUP_CONFLICT_NOT_PROVEN_STALE");
+      }
+      if (
+        response.status !== 200 ||
+        response.headers.get("cache-control") !== "private, no-store"
+      ) {
+        await cancelResponseBody(response);
+        throw invalidResponse("EXECUTION_LOOKUP_HEADERS_INVALID");
+      }
+      const body = await readBoundedJson(response, JSON_MEDIA_TYPE);
+      if (body?.status === "SUCCEEDED" && validateTerminalExecution(body, execution)) {
+        renderTerminalExecution(body, execution);
+        return;
+      }
+      if (body?.status === "PLANNED" && validatePersistedPlanned(body, execution)) {
+        showPersistedPlanned(execution);
+        return;
+      }
+      throw invalidResponse("EXECUTION_LOOKUP_BINDING_INVALID");
+    } catch (failure) {
+      if (
+        requestController !== controller ||
+        recoverableExecution !== execution
+      ) {
+        return;
+      }
+      const typedFailure =
+        failure instanceof ApprovalClientError
+          ? failure
+          : transportUnknown(
+              controller.signal.aborted
+                ? "EXECUTION_LOOKUP_TIMEOUT_OR_ABORT"
+                : "EXECUTION_LOOKUP_TRANSPORT_UNKNOWN",
+            );
+      if (recoverableExecutionHistorical) {
+        showHistoricalExecutionUnknown();
+      } else {
+        showExecutionUnknown(typedFailure.kind);
+      }
+    } finally {
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+      if (requestController === controller) {
+        requestController = null;
+        setBusy(false);
       }
     }
   };
 
   submit.addEventListener("click", async (event) => {
     event.preventDefault?.();
-    if (requestPending || !trustedArtifact || !trustedScope || frozenApproval) {
+    if (
+      hasUnresolvedHistoricalExecution() ||
+      requestPending ||
+      !trustedArtifact ||
+      !trustedScope ||
+      frozenApproval
+    ) {
       return;
     }
     const approvalNonce = randomApprovalNonce();
@@ -835,6 +1527,27 @@
       return;
     }
     await postApproval(frozenApproval);
+  });
+
+  execute.addEventListener("click", async (event) => {
+    event.preventDefault?.();
+    if (hasUnresolvedHistoricalExecution()) {
+      return;
+    }
+    const execution = plannedExecution;
+    if (!execution) {
+      return;
+    }
+    await executePlannedApproval(execution);
+  });
+
+  checkExecution.addEventListener("click", async (event) => {
+    event.preventDefault?.();
+    const execution = recoverableExecution;
+    if (!execution) {
+      return;
+    }
+    await recoverExecution(execution);
   });
 
   document.addEventListener(TRUSTED_ARTIFACT_EVENT, (event) => {

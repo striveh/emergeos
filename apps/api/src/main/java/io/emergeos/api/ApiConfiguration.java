@@ -15,6 +15,7 @@ import io.emergeos.adapters.postgres.PostgresActionAttemptStore;
 import io.emergeos.adapters.postgres.PostgresArtifactLineageStore;
 import io.emergeos.adapters.postgres.PostgresCaptureStore;
 import io.emergeos.adapters.postgres.PostgresAgentRunStore;
+import io.emergeos.adapters.postgres.PostgresLocalDraftboxStore;
 import io.emergeos.adapters.postgres.PostgresStage1OperationsProbe;
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.application.AgentDraftService;
@@ -23,6 +24,8 @@ import io.emergeos.core.application.ArtifactLineageService;
 import io.emergeos.core.application.CaptureService;
 import io.emergeos.core.application.DurableReadOnlyWorkerService;
 import io.emergeos.core.application.LocalActionAuthority;
+import io.emergeos.core.application.LocalDraftboxAuthority;
+import io.emergeos.core.application.LocalDraftboxService;
 import io.emergeos.core.application.ManifestationService;
 import io.emergeos.core.application.ReadOnlyWorkerExecutionProfile;
 import io.emergeos.core.application.RecoverableActionService;
@@ -177,6 +180,15 @@ class ApiConfiguration {
   }
 
   @Bean
+  PostgresLocalDraftboxStore localDraftboxStore(
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager,
+      PostgresActionAttemptStore actionAttemptStore) {
+    return new PostgresLocalDraftboxStore(
+        dataSource, transactionManager, actionAttemptStore);
+  }
+
+  @Bean
   PostgresStage1OperationsProbe stage1OperationsProbe(DataSource dataSource) {
     return new PostgresStage1OperationsProbe(dataSource);
   }
@@ -219,20 +231,38 @@ class ApiConfiguration {
   }
 
   @Bean
+  LocalDraftboxAuthority localDraftboxAuthority(
+      @Value("${emerge.prototype.principal-id}") String principalId,
+      @Value("${emerge.local-draftbox.capability-ttl}") Duration capabilityTtl) {
+    return new LocalDraftboxAuthority(principalId, capabilityTtl);
+  }
+
+  @Bean
   RecoverableActionService recoverableActionService(
       PostgresActionAttemptStore actionAttemptStore,
       PostgresArtifactLineageStore artifactLineageStore,
       HttpSimulatedActionProvider simulatedActionProvider,
       IdGenerator idGenerator,
       Clock clock,
-      LocalActionAuthority localActionAuthority) {
+      LocalActionAuthority localActionAuthority,
+      LocalDraftboxAuthority localDraftboxAuthority) {
     return new RecoverableActionService(
         actionAttemptStore,
         artifactLineageStore,
         simulatedActionProvider,
         idGenerator,
         clock,
-        localActionAuthority);
+        localActionAuthority,
+        localDraftboxAuthority);
+  }
+
+  @Bean
+  LocalDraftboxService localDraftboxService(
+      PostgresLocalDraftboxStore localDraftboxStore,
+      IdGenerator idGenerator,
+      LocalDraftboxAuthority localDraftboxAuthority) {
+    return new LocalDraftboxService(
+        localDraftboxStore, idGenerator, localDraftboxAuthority);
   }
 
   @Bean

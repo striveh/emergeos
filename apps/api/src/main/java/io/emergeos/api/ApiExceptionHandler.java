@@ -1,17 +1,18 @@
 package io.emergeos.api;
 
-import io.emergeos.core.application.ActionIdempotencyConflictException;
-import io.emergeos.core.application.CaptureNonceConflictException;
-import io.emergeos.core.application.ArtifactRevisionConflictException;
-import io.emergeos.core.application.ApprovalStaleException;
+import io.emergeos.adapters.postgres.ActionApprovalIntegrityException;
 import io.emergeos.adapters.postgres.AgentRunConflictException;
 import io.emergeos.adapters.postgres.AgentRunIntegrityException;
+import io.emergeos.core.application.ActionIdempotencyConflictException;
+import io.emergeos.core.application.ApprovalStaleException;
+import io.emergeos.core.application.ArtifactRevisionConflictException;
+import io.emergeos.core.application.CaptureNonceConflictException;
 import java.net.URI;
 import java.util.NoSuchElementException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -63,6 +64,15 @@ class ApiExceptionHandler {
         "urn:emergeos:problem:approval-stale",
         "Action approval stale",
         "The approved action scope is not the current local scope.");
+  }
+
+  @ExceptionHandler(ActionApprovalIntegrityException.class)
+  ResponseEntity<ProblemDetail> actionApprovalIntegrity() {
+    return privateProblem(
+        HttpStatus.CONFLICT,
+        "urn:emergeos:problem:action-approval-integrity",
+        "Action approval integrity conflict",
+        "Stored action approval cannot be verified.");
   }
 
   @ExceptionHandler(ArtifactRevisionConflictException.class)

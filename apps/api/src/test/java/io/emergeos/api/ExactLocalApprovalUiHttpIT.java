@@ -324,6 +324,7 @@ class ExactLocalApprovalUiHttpIT {
   }
 
   private static void assertNoExecutionSurface(Scenario result) {
+    assertEquals(0, result.executePostCount(), "EXACT_LOCAL_APPROVAL_UI_EXECUTE_POST_CALLED");
     assertEquals(0, result.forbiddenActionCalls(), "EXACT_LOCAL_APPROVAL_UI_EXECUTION_ENDPOINT_CALLED");
     assertEquals(0, result.reconcileCalls(), "EXACT_LOCAL_APPROVAL_UI_RECONCILE_CALLED");
     assertEquals(0, result.completionClaimRendered(), "EXACT_LOCAL_APPROVAL_UI_FALSE_COMPLETION_RENDERED");
@@ -394,6 +395,22 @@ class ExactLocalApprovalUiHttpIT {
     assertEquals(
         expectedRows,
         queryInt("SELECT count(*) FROM action_attempts WHERE principal_id = ? AND idempotency_key = ?", OWNER, nonce));
+    assertEquals(
+        0,
+        queryInt(
+            "SELECT count(*) FROM local_drafts d JOIN action_attempts a "
+                + "ON a.principal_id=d.principal_id AND a.attempt_id=d.attempt_id "
+                + "WHERE a.principal_id=? AND a.idempotency_key=?",
+            OWNER,
+            nonce));
+    assertEquals(
+        0,
+        queryInt(
+            "SELECT count(*) FROM local_draft_creation_receipts r JOIN action_attempts a "
+                + "ON a.principal_id=r.principal_id AND a.attempt_id=r.attempt_id "
+                + "WHERE a.principal_id=? AND a.idempotency_key=?",
+            OWNER,
+            nonce));
     if (expectedRows == 0) {
       return;
     }
@@ -581,6 +598,7 @@ class ExactLocalApprovalUiHttpIT {
       int actualProblemMimeExact,
       int actualProblemNoStore,
       int actualProblemTypeExact,
+      int executePostCount,
       int forbiddenActionCalls,
       int reconcileCalls,
       int completionClaimRendered,
@@ -623,6 +641,7 @@ class ExactLocalApprovalUiHttpIT {
           outputInt(output, "ACTUAL_PROBLEM_MIME_EXACT"),
           outputInt(output, "ACTUAL_PROBLEM_NO_STORE"),
           outputInt(output, "ACTUAL_PROBLEM_TYPE_EXACT"),
+          outputInt(output, "EXECUTE_POST_COUNT"),
           outputInt(output, "FORBIDDEN_ACTION_CALLS"),
           outputInt(output, "RECONCILE_CALLS"),
           outputInt(output, "COMPLETION_CLAIM_RENDERED"),

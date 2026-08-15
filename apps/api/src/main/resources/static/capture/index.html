@@ -184,6 +184,18 @@
                 <button id="approval-retry" class="secondary-action" type="button" hidden>
                   明确重试同一批准
                 </button>
+                <button id="approval-execute" type="button" hidden disabled>
+                  明确执行：写入本地草稿
+                </button>
+                <button
+                  id="approval-check-execution"
+                  class="secondary-action"
+                  type="button"
+                  hidden
+                  disabled
+                >
+                  查询执行结果
+                </button>
               </div>
               <p
                 id="approval-status"
@@ -196,6 +208,20 @@
               >
                 等待你核对目标、风险和精确 Artifact 版本。
               </p>
+              <section id="approval-result" class="approval-result" hidden>
+                <p id="approval-result-context" class="approval-result-context" hidden>
+                  历史执行结果；不授权当前 Artifact
+                </p>
+                <p id="approval-local-draft" class="approval-result-line" hidden>
+                  <span id="approval-draft-summary"></span>
+                </p>
+                <p id="approval-receipt" class="approval-result-line" hidden>
+                  <span id="approval-receipt-summary"></span>
+                </p>
+                <p id="approval-undo-boundary" class="approval-undo-boundary" hidden>
+                  撤销暂未开放；本版本不会提供 Undo 操作。
+                </p>
+              </section>
             </section>
             <section
               id="outcome-conflict"

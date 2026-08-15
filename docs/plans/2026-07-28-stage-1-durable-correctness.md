@@ -13,8 +13,9 @@ Review shape: four weekly checkpoints, not a promised delivery date
 - AI Coding: practice vertical slicing, outside-in TDD, bounded delegation and adversarial review.
 - Agent Engineering: reach L3 in two mechanisms only: transactional concurrency and recoverable external
   action.
-- Product/Production: a captured thought, its revision and an approved simulated action survive restart
-  without losing ownership or silently duplicating the result.
+- Product/Production: a captured thought, its revision, exact approval and provider-free local Draft/Receipt
+  survive restart without losing ownership or silently duplicating the result; external-provider evidence
+  remains a separate Gate.
 - Career: produce a five-minute failure-recovery demo, Case Card and independently scored teach-back.
 - Business: start founder dogfooding, problem interviews, Concierge delivery and one real price request on
   Day 1 rather than after the infrastructure is complete.
@@ -27,8 +28,9 @@ vertical slices while a separate market lane tests whether the proposed outcome 
 
 Desired user result:
 
-> I can capture a thought with little friction, revise it and approve a local simulated action. A duplicate
-> request or process restart does not lose my latest content, authority or the explanation of what happened.
+> I can capture a thought with little friction, revise it, approve one exact local action and use a second
+> explicit gesture to create a local Draft with a durable Receipt. A duplicate request, lost response or
+> process restart does not lose my latest content, authority or the explanation of what happened.
 
 Stage 1 proves capture, revision, approval, persistence and recovery. It does **not** prove that generated
 content “像本人” or is worth paying for. Those claims require real Seeds and human + Codex Concierge
@@ -828,15 +830,73 @@ do not count.
   `SUCCESS / BUILD SUCCESS`（`24m42s`），fresh日志确认 Explicit/UI/Exact/Recoverable、Pack009与V18
   shipping tests。回执截止时PR仍Draft/Open/CLEAN且未merge/release；本证据固定绑定code-bearing
   commit/run，后续docs-only head不改变它，PR当前check状态以GitHub为准。
-- 下一条产品 Acceptance是 Real Local Draftbox + Undo Receipt；founder dogfood、Human-learning与
+- 下一条产品 Acceptance原定为 Real Local Draftbox + Undo Receipt；其中provider-free Draft/typed
+  Receipt已在下一增量实现，Undo仍等待owner选择A/B/C语义。founder dogfood、Human-learning与
   Commercial evidence仍未开始，不由本 focused Green代替。
+
+### Product-closure delta · 2026-08-15 · Real Local Draftbox
+
+- Status：focused UI/API、PostgreSQL integration、crash/fresh-JVM与late-review P1 focused/combined
+  Gate及post-P1 fresh root Engineering Green；final independent review/release pending；overall
+  Authority / Live Red。
+- Receipt：[Real Local Draftbox Engineering Receipt](../operations/build-notes/2026-08-15-real-local-draftbox.md)。
+- `LOCAL_DRAFTBOX_V2`把exact approval与provider route分离；第二个明确手势才在一个PostgreSQL事务内
+  形成`ACTIVE` local Draft、`PLANNED → SUCCEEDED`与
+  `LOCAL_DRAFT_CREATED_V1 / simulated=false` typed Receipt。first/replay/GET为`201/200/200`，
+  legacy provider Receipt仍为0。
+- UI packaged Acceptance覆盖16 modes：double-click、response loss/hang显式GET恢复、5项V2 authority
+  drift、timer spoof、executing-edit recovery及terminal/new Artifact隔离；不会自动POST/GET，也不显示
+  虚假Undo能力。
+- PostgreSQL claim以同一statement的`clock_timestamp()`执行expiry guard；lock-upgrade跨expiry后返回
+  `STALE`且digest不变。focused store为`6/6`、与V18 migration及既有ActionAttempt store组合为
+  PostgreSQL `18/18` Green。
+- packaged crash Acceptance证明COMMIT前hard-kill全回滚、fresh JVM仍读`PLANNED`；commit后response
+  loss由另一fresh JVM GET并以`200` canonical replay；历史`LOCAL_DRAFTBOX_V1` execute为`412`且零变更。
+- 首轮root为`115 XML / 627 tests / 2F`；两条stale V1 Acceptance随后已修复并在recovery中Green。
+  bounded recovery的reactor 1–9成功，第10个graph-eval-runner因两个V18 fixture compatibility缺口失败，
+  第11个module跳过，终态为`164 XML / 820 tests / 1F + 3E / 0S`。PostgreSQL`188/188`、DB-time
+  `6/6`、API `33 + 20`、Crash/Real UI与eval `88/88`局部Green不能覆盖aggregate Red。recovery额度
+  耗尽后没有继续重跑；随后先静态修正Pack010 TRUNCATE与Pack009 exact catalog fixture，再开启新的
+  root cycle。当前dirty bytes未stage/commit/push，无新PR/CI，旧Draft PR #6与CI run 31771125144只
+  绑定前一exact approval code head。
+- 两个fixture经最小静态修正后，新的root verification cycle一次`11/11 SUCCESS`，耗时`32m02s`，
+  fresh aggregate为`175 XML / 904 tests / 0 failures / 0 errors / 0 skipped / 0 flakes`；XML manifest
+  为`b43cc1d0e7694a995922e72f52c3fb6cc87c4f9aed839f23fb526d0cc6dd5c8`，12 JAR manifest为
+  `fb20fef8e21c9a926095ee9eb4379ad94515e9ddc762d61d5acd0d35b25ab3e2`。PostgreSQL`188`、API`53`、
+  Synthetic`88`、Graph`105`与Offline`84`均实际运行Green；该结果绑定late-review P1修复前的bytes。
+- 随后的独立终审发现`P0=0 / P1=1 / P2=0`：READY卡片把`REVERSIBLE`误译为“可撤销”，但Undo
+  尚未实现。新outside-in Acceptance以`EXACT_LOCAL_APPROVAL_UI_TARGET_RISK_MISSING`精确Red
+  （XML SHA `912335f314ca61b712bb57fce0f61ef260104764da587765591962e9710454ee`）；minimum copy
+  修复把文案冻结为`REVERSIBLE（风险分类；撤销暂未开放） · Policy local-action-v2`，production
+  SHA为`a1cc455829d0015e873c26889af3eec6a72d104154cdf55448e4f02ff4231f9a`，Acceptance SHA为
+  `be588523917cc656e85ad6ffc48c7d4480f9b7207023dd7b6b5a7f025643eccc`。focused Exact XML
+  `e4888379576802bf9825b954a2e2a599f39b0fa0dd031cfed1bf40f23e4732a3`与PostgreSQL 6 + 三个
+  指定IT的combined 4-XML manifest
+  `8ba70bb4971216d5eee737ea78718bf7f91c77620edbd916df8555d911d18a7b`均Green。因为production
+  bytes已变化，旧`904/904`不能作为post-P1 release evidence。
+- post-P1 root从fresh `clean`另起一次cycle，于`2026-08-15 15:29:41+08`一次完成`11/11 SUCCESS`
+  （`10m16s`），aggregate为`175 fresh XML / 904 tests / 0 failures / 0 errors / 0 skipped`；XML manifest
+  `7d0d98716ec45efc85aa5ffb635f12cc0f5500db3218ae226862cd0e6bd4ba95`，12 JAR manifest
+  `bd4ac24ef8a8dcfdae51e6ce62eb39f6b166a76a02421afac40bd34aaaf4ad20`。packaged
+  `approval-card.js`与source同为`a1cc455829d0015e873c26889af3eec6a72d104154cdf55448e4f02ff4231f9a`；
+  Exact harness source/target同为`be588523917cc656e85ad6ffc48c7d4480f9b7207023dd7b6b5a7f025643eccc`。
+  当前仍未stage/commit/push，无新PR/CI；下一步为final independent review、Receipt freeze、DCO
+  commit/non-force push与code-head CI。
+- Undo未实现，owner仍需选择A logical undo（推荐）、B isolate retention或C permanent forget；
+  ReflectionCandidate与founder dogfood未执行，shipping disabled，无merge/release/deploy。
 
 ## Outcome and next hypothesis
 
-S1–S4 engineering slice Receipts are complete. Stage 1 remains active because ADR-0004 remains Proposed,
-the real Connector Gate remains blocked, and owner-led Teach-back/transfer/unknown-fault exercises plus
-Lane B market evidence are still incomplete. The S3/S4 result is exactly one recoverable simulated local
-object after durable `UNKNOWN`; it is not a real Connector, an exactly-once provider-call claim or a safe
-stale-`DISPATCHING` takeover. Stage 2 begins only when the full engineering, market and human-learning Gates are
-decided; a failed market hypothesis leads to a new vertical product result, not automatic runtime
-expansion.
+S1–S4 engineering slice Receipts are complete. The later product increment now also has focused,
+PostgreSQL and crash/fresh-JVM evidence for one exact provider-free local Draft with a non-simulated typed
+Receipt. Its two stale V1 assertions and two V18 graph-eval fixture gaps remain recorded as bounded Red
+history; the pre-late-review root cycle was `904/904` Green. A later independent review P1 about misleading
+Undo copy is now focused/combined Green, and the separate post-P1 fresh root is also `904/904` Green. Final
+post-fix review, release and Undo are not complete. Stage 1 remains active because ADR-0004 remains Proposed,
+the real Connector Gate remains blocked,
+owner must choose Undo semantics, and owner-led Teach-back/transfer/unknown-fault exercises plus founder
+dogfood/Lane B market evidence are incomplete. The older S3/S4 result remains exactly one recoverable
+simulated provider object after durable `UNKNOWN`; the new local Draft result is a database effect, but
+neither is a real Connector or an exactly-once external-provider claim. Stage 2 begins only when the full
+engineering, market and human-learning Gates are decided; a failed market hypothesis leads to a new vertical
+product result, not automatic runtime expansion.

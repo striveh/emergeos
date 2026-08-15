@@ -36,6 +36,7 @@ public record ActionApprovalScope(
   public static final String EXPLICIT_LOCAL_OWNER_INPUT = "EXPLICIT_LOCAL_OWNER_INPUT";
   public static final String SIMULATED_PROVIDER_V1 = "SIMULATED_PROVIDER_V1";
   public static final String LOCAL_DRAFTBOX_V1 = "LOCAL_DRAFTBOX_V1";
+  public static final String LOCAL_DRAFTBOX_V2 = "LOCAL_DRAFTBOX_V2";
 
   public ActionApprovalScope {
     requireExact(principalBasis, CONFIGURED_LOCAL_PRINCIPAL, "principalBasis");
@@ -50,10 +51,12 @@ public record ActionApprovalScope(
         executionRoute,
         "executionRoute",
         SIMULATED_PROVIDER_V1,
-        LOCAL_DRAFTBOX_V1);
+        LOCAL_DRAFTBOX_V1,
+        LOCAL_DRAFTBOX_V2);
     boolean validProvenanceRoute =
         (EXPLICIT_LOCAL_OWNER_INPUT.equals(approvalOrigin)
-                && LOCAL_DRAFTBOX_V1.equals(executionRoute))
+                && (LOCAL_DRAFTBOX_V1.equals(executionRoute)
+                    || LOCAL_DRAFTBOX_V2.equals(executionRoute)))
             || ((PRE_V17_UNPROVEN.equals(approvalOrigin)
                     || LEGACY_SERVER_IMPLICIT.equals(approvalOrigin))
                 && SIMULATED_PROVIDER_V1.equals(executionRoute));
