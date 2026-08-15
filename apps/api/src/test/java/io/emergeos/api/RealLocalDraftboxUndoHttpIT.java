@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.jayway.jsonpath.JsonPath;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -13,14 +14,21 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +44,7 @@ class RealLocalDraftboxUndoHttpIT {
 
   private static final String OWNER = "real-local-draftbox-owner";
   private static final String SCOPE_SCHEMA = "emergeos.action-approval-scope.v1";
+  private static final String UNDO_SCOPE_SCHEMA = "emergeos.local-draft-undo-scope.v1";
   private static final String UNREACHABLE_PROVIDER = "http://127.0.0.1:1";
   private static final String ZERO_HASH = "0".repeat(64);
   private static final Pattern SHA_256_TEXT = Pattern.compile("[0-9a-f]{64}");
@@ -200,6 +209,175 @@ class RealLocalDraftboxUndoHttpIT {
               OWNER,
               attemptId));
 
+      String undoNonce = "real-local-draftbox-logical-undo-001";
+      String undoScopeHash =
+          logicalUndoScopeHash(
+              draftId,
+              attemptId,
+              receiptId,
+              artifact,
+              undoNonce);
+      Map<String, Object> canonicalCreationReceipt =
+          JsonPath.parse(canonicalExecutedBody).read("$.receipt");
+      RetainedTruthSnapshot retainedBeforeUndo =
+          retainedTruthSnapshot(artifact.artifactId(), attemptId);
+
+      HttpResponse<String> undone =
+          send(
+              application.port(),
+              "POST",
+              "/api/v1/action-approvals/" + attemptId + "/undo",
+              undoRequest(undoNonce, UNDO_SCOPE_SCHEMA, undoScopeHash));
+      if (undone.statusCode() != 201) {
+        System.out.printf(
+            "REAL_LOCAL_DRAFTBOX_LOGICAL_UNDO_MISSING expected=201 actual=%d%n",
+            undone.statusCode());
+      }
+      assertEquals(
+          201,
+          undone.statusCode(),
+          "REAL_LOCAL_DRAFTBOX_LOGICAL_UNDO_MISSING expected=201 actual="
+              + undone.statusCode());
+      assertPrivateNoStore(undone);
+      assertEquals(
+          approvalLocation,
+          undone.headers().firstValue("Location").orElse(null));
+      assertLogicallyUndone(
+          undone.body(),
+          attemptId,
+          draftId,
+          receiptId,
+          artifact,
+          undoNonce,
+          undoScopeHash,
+          canonicalCreationReceipt);
+      String canonicalUndoneBody = undone.body();
+      String undoReceiptId = JsonPath.read(canonicalUndoneBody, "$.undoReceipt.receiptId");
+      assertNotNull(undoReceiptId);
+      assertTrue(!undoReceiptId.isBlank());
+
+      assertEquals(
+          1,
+          queryInt(
+              "SELECT count(*) FROM local_draft_undo_receipts "
+                  + "WHERE principal_id=? AND creation_attempt_id=? AND draft_id=? "
+                  + "AND creation_receipt_id=? AND artifact_id=? AND artifact_version=? "
+                  + "AND artifact_hash=? AND scope_schema=? AND scope_hash=? AND undo_nonce=? "
+                  + "AND receipt_id=? AND receipt_type='LOCAL_DRAFT_LOGICALLY_UNDONE_V1' "
+                  + "AND effect='LOGICALLY_UNDONE' "
+                  + "AND retention='CAPTURE_ARTIFACT_HISTORY_RETAINED' "
+                  + "AND outcome='SUCCEEDED' AND NOT simulated",
+              OWNER,
+              attemptId,
+              draftId,
+              receiptId,
+              artifact.artifactId(),
+              artifact.version(),
+              artifact.hash(),
+              UNDO_SCOPE_SCHEMA,
+              undoScopeHash,
+              undoNonce,
+              undoReceiptId));
+      String undoReceiptBeforeReplay = undoReceiptSnapshot(undoReceiptId);
+
+      HttpResponse<String> undoReplay =
+          send(
+              application.port(),
+              "POST",
+              "/api/v1/action-approvals/" + attemptId + "/undo",
+              undoRequest(undoNonce, UNDO_SCOPE_SCHEMA, undoScopeHash));
+      assertEquals(200, undoReplay.statusCode(), undoReplay::body);
+      assertPrivateNoStore(undoReplay);
+      assertEquals(
+          approvalLocation,
+          undoReplay.headers().firstValue("Location").orElse(null));
+      assertEquals(canonicalUndoneBody, undoReplay.body());
+
+      HttpResponse<String> recoveredUndo =
+          send(application.port(), "GET", approvalLocation, null);
+      assertEquals(200, recoveredUndo.statusCode(), recoveredUndo::body);
+      assertPrivateNoStore(recoveredUndo);
+      assertEquals(canonicalUndoneBody, recoveredUndo.body());
+
+      assertEquals(
+          1,
+          queryInt(
+              "SELECT count(*) FROM action_attempts "
+                  + "WHERE principal_id=? AND attempt_id=? AND status='SUCCEEDED' "
+                  + "AND state_version=2 AND capability_used_calls=1",
+              OWNER,
+              attemptId));
+      assertEquals(
+          2,
+          queryInt(
+              "SELECT count(*) FROM action_attempt_transitions "
+                  + "WHERE principal_id=? AND attempt_id=?",
+              OWNER,
+              attemptId));
+      assertEquals(
+          1,
+          queryInt(
+              "SELECT count(*) FROM local_drafts "
+                  + "WHERE principal_id=? AND attempt_id=? AND draft_id=? AND state='ACTIVE'",
+              OWNER,
+              attemptId,
+              draftId));
+      assertEquals(1, queryInt("SELECT count(*) FROM local_draft_undo_receipts"));
+      assertEquals(0, queryInt("SELECT count(*) FROM action_receipts"));
+      assertEquals(
+          retainedBeforeUndo, retainedTruthSnapshot(artifact.artifactId(), attemptId));
+      assertEquals(undoReceiptBeforeReplay, undoReceiptSnapshot(undoReceiptId));
+      assertUndoReceiptImmutable(undoReceiptId);
+      assertEquals(
+          retainedBeforeUndo, retainedTruthSnapshot(artifact.artifactId(), attemptId));
+      assertEquals(undoReceiptBeforeReplay, undoReceiptSnapshot(undoReceiptId));
+      assertFalse(canonicalUndoneBody.toLowerCase(Locale.ROOT).contains("reflection"));
+
+      ActiveDraftFixture wrongUndoFixture =
+          createIndependentActiveDraftFixture(application.port());
+      assertFalse(artifact.artifactId().equals(wrongUndoFixture.artifact().artifactId()));
+      assertEquals(2, queryInt("SELECT count(*) FROM captures"));
+      assertEquals(2, queryInt("SELECT count(*) FROM artifacts"));
+      String wrongUndoNonce = "real-local-draftbox-logical-undo-wrong-scope-002";
+      String validSecondUndoScopeHash =
+          logicalUndoScopeHash(
+              wrongUndoFixture.draftId(),
+              wrongUndoFixture.attemptId(),
+              wrongUndoFixture.creationReceiptId(),
+              wrongUndoFixture.artifact(),
+              wrongUndoNonce);
+      RetainedTruthSnapshot secondRetainedBeforeWrongUndo =
+          retainedTruthSnapshot(
+              wrongUndoFixture.artifact().artifactId(), wrongUndoFixture.attemptId());
+      DatabaseMutationDigest wrongUndoBaseline = databaseMutationDigest();
+
+      HttpResponse<String> wrongUndoScope =
+          send(
+              application.port(),
+              "POST",
+              "/api/v1/action-approvals/" + wrongUndoFixture.attemptId() + "/undo",
+              undoRequest(
+                  wrongUndoNonce,
+                  UNDO_SCOPE_SCHEMA,
+                  differentValidHash(validSecondUndoScopeHash)));
+      ProblemShape wrongUndoShape = assertSafeProblem(wrongUndoScope, 412);
+      assertEquals("urn:emergeos:problem:approval-stale", wrongUndoShape.type());
+      assertEquals(wrongUndoBaseline, databaseMutationDigest());
+      assertEquals(
+          secondRetainedBeforeWrongUndo,
+          retainedTruthSnapshot(
+              wrongUndoFixture.artifact().artifactId(), wrongUndoFixture.attemptId()));
+      assertEquals(1, queryInt("SELECT count(*) FROM local_draft_undo_receipts"));
+      assertEquals(
+          1,
+          queryInt(
+              "SELECT count(*) FROM local_draft_undo_receipts "
+                  + "WHERE principal_id=? AND receipt_id=?",
+              OWNER,
+              undoReceiptId));
+      assertEquals(0, queryInt("SELECT count(*) FROM action_receipts"));
+      assertFalse(wrongUndoScope.body().toLowerCase(Locale.ROOT).contains("reflection"));
+
       DatabaseMutationDigest negativeBaseline = databaseMutationDigest();
       String wrongScopeHash = differentValidHash(scope.hash());
       HttpResponse<String> wrongScope =
@@ -320,6 +498,168 @@ class RealLocalDraftboxUndoHttpIT {
         .formatted(scopeSchema, scopeHash);
   }
 
+  private static String undoRequest(
+      String undoNonce, String scopeSchema, String scopeHash) {
+    return """
+        {
+          "undoNonce": "%s",
+          "scopeSchema": "%s",
+          "scopeHash": "%s"
+        }
+        """
+        .formatted(undoNonce, scopeSchema, scopeHash);
+  }
+
+  private static String logicalUndoScopeHash(
+      String draftId,
+      String creationAttemptId,
+      String creationReceiptId,
+      ArtifactHead artifact,
+      String undoNonce)
+      throws Exception {
+    List<String> values =
+        List.of(
+            "CONFIGURED_LOCAL_PRINCIPAL",
+            OWNER,
+            "EXPLICIT_LOCAL_OWNER_INPUT",
+            "LOCAL_DRAFTBOX_LOGICAL_UNDO_V1",
+            "LOGICALLY_UNDO_LOCAL_DRAFT",
+            "local://drafts/" + draftId,
+            draftId,
+            creationAttemptId,
+            creationReceiptId,
+            artifact.artifactId(),
+            Integer.toString(artifact.version()),
+            artifact.hash(),
+            "ACTIVE",
+            "CAPTURE_ARTIFACT_HISTORY_RETAINED",
+            "local-draft-undo-v1",
+            "emergeos.local-draftbox",
+            "emergeos:local-draftbox",
+            "local-draftbox:" + OWNER,
+            undoNonce,
+            "1");
+    ByteArrayOutputStream canonical = new ByteArrayOutputStream();
+    canonical.writeBytes(UNDO_SCOPE_SCHEMA.getBytes(StandardCharsets.UTF_8));
+    canonical.write(0);
+    for (String value : values) {
+      byte[] utf8 = value.getBytes(StandardCharsets.UTF_8);
+      canonical.writeBytes(ByteBuffer.allocate(Integer.BYTES).putInt(utf8.length).array());
+      canonical.writeBytes(utf8);
+    }
+    return HexFormat.of()
+        .formatHex(MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()));
+  }
+
+  private static void assertLogicallyUndone(
+      String json,
+      String attemptId,
+      String draftId,
+      String creationReceiptId,
+      ArtifactHead artifact,
+      String undoNonce,
+      String scopeHash,
+      Map<String, Object> canonicalCreationReceipt)
+      throws Exception {
+    Map<String, Object> body = JsonPath.parse(json).read("$");
+    assertEquals(
+        Set.of(
+            "attemptId",
+            "status",
+            "plan",
+            "approval",
+            "capability",
+            "transitions",
+            "receipt",
+            "localDraft",
+            "scopeSchema",
+            "scopeHash",
+            "approvalPrincipal",
+            "provenance",
+            "action",
+            "artifact",
+            "executionState",
+            "undoReceipt",
+            "undoAvailable"),
+        body.keySet());
+    assertEquals(attemptId, JsonPath.read(json, "$.attemptId"));
+    assertEquals("SUCCEEDED", JsonPath.read(json, "$.status"));
+    assertEquals("EXECUTED", JsonPath.read(json, "$.executionState"));
+    assertEquals(false, JsonPath.read(json, "$.undoAvailable"));
+    assertEquals(1, number(json, "$.capability.usedCalls"));
+    assertEquals(2, number(json, "$.transitions.length()"));
+    assertEquals("PLANNED", JsonPath.read(json, "$.transitions[0].toStatus"));
+    assertEquals("PLANNED", JsonPath.read(json, "$.transitions[1].fromStatus"));
+    assertEquals("SUCCEEDED", JsonPath.read(json, "$.transitions[1].toStatus"));
+    Map<String, Object> localDraft = JsonPath.parse(json).read("$.localDraft");
+    assertEquals(
+        Set.of(
+            "draftId",
+            "state",
+            "artifactId",
+            "artifactVersion",
+            "artifactHash",
+            "createdAt"),
+        localDraft.keySet());
+    assertEquals("LOGICALLY_UNDONE", JsonPath.read(json, "$.localDraft.state"));
+    assertEquals(draftId, JsonPath.read(json, "$.localDraft.draftId"));
+    assertEquals(artifact.artifactId(), JsonPath.read(json, "$.localDraft.artifactId"));
+    assertEquals(artifact.version(), number(json, "$.localDraft.artifactVersion"));
+    assertEquals(artifact.hash(), JsonPath.read(json, "$.localDraft.artifactHash"));
+    assertEquals(
+        canonicalCreationReceipt.get("occurredAt"),
+        JsonPath.read(json, "$.localDraft.createdAt"));
+    assertEquals(canonicalCreationReceipt, JsonPath.parse(json).read("$.receipt"));
+
+    Map<String, Object> undoReceipt = JsonPath.parse(json).read("$.undoReceipt");
+    assertEquals(
+        Set.of(
+            "receiptType",
+            "receiptId",
+            "creationAttemptId",
+            "draftId",
+            "creationReceiptId",
+            "artifactId",
+            "artifactVersion",
+            "artifactHash",
+            "scopeSchema",
+            "scopeHash",
+            "undoNonce",
+            "effect",
+            "retention",
+            "outcome",
+            "occurredAt",
+            "simulated"),
+        undoReceipt.keySet());
+    assertEquals(
+        "LOCAL_DRAFT_LOGICALLY_UNDONE_V1",
+        JsonPath.read(json, "$.undoReceipt.receiptType"));
+    assertEquals(attemptId, JsonPath.read(json, "$.undoReceipt.creationAttemptId"));
+    assertEquals(draftId, JsonPath.read(json, "$.undoReceipt.draftId"));
+    assertEquals(
+        creationReceiptId, JsonPath.read(json, "$.undoReceipt.creationReceiptId"));
+    assertEquals(artifact.artifactId(), JsonPath.read(json, "$.undoReceipt.artifactId"));
+    assertEquals(artifact.version(), number(json, "$.undoReceipt.artifactVersion"));
+    assertEquals(artifact.hash(), JsonPath.read(json, "$.undoReceipt.artifactHash"));
+    assertEquals(UNDO_SCOPE_SCHEMA, JsonPath.read(json, "$.undoReceipt.scopeSchema"));
+    assertEquals(scopeHash, JsonPath.read(json, "$.undoReceipt.scopeHash"));
+    assertEquals(undoNonce, JsonPath.read(json, "$.undoReceipt.undoNonce"));
+    assertEquals("LOGICALLY_UNDONE", JsonPath.read(json, "$.undoReceipt.effect"));
+    assertEquals(
+        "CAPTURE_ARTIFACT_HISTORY_RETAINED",
+        JsonPath.read(json, "$.undoReceipt.retention"));
+    assertEquals("SUCCEEDED", JsonPath.read(json, "$.undoReceipt.outcome"));
+    assertEquals(false, JsonPath.read(json, "$.undoReceipt.simulated"));
+    Instant occurredAt = Instant.parse(JsonPath.read(json, "$.undoReceipt.occurredAt"));
+    assertEquals(
+        occurredAt,
+        queryInstant(
+            "SELECT occurred_at FROM local_draft_undo_receipts "
+                + "WHERE principal_id=? AND receipt_id=?",
+            OWNER,
+            JsonPath.read(json, "$.undoReceipt.receiptId")));
+  }
+
   private static String differentValidHash(String hash) {
     return (hash.charAt(0) == 'a' ? "b" : "a") + hash.substring(1);
   }
@@ -426,6 +766,10 @@ class RealLocalDraftboxUndoHttpIT {
                 + "ORDER BY principal_id, attempt_id, receipt_id), '') "
                 + "FROM local_draft_creation_receipts"),
         queryString(
+            "SELECT COALESCE(string_agg(r.xmin::text || '|' || to_jsonb(r)::text, ';' "
+                + "ORDER BY principal_id, draft_id, receipt_id), '') "
+                + "FROM local_draft_undo_receipts r"),
+        queryString(
             "SELECT COALESCE(string_agg(concat_ws('|', principal_id, attempt_id, receipt_id, "
                 + "outcome, simulated::text), ';' "
                 + "ORDER BY principal_id, attempt_id, receipt_id), '') "
@@ -483,6 +827,84 @@ class RealLocalDraftboxUndoHttpIT {
   }
 
   private static ArtifactHead createCurrentArtifact(int port) throws Exception {
+    return createArtifact(
+        port,
+        "real-local-draftbox-capture-001",
+        "synthetic thought that becomes one local draft",
+        "real-local-draftbox:http-it",
+        "synthetic current Artifact for the real local draftbox");
+  }
+
+  private static ActiveDraftFixture createIndependentActiveDraftFixture(int port)
+      throws Exception {
+    ArtifactHead artifact =
+        createArtifact(
+            port,
+            "real-local-draftbox-capture-wrong-undo-002",
+            "synthetic independent thought for wrong logical Undo scope",
+            "real-local-draftbox:http-it:wrong-undo-002",
+            "synthetic independent Artifact for wrong logical Undo scope");
+    ScopeHead scope = previewExactScope(port, artifact);
+    String approvalNonce = "real-local-draftbox-approval-wrong-undo-002";
+    HttpResponse<String> approval =
+        send(
+            port,
+            "POST",
+            "/api/v1/artifacts/" + artifact.artifactId() + "/action-approvals",
+            """
+            {
+              "approvedArtifactVersion": %d,
+              "approvedArtifactHash": "%s",
+              "approvalNonce": "%s",
+              "approvedScopeSchema": "%s",
+              "approvedScopeHash": "%s"
+            }
+            """
+                .formatted(
+                    artifact.version(),
+                    artifact.hash(),
+                    approvalNonce,
+                    scope.schema(),
+                    scope.hash()));
+    assertEquals(201, approval.statusCode(), approval::body);
+    assertPrivateNoStore(approval);
+    String attemptId = JsonPath.read(approval.body(), "$.attemptId");
+    assertNotNull(attemptId);
+    assertTrue(!attemptId.isBlank());
+    assertEquals(
+        approvalNonce,
+        queryString(
+            "SELECT idempotency_key FROM action_attempts "
+                + "WHERE principal_id=? AND attempt_id=?",
+            OWNER,
+            attemptId));
+
+    HttpResponse<String> executed =
+        send(
+            port,
+            "POST",
+            "/api/v1/action-approvals/" + attemptId + "/execute",
+            executeRequest(scope.schema(), scope.hash()));
+    assertEquals(201, executed.statusCode(), executed::body);
+    assertPrivateNoStore(executed);
+    assertEquals(
+        "/api/v1/action-approvals/" + attemptId,
+        executed.headers().firstValue("Location").orElse(null));
+    assertExecutedLocalDraft(executed.body(), attemptId, artifact, scope);
+    return new ActiveDraftFixture(
+        artifact,
+        attemptId,
+        JsonPath.read(executed.body(), "$.localDraft.draftId"),
+        JsonPath.read(executed.body(), "$.receipt.receiptId"));
+  }
+
+  private static ArtifactHead createArtifact(
+      int port,
+      String clientNonce,
+      String captureContent,
+      String sourceRef,
+      String artifactContent)
+      throws Exception {
     HttpResponse<String> captured =
         send(
             port,
@@ -490,13 +912,14 @@ class RealLocalDraftboxUndoHttpIT {
             "/api/v1/captures",
             """
             {
-              "clientNonce": "real-local-draftbox-capture-001",
-              "content": "synthetic thought that becomes one local draft",
+              "clientNonce": "%s",
+              "content": "%s",
               "sourceType": "TEXT",
-              "sourceRef": "real-local-draftbox:http-it",
+              "sourceRef": "%s",
               "dataClass": "PERSONAL"
             }
-            """);
+            """
+                .formatted(clientNonce, captureContent, sourceRef));
     assertEquals(201, captured.statusCode(), captured::body);
     String captureId = JsonPath.read(captured.body(), "$.captureId");
 
@@ -508,10 +931,10 @@ class RealLocalDraftboxUndoHttpIT {
             """
             {
               "captureId": "%s",
-              "content": "synthetic current Artifact for the real local draftbox"
+              "content": "%s"
             }
             """
-                .formatted(captureId));
+                .formatted(captureId, artifactContent));
     assertEquals(201, created.statusCode(), created::body);
     assertEquals(1, number(created.body(), "$.currentVersion"));
     return new ArtifactHead(
@@ -640,6 +1063,119 @@ class RealLocalDraftboxUndoHttpIT {
     return (String) query(sql, values);
   }
 
+  private static Instant queryInstant(String sql, Object... values) throws Exception {
+    try (var connection =
+            DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement statement = connection.prepareStatement(sql)) {
+      for (int index = 0; index < values.length; index++) {
+        statement.setObject(index + 1, values[index]);
+      }
+      try (ResultSet rows = statement.executeQuery()) {
+        assertTrue(rows.next());
+        return rows.getObject(1, java.time.OffsetDateTime.class).toInstant();
+      }
+    }
+  }
+
+  private static RetainedTruthSnapshot retainedTruthSnapshot(
+      String artifactId, String attemptId)
+      throws Exception {
+    return new RetainedTruthSnapshot(
+        queryInt(
+            "SELECT count(*) FROM captures c JOIN artifacts a "
+                + "ON a.principal_id=c.principal_id AND a.source_capture_id=c.capture_id "
+                + "WHERE a.principal_id=? AND a.artifact_id=?",
+            OWNER,
+            artifactId),
+        queryString(
+            "SELECT c.xmin::text || '|' || to_jsonb(c)::text FROM captures c "
+                + "JOIN artifacts a ON a.principal_id=c.principal_id "
+                + "AND a.source_capture_id=c.capture_id "
+                + "WHERE a.principal_id=? AND a.artifact_id=?",
+            OWNER,
+            artifactId),
+        queryInt(
+            "SELECT count(*) FROM artifacts WHERE principal_id=? AND artifact_id=?",
+            OWNER,
+            artifactId),
+        queryString(
+            "SELECT a.xmin::text || '|' || to_jsonb(a)::text FROM artifacts a "
+                + "WHERE principal_id=? AND artifact_id=?",
+            OWNER,
+            artifactId),
+        queryInt(
+            "SELECT count(*) FROM artifact_versions WHERE principal_id=? AND artifact_id=?",
+            OWNER,
+            artifactId),
+        queryString(
+            "SELECT string_agg(v.xmin::text || '|' || to_jsonb(v)::text, ';' "
+                + "ORDER BY v.version) FROM artifact_versions v "
+                + "WHERE principal_id=? AND artifact_id=?",
+            OWNER,
+            artifactId),
+        queryString(
+            "SELECT d.xmin::text || '|' || to_jsonb(d)::text FROM local_drafts d "
+                + "WHERE principal_id=? AND artifact_id=?",
+            OWNER,
+            artifactId),
+        queryString(
+            "SELECT r.xmin::text || '|' || to_jsonb(r)::text "
+                + "FROM local_draft_creation_receipts r JOIN local_drafts d "
+                + "ON d.principal_id=r.principal_id AND d.attempt_id=r.attempt_id "
+                + "AND d.draft_id=r.draft_id "
+                + "WHERE d.principal_id=? AND d.artifact_id=?",
+            OWNER,
+            artifactId),
+        queryString(
+            "SELECT a.xmin::text || '|' || a.updated_at::text || '|' || to_jsonb(a)::text "
+                + "FROM action_attempts a WHERE a.principal_id=? AND a.attempt_id=?",
+            OWNER,
+            attemptId),
+        queryString(
+            "SELECT string_agg(t.xmin::text || '|' || to_jsonb(t)::text, ';' "
+                + "ORDER BY t.sequence) FROM action_attempt_transitions t "
+                + "WHERE t.principal_id=? AND t.attempt_id=?",
+            OWNER,
+            attemptId));
+  }
+
+  private static String undoReceiptSnapshot(String receiptId) throws Exception {
+    return queryString(
+        "SELECT r.xmin::text || '|' || to_jsonb(r)::text "
+            + "FROM local_draft_undo_receipts r "
+            + "WHERE principal_id=? AND receipt_id=?",
+        OWNER,
+        receiptId);
+  }
+
+  private static void assertUndoReceiptImmutable(String receiptId) throws Exception {
+    assertUndoReceiptMutationRejected(
+        "UPDATE local_draft_undo_receipts SET outcome=outcome "
+            + "WHERE principal_id=? AND receipt_id=?",
+        receiptId);
+    assertUndoReceiptMutationRejected(
+        "DELETE FROM local_draft_undo_receipts WHERE principal_id=? AND receipt_id=?",
+        receiptId);
+  }
+
+  private static void assertUndoReceiptMutationRejected(String sql, String receiptId)
+      throws Exception {
+    SQLException rejection = null;
+    try (var connection =
+            DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement statement = connection.prepareStatement(sql)) {
+      statement.setString(1, OWNER);
+      statement.setString(2, receiptId);
+      statement.executeUpdate();
+    } catch (SQLException failure) {
+      rejection = failure;
+    }
+    assertNotNull(rejection, "logical Undo Receipt must reject UPDATE and DELETE");
+    assertEquals("23514", rejection.getSQLState());
+  }
+
   private static Object query(String sql, Object... values) throws Exception {
     try (var connection =
             DriverManager.getConnection(
@@ -676,6 +1212,12 @@ class RealLocalDraftboxUndoHttpIT {
 
   private record ArtifactHead(String artifactId, int version, String hash) {}
 
+  private record ActiveDraftFixture(
+      ArtifactHead artifact,
+      String attemptId,
+      String draftId,
+      String creationReceiptId) {}
+
   private record ProblemShape(String type, String title, int status, String detail) {}
 
   private record DatabaseMutationDigest(
@@ -683,7 +1225,20 @@ class RealLocalDraftboxUndoHttpIT {
       String transitions,
       String drafts,
       String localReceipts,
+      String localUndoReceipts,
       String legacyReceipts) {}
+
+  private record RetainedTruthSnapshot(
+      int captureCount,
+      String captureRow,
+      int artifactCount,
+      String artifactRow,
+      int artifactVersionCount,
+      String artifactVersionRows,
+      String localDraftRow,
+      String creationReceiptRow,
+      String actionAttemptRow,
+      String actionAttemptTransitionRows) {}
 
   private record ScopeHead(
       String schema,

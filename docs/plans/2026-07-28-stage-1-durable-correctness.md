@@ -13,9 +13,9 @@ Review shape: four weekly checkpoints, not a promised delivery date
 - AI Coding: practice vertical slicing, outside-in TDD, bounded delegation and adversarial review.
 - Agent Engineering: reach L3 in two mechanisms only: transactional concurrency and recoverable external
   action.
-- Product/Production: a captured thought, its revision, exact approval and provider-free local Draft/Receipt
-  survive restart without losing ownership or silently duplicating the result; external-provider evidence
-  remains a separate Gate.
+- Product/Production: a captured thought, its revision, exact approval, provider-free local Draft/Receipt and
+  third-gesture append-only logical Undo survive restart without losing ownership or silently duplicating the
+  result; plaintext retention and external-provider evidence remain separate Gates.
 - Career: produce a five-minute failure-recovery demo, Case Card and independently scored teach-back.
 - Business: start founder dogfooding, problem interviews, Concierge delivery and one real price request on
   Day 1 rather than after the infrastructure is complete.
@@ -29,8 +29,10 @@ vertical slices while a separate market lane tests whether the proposed outcome 
 Desired user result:
 
 > I can capture a thought with little friction, revise it, approve one exact local action and use a second
-> explicit gesture to create a local Draft with a durable Receipt. A duplicate request, lost response or
-> process restart does not lose my latest content, authority or the explanation of what happened.
+> explicit gesture to create a local Draft with a durable Receipt. If I no longer want that Draft treated as
+> active, a third explicit gesture appends a logical-Undo Receipt while honestly retaining the original content
+> and history. A duplicate request, lost response or process restart does not lose my latest content, authority
+> or the explanation of what happened.
 
 Stage 1 proves capture, revision, approval, persistence and recovery. It does **not** prove that generated
 content “像本人” or is worth paying for. Those claims require real Seeds and human + Codex Concierge
@@ -45,6 +47,7 @@ Non-goals:
 - streaming voice, VAD or generative UI;
 - generalized Outbox/Inbox without an asynchronous event requirement;
 - a normalized, comprehensive Working Self graph;
+- destructive delete, restore, isolate-retention or crypto-shred semantics hidden behind logical Undo;
 - a generic metrics platform or reversible down-migrations.
 
 ## Execution model
@@ -479,6 +482,28 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   implementation. The diagnostic worktree and private P-001 packet remain
   parked without completion claims; an explicit Roadmap exception allows
   Stage 2 S1 to begin while this Stage remains active.
+- [x] 2026-08-16: logical local Draft Undo reached PostgreSQL adapter full
+  `465/465` and selected graph compatibility `3/3`; the earlier API classpath and
+  packaged `12/12` are retained as historical pre-pin/pre-late-P1 evidence.
+- [x] 2026-08-16: explicit `maven-jar-plugin` `3.5.0` pin landed and received
+  independent read-only review. The API reset child-first P1 fix landed, passed
+  independent source review and ran in the fresh root first cycle/API Surefire. The historical
+  Undo edit-recovery P1 went from outside-in Red to focused Green; final UI focused
+  evidence is `7/7` Green (Store 6 + UI 1), covering 5 Undo and 16 legacy UI scenarios.
+- [x] 2026-08-16: the only fresh root first cycle ran the exact `clean verify` command and ended
+  Red after `4m25s / exit 1`: all prior modules and API Surefire were Green, while the only API
+  Failsafe failure was one stale schema-18 readiness fixture against current schema 19. A one-line
+  test-only `18 -> 19` correction passed independent `GO / P0=0 / P1=0 / P2=0` review and one
+  focused Store 6 + IT 1 verify in `21.993s`; this does not make the root cycle Green.
+- [x] 2026-08-16: the one bounded root recovery passed `11/11` reactor modules with `179` fresh
+  XML and `914 tests / 0 failures / 0 errors / 0 skipped`; it is Engineering Green for the
+  then-current code/test/POM and pre-update docs.
+- [x] 2026-08-16: final independent release review returned
+  `GO / P0=0 / P1=0 / 7 P2 deferred`; Receipt, DCO commit and non-force push are allowed,
+  while Ready/merge/release/deploy remain prohibited and Authority / Live remains Red.
+- [ ] After writer stop-write, externally seal the current 45-path content, docs5 and terminal-docs4
+  manifests, then create the Receipt/DCO commit, non-force push and obtain exact-head CI. The seven
+  nonblocking P2s remain explicit until separately closed.
 
 ## Decisions
 
@@ -540,6 +565,12 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
   product-system implementation. This supersedes the Stage 2 freeze, not the
   unfinished evidence: the fault diagnosis, market checks and Stage 1 Gate
   remain open and cannot be cited as completed.
+- 2026-08-16, local Draft logical Undo: select append-only option A. A third
+  explicit owner gesture appends one immutable typed Undo Receipt; raw Draft
+  truth remains `ACTIVE`, while the constrained read projection becomes
+  `LOGICALLY_UNDONE`. Capture/Artifact plaintext and history remain retained;
+  there is no delete, restore, provider, Reflection or Working Self mutation.
+  See [ADR-0020](../architecture/decisions/0020-append-only-logical-local-draft-undo.md).
 
 ## Surprises, failures and verification receipts
 
@@ -897,18 +928,122 @@ do not count.
 - Undo未实现，owner仍需选择A logical undo（推荐）、B isolate retention或C permanent forget；
   ReflectionCandidate与founder dogfood未执行，shipping disabled，无merge/release/deploy。
 
+### Product-closure delta · 2026-08-16 · Append-only logical local Draft Undo
+
+- Status：PostgreSQL adapter full、selected graph compatibility与post-pin UI focused Engineering Green；
+  `maven-jar-plugin` `3.5.0` pin已落地并独立review；reset P1 runtime已执行；UI P1已
+  outside-in Red -> focused Green；fresh root first cycle因唯一stale current-schema test fixture而Red，
+  一行test-only修复已independent review + focused verify Green；唯一bounded root recovery已
+  `11/11 / 179 XML / 914 tests / 0` Engineering Green；final independent review为
+  `GO / P0=0 / P1=0 / 7 P2 deferred`；Receipt/DCO/non-force push已允许，exact-head CI仍
+  PENDING，不Ready/merge/release/deploy；overall Authority / Live Red。
+- Receipt：[S1 Append-only Logical Local Draft Undo Engineering Receipt](../operations/build-notes/2026-08-16-s1-logical-local-draft-undo.md)；长期边界见
+  [ADR-0020](../architecture/decisions/0020-append-only-logical-local-draft-undo.md)。
+- owner选择logical Undo option A。approval与execute之后，页面只在canonical creation truth确认
+  `undoAvailable=true`时开放第三个明确手势；该手势提交新nonce与browser独立重算的exact 20-field
+  scope hash，timer、历史result、edit或前两个手势均不能继承。
+- 成功在一个PostgreSQL事务内追加
+  `LOCAL_DRAFT_LOGICALLY_UNDONE_V1 / LOGICALLY_UNDONE /
+  CAPTURE_ARTIFACT_HISTORY_RETAINED / SUCCEEDED / simulated=false` Receipt。raw
+  `local_drafts.state`保持不可变`ACTIVE`，只有exact projection返回`LOGICALLY_UNDONE`；creation
+  attempt/transitions/Receipt、Capture、Artifact/version/hash与`xmin`保持不变。
+- 这是保留明文与历史的逻辑撤销，不是delete、restore、isolation或permanent forget。路径不访问
+  provider/Connector、legacy action/reconcile，也不产生Reflection或Working Self response/mutation。
+- `UNDO_UNKNOWN`不自动POST或GET、不显示成功；只有显式“查询撤销结果”手势才GET同一creation
+  attempt。race只允许one winner；commit前kill回滚，commit后response loss由fresh JVM恢复同一
+  canonical Receipt；cross-principal/missing为`404`且protected identifiers不泄漏。
+- 已确认gate：PostgreSQL adapter full `465/465`、selected graph compatibility `3/3`、API selected
+  classpath `12/12` Green。API gate中的Store 6项与六个IT各1项fresh Green，Real UI实际执行4个Undo
+  场景及16个legacy场景。这份API证据现保留为historical pre-pin/pre-late-P1 Receipt。
+- 同一API gate首先发现fat JAR内嵌adapter不是current reactor JAR，embedded V19 migration缺少
+  type ACL revoke，形成initial P1。同一原命令的bounded packaged recovery随后以`12/12`、
+  `7/7` reactor、`51.502s` Green，fat JAR SHA-256为
+  `639ed678fa1e8d2ba39863f2bd619de96044e12d5d9831d0b4f57cb02288e73b`；nested adapter与
+  reactor adapter同为`9ee9af19…`，nested/source/target V19同为`740bea…`且包含type ACL revoke，
+  UI/resources/classes parity也Green。initial P1因此已对该recovery bytes关闭。
+- 显式`maven-jar-plugin` `3.5.0` pin已落地并通过独立只读review。late reset P1修复
+  以child-first顺序将V19三表纳入`PostgresApiTest`（SHA `e42994e…`）；它已落地、
+  通过独立源码review，并在fresh root first cycle/API Surefire中执行。historical Undo在inflight
+  response后立即edit时必须保留独立UNKNOWN/GET recovery context；该UI P1已经历
+  outside-in Red -> focused Green。
+  后者outside-in Red为
+  `REAL_LOCAL_DRAFTBOX_UI_UNDO_INFLIGHT_EDIT_RECOVERY_LOST expected=1 actual=0`，Red XML SHA前缀
+  `446e90c`；production JS/test/harness分别为`d364688c…`/`787ce4c…`/`fc8102ee…`。
+- 最终UI focused gate为`7/7` Green（Store 6 + UI 1）；Store/UI XML SHA-256为
+  `acd77b950510e3d244de60edffe8987a1ff042e60d8699576b937917c02e6cc1`与
+  `bff291bd2702547691a2a450f33da36bdf55300862846232cd2801a0e70b9593`。Real UI执行5个
+  Undo与16个legacy场景；new fat JAR为`a355feb4…`，UI resource source/target/fat parity Green，
+  plugin-version warning absent。这是focused evidence，不是current root。
+- 唯一一次fresh root first cycle执行exact
+  `./mvnw --batch-mode --no-transfer-progress clean verify`，在`4m25s`后`exit 1`，因此root不是
+  Green。Contracts `59`、Core `210`、Agent Loop `41`、OpenAI `39`、InMemory `37`、PostgreSQL
+  `196`及API Surefire `33`全部Green；API Failsafe `22`中唯一失败为
+  `RecoverableLocalActionHttpIT` readiness `expected schemaVersion=18, actual=19`，后三个reactor
+  module `SKIPPED`。failure XML SHA-256为
+  `628335f891e35746b62930a67c7e499a72ecd8744b3fd96738ea3307f621252b`，fresh fat JAR SHA-256前缀
+  `7ba5b19b…`。这是全仓唯一stale current-schema fixture，不是production故障。
+- minimum test-only fix仅将`CURRENT_SCHEMA_VERSION` `18 → 19`，source SHA-256为
+  `474528d20f858bd92a60ec9c4aeef70f9e2e75fe78e8a04e9da9e45270c3042a`，全仓无第二
+  current-head oracle；独立review为`GO / P0=0 / P1=0 / P2=0`。该review不是final release review。
+  修复后只运行一次exact
+  `./mvnw --batch-mode --no-transfer-progress -pl apps/api -am -Dtest=PostgresLocalDraftboxStoreTest -Dsurefire.failIfNoSpecifiedTests=false -Dit.test=RecoverableLocalActionHttpIT -Dfailsafe.failIfNoSpecifiedTests=false verify`；
+  `21.993s / BUILD SUCCESS`，Store `6/6` + IT `1/1` Green。XML SHA-256为
+  `a9afe0890ddb77b3f9254894afe499e50587b45ea46537523578a731fc11b03c` /
+  `113bd4e2d3840f97dd3499e7d85972dc2bd3e9df1a347fd6e95b670e5644ac2a`；6次readiness均为
+  `schemaVersion=19 / pendingMigrations=0 / schemaValid=true`。focused fat JAR `bdd5d664…`与
+  nested adapter `76844d5b…` parity，source/target/nested V19均为`740bea…`并包含type
+  `REVOKE`。这是focused Engineering closure，不是root Green。
+- 唯一bounded root recovery使用同exact
+  `./mvnw --batch-mode --no-transfer-progress clean verify`，以
+  `exit 0 / BUILD SUCCESS / 09:28 / 11 of 11`结束。`179` fresh Surefire/Failsafe XML共
+  `914 tests / 0 failures / 0 errors / 0 skipped`，manifest SHA-256为
+  `31d68d6d728a8f6cc8921d19dd153e5c7ae88e9d8df70be9b5efffe9695caca8`。关键XML前缀为
+  V9 `5387d045…`、V19 `0b5564d9…`、UndoStore `25b5690f…`、Graph61 `a12ecd6d…`、
+  DurableGraph `b6ff161a…`、UndoAPI `4f608710…`、UI `e7190259…`、Crash `d09a7f81…`、
+  Isolation `956f8d21…`、Recoverable `7e4abcf2…`与Pack009 `70b6041c…`。API fat JAR为
+  `1a0278d8…`；nested PostgreSQL/Core与reactor逐字节一致，V19 all surfaces为
+  `740bea…`并含type `REVOKE` exact一次，UI `4/4` parity，adapter `130` / graph `61`
+  payload均`0 mismatch`，`maven-jar-plugin 3.5.0`无warning，postflight无code/test/POM drift。
+  该root运行早于本次terminal docs-only update，只覆盖当时code/test/POM与pre-update docs。
+- known nonblocking P2：causal-time ordering、hostile named/default type ACL、generic Undone hash
+  重算、historical recovery后card文案/state、forced handler Acceptance，以及
+  `EmergeDatabaseSnapshot`对local Draft/creation Receipt/Undo Receipt三表的coverage。它们不得
+  被写成已覆盖，也不阻断上述focused Green。第7项P2是two-tab different-nonce
+  concurrent Undo：backend正确返回`201 + 409`且one Receipt，但loser UI把deterministic
+  `409`视为`UNDO_UNKNOWN`；显式GET读到winner canonical Undone后，仍因loser nonce/hash
+  不匹配而UNKNOWN。这没有duplicate mutation、leak或false success，所以非阻断。最窄future
+  是补two-tab different-nonce UI Acceptance，识别exact `409`，并在显式GET后显示
+  “由另一操作逻辑撤销”，但不得声称loser POST成功。
+- final independent release review已`GO / P0=0 / P1=0 / 7 P2 deferred`。root-covered
+  41-path code-bearing manifest已冻结为
+  `bacb5b377e9cfa4c8d14f7a771d7c0742b4c6734290fb9804b9b9f80903ae98f`。pre-update
+  45-path content/docs5/terminal-docs4 manifests只是historical，不得称final；current值必须在
+  writer stop-write后由独立reviewer外部重算并封存，不把文档自身manifest内嵌回自身。
+  Receipt、DCO commit与non-force push已允许，exact-head CI仍需通过；Draft不Ready，
+  不merge/release/deploy。
+
 ## Outcome and next hypothesis
 
 S1–S4 engineering slice Receipts are complete. The later product increment now also has focused,
 PostgreSQL and crash/fresh-JVM evidence for one exact provider-free local Draft with a non-simulated typed
-Receipt. Its two stale V1 assertions and two V18 graph-eval fixture gaps remain recorded as bounded Red
-history; the pre-late-review root cycle was `904/904` Green. A later independent review P1 about misleading
-Undo copy is now focused/combined Green, and the separate post-P1 fresh root is also `904/904` Green. Final
-post-fix review and the exact code-bearing head CI are Green; Draft PR #7 remains open and Draft, while the
-later Receipt docs-only head still needs its own CI. Release and Undo are not complete. Stage 1 remains active
-because ADR-0004 remains Proposed, the real Connector Gate remains blocked,
-owner must choose Undo semantics, and owner-led Teach-back/transfer/unknown-fault exercises plus founder
-dogfood/Lane B market evidence are incomplete. The older S3/S4 result remains exactly one recoverable
+Receipt. Its previous code-bearing head, post-P1 root and CI remain historical Green for those exact bytes.
+The next increment has now selected append-only logical Undo and reached adapter full, graph focused and
+post-pin UI focused Engineering Green: a third explicit gesture appends one immutable Receipt, raw Draft stays
+`ACTIVE`, and the exact projection becomes `LOGICALLY_UNDONE` while plaintext Capture/Artifact history remains.
+The explicit plugin pin has landed and passed independent review. The reset P1 fix has landed, passed source
+review and exercised its runtime path in the first root cycle; the UI P1 went from outside-in Red to focused Green. The
+earlier packaged `12/12` and fat JAR `639ed678…` remain historical rather than current-root evidence. Final UI
+focused `7/7` is Green. The only first root cycle remained Red on one stale current-schema test fixture; its one-line
+test-only correction passed independent review and a single focused Store 6 + IT 1 verification. The one bounded root
+recovery then passed `11/11 / 179 XML / 914 tests / 0`, making the then-current code/test/POM and pre-update docs
+Engineering Green. Because this terminal docs-only evidence update happened after that root, current docs manifests
+must be sealed externally after writer stop. Final review is `GO / P0=0 / P1=0 / 7 P2 deferred`; Receipt, DCO commit
+and non-force push are allowed, but exact-head CI remains pending. The seven known P2 follow-ups are nonblocking and
+still explicit. Draft remains not Ready, with no merge/release/deploy; release is not complete.
+Stage 1 remains active because
+ADR-0004 remains Proposed, the real Connector Gate remains blocked, owner-led Teach-back/transfer/unknown-fault
+exercises plus founder dogfood/Lane B market evidence are incomplete, and logical Undo does not satisfy a
+delete/forget privacy Gate. The older S3/S4 result remains exactly one recoverable
 simulated provider object after durable `UNKNOWN`; the new local Draft result is a database effect, but
 neither is a real Connector or an exactly-once external-provider claim. Stage 2 begins only when the full
 engineering, market and human-learning Gates are decided; a failed market hypothesis leads to a new vertical

@@ -54,6 +54,7 @@ abstract class PostgresApiTest {
               agent_runs,
               action_receipts,
               action_attempt_transitions,
+              local_draft_undo_receipts,
               local_draft_creation_receipts,
               local_drafts,
               action_attempts,

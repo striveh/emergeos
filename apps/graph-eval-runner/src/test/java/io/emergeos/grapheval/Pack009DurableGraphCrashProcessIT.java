@@ -86,6 +86,7 @@ class Pack009DurableGraphCrashProcessIT {
           "captures",
           "flyway_schema_history",
           "local_draft_creation_receipts",
+          "local_draft_undo_receipts",
           "local_drafts");
 
   @Container
@@ -458,6 +459,7 @@ class Pack009DurableGraphCrashProcessIT {
           count(
               connection,
               "local_draft_creation_receipts"));
+      assertEquals(0, count(connection, "local_draft_undo_receipts"));
       assertEquals(0, count(connection, "local_drafts"));
       assertEquals(2, count(connection, "agent_runs"));
       assertEquals(0, count(connection, "agent_trace_events"));
@@ -494,7 +496,7 @@ class Pack009DurableGraphCrashProcessIT {
           count(
               connection,
               "agent_graph_attempt_terminal_bindings"));
-      assertEquals(18, count(connection, "flyway_schema_history"));
+      assertEquals(19, count(connection, "flyway_schema_history"));
 
       try (PreparedStatement statement =
           connection.prepareStatement(

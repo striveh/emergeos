@@ -1,6 +1,6 @@
 -- Independent Pack010 runtime-role bootstrap.
 --
--- Run only after Flyway V16, V17, or V18 has completed. This file creates one
+-- Run only after Flyway V16, V17, V18, or V19 has completed. This file creates one
 -- audited schema-version helper and never accepts or persists a password.
 -- LOGIN roles are created
 -- with PASSWORD NULL so a separate secret manager must rotate ephemeral or
@@ -64,7 +64,7 @@ BEGIN
     END;
     IF latest_schema_version IS NULL
        OR latest_schema_success IS DISTINCT FROM TRUE
-       OR latest_schema_version NOT IN ('16', '17', '18') THEN
+       OR latest_schema_version NOT IN ('16', '17', '18', '19') THEN
         RAISE EXCEPTION 'Pack010 schema history is unsupported'
             USING ERRCODE = '55000';
     END IF;
@@ -75,6 +75,8 @@ BEGIN
           THEN '6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b'
         WHEN '18'
           THEN '0f2cdc12cb4dc587eb0f5bd648fcb3778401b99e1fdd5aa9a0cc4252ba108afb'
+        WHEN '19'
+          THEN 'd08a2c229ef90e16cc6e076fac68671a4f1fe6ebddec9abcfff813e4b81c1827'
         ELSE NULL
     END;
     SELECT
@@ -211,6 +213,20 @@ BEGIN
         expected_executor_guard_hash := executor_guard_hash;
         expected_helper_closure_hash :=
             '3711ff2b89dba5b36e564a8a74a5399d80be8d04178434c74503b688e5f49b9f';
+    ELSIF failure_guard_hash =
+           '40256147c9316e680e6cb276f2b4fa41e90280385e41997a23177425a9f7e36e'
+       AND executor_guard_hash =
+           'd9909934e3e4e4f015857654c05b02dbe36372ef2421ccd4f8475adb108ee4e1'
+       AND failure_guard_count = 1
+       AND executor_guard_count = 1
+       AND schema_version_helper_count = 1
+       AND schema_version_helper_hash =
+            '51d4368bbaff6d78ec69a6ae5ea13a746816bf478fe6d58b86319b0a041be7e9'
+       AND schema_version_helper_exact THEN
+        expected_failure_guard_hash := failure_guard_hash;
+        expected_executor_guard_hash := executor_guard_hash;
+        expected_helper_closure_hash :=
+            '0bf03dba92918a6b042370debdc818d390095e53e5d49d1aaf8b3e3f72d3ab6c';
     ELSE
         RAISE EXCEPTION
             'Pack010 live authority guard state is mixed or drifted'
@@ -1425,7 +1441,7 @@ BEGIN
     END;
     IF latest_version IS NULL
        OR latest_success IS DISTINCT FROM TRUE
-       OR latest_version NOT IN ('16', '17', '18') THEN
+       OR latest_version NOT IN ('16', '17', '18', '19') THEN
         RAISE EXCEPTION 'Pack010 schema history is unsupported'
             USING ERRCODE = '55000';
     END IF;
@@ -1442,14 +1458,18 @@ DECLARE
         '18e4c45e18c348d21b13c9de8ce600859c3acd64892006c99f8f93cbbd42340e';
     raw_executor_guard_hash CONSTANT TEXT :=
         'fa653be43cb040236f47a7198b75d0a2a7b856281199fc7bf4d17828406b27b4';
-    current_failure_guard_hash CONSTANT TEXT :=
+    legacy_failure_guard_hash CONSTANT TEXT :=
         '814c2d1a58013749d0441f07411e0065c14acc1d9523bc1ea8d8505218573920';
-    current_executor_guard_hash CONSTANT TEXT :=
+    legacy_executor_guard_hash CONSTANT TEXT :=
         '794a126edf1b5a0812ac7feab6ea2be0acc8e808608c83b069b41bf4c6fb394e';
-    target_failure_guard_hash CONSTANT TEXT :=
+    provisioned_failure_guard_hash CONSTANT TEXT :=
         '2ec9d651a84a1db7b414cbe86a2e2f8b13793114bb1e29662783eea03245a3e0';
-    target_executor_guard_hash CONSTANT TEXT :=
+    provisioned_executor_guard_hash CONSTANT TEXT :=
         'd3bbadacfea777b9d0a5e590ab7e068babc9594a2e50fb5600a7c2438b32777a';
+    target_failure_guard_hash CONSTANT TEXT :=
+        '40256147c9316e680e6cb276f2b4fa41e90280385e41997a23177425a9f7e36e';
+    target_executor_guard_hash CONSTANT TEXT :=
+        'd9909934e3e4e4f015857654c05b02dbe36372ef2421ccd4f8475adb108ee4e1';
     helper_guard_prefix CONSTANT TEXT := $guard_body$        BEGIN
             IF (
                 SELECT count(*)
@@ -1481,7 +1501,7 @@ DECLARE
                   AND pg_catalog.encode(
                         pg_catalog.sha256(pg_catalog.convert_to(
                             procedure.prosrc, 'UTF8')), 'hex') =
-                        '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3'
+                        '51d4368bbaff6d78ec69a6ae5ea13a746816bf478fe6d58b86319b0a041be7e9'
                   AND (
                         SELECT count(*)
                         FROM pg_catalog.aclexplode(COALESCE(
@@ -1609,16 +1629,51 @@ BEGIN
                 || 'SECURITY INVOKER '
                 || 'SET search_path = pg_catalog, pg_temp AS %L',
             executor_guard_body);
-    ELSIF failure_guard_hash = current_failure_guard_hash
-       AND executor_guard_hash = current_executor_guard_hash THEN
+    ELSIF failure_guard_hash = legacy_failure_guard_hash
+       AND executor_guard_hash = legacy_executor_guard_hash THEN
         failure_guard_body := pg_catalog.replace(
             failure_guard_body,
             '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143',
-            '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3');
+            '51d4368bbaff6d78ec69a6ae5ea13a746816bf478fe6d58b86319b0a041be7e9');
         executor_guard_body := pg_catalog.replace(
             executor_guard_body,
             '1a3bc853fa25e739491b1862478046d052686931d4a36a4683c0faad6e331143',
-            '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3');
+            '51d4368bbaff6d78ec69a6ae5ea13a746816bf478fe6d58b86319b0a041be7e9');
+        IF pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+               failure_guard_body, 'UTF8')), 'hex') <>
+                 target_failure_guard_hash
+           OR pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+               executor_guard_body, 'UTF8')), 'hex') <>
+                 target_executor_guard_hash THEN
+            RAISE EXCEPTION 'Pack010 live authority guard upgrade drifted'
+                USING ERRCODE = '55000';
+        END IF;
+        EXECUTE pg_catalog.format(
+            'CREATE OR REPLACE FUNCTION '
+                || 'public.agent_graph_require_failure_resumer_v12('
+                || 'expected_function REGPROCEDURE) RETURNS VOID '
+                || 'LANGUAGE plpgsql VOLATILE PARALLEL UNSAFE '
+                || 'SECURITY INVOKER '
+                || 'SET search_path = pg_catalog, pg_temp AS %L',
+            failure_guard_body);
+        EXECUTE pg_catalog.format(
+            'CREATE OR REPLACE FUNCTION '
+                || 'public.agent_graph_require_executor_v10('
+                || 'expected_function REGPROCEDURE) RETURNS VOID '
+                || 'LANGUAGE plpgsql VOLATILE PARALLEL UNSAFE '
+                || 'SECURITY INVOKER '
+                || 'SET search_path = pg_catalog, pg_temp AS %L',
+            executor_guard_body);
+    ELSIF failure_guard_hash = provisioned_failure_guard_hash
+       AND executor_guard_hash = provisioned_executor_guard_hash THEN
+        failure_guard_body := pg_catalog.replace(
+            failure_guard_body,
+            '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3',
+            '51d4368bbaff6d78ec69a6ae5ea13a746816bf478fe6d58b86319b0a041be7e9');
+        executor_guard_body := pg_catalog.replace(
+            executor_guard_body,
+            '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3',
+            '51d4368bbaff6d78ec69a6ae5ea13a746816bf478fe6d58b86319b0a041be7e9');
         IF pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
                failure_guard_body, 'UTF8')), 'hex') <>
                  target_failure_guard_hash
@@ -1673,9 +1728,9 @@ BEGIN
           AND pg_catalog.md5(procedure.prosrc) =
                 CASE procedure.proname
                   WHEN 'agent_graph_require_failure_resumer_v12'
-                    THEN '2bcdf5ca7c13d22fe46d0979cc23d4d5'
+                    THEN 'b7cffa1c95261f33b62f973ffefd6ef7'
                   WHEN 'agent_graph_require_executor_v10'
-                    THEN '990d8d29e187ffa5f09e76c09ff0818b'
+                    THEN 'e2e5b865650e39fc7ea425edf4001b19'
                   ELSE NULL
                 END
           AND NOT procedure.prosecdef
@@ -2445,9 +2500,9 @@ BEGIN
           AND pg_catalog.encode(
                 pg_catalog.sha256(pg_catalog.convert_to(
                     procedure.prosrc, 'UTF8')), 'hex')
-                = '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3'
+                = '51d4368bbaff6d78ec69a6ae5ea13a746816bf478fe6d58b86319b0a041be7e9'
           AND pg_catalog.md5(procedure.prosrc)
-                = '03d284a2970c2085fbb94c91acde26d2'
+                = '5e6d50f28c89c58242b4d90f65472927'
           AND pg_catalog.has_function_privilege(
                 'emergeos_terminal_owner', procedure.oid, 'EXECUTE')
           AND NOT pg_catalog.has_function_privilege(
@@ -2549,17 +2604,17 @@ BEGIN
                     procedure.prosrc, 'UTF8')), 'hex') =
                 CASE procedure.proname
                   WHEN 'agent_graph_require_failure_resumer_v12'
-                    THEN '2ec9d651a84a1db7b414cbe86a2e2f8b13793114bb1e29662783eea03245a3e0'
+                    THEN '40256147c9316e680e6cb276f2b4fa41e90280385e41997a23177425a9f7e36e'
                   WHEN 'agent_graph_require_executor_v10'
-                    THEN 'd3bbadacfea777b9d0a5e590ab7e068babc9594a2e50fb5600a7c2438b32777a'
+                    THEN 'd9909934e3e4e4f015857654c05b02dbe36372ef2421ccd4f8475adb108ee4e1'
                   ELSE NULL
                 END
           AND pg_catalog.md5(procedure.prosrc) =
                 CASE procedure.proname
                   WHEN 'agent_graph_require_failure_resumer_v12'
-                    THEN '2bcdf5ca7c13d22fe46d0979cc23d4d5'
+                    THEN 'b7cffa1c95261f33b62f973ffefd6ef7'
                   WHEN 'agent_graph_require_executor_v10'
-                    THEN '990d8d29e187ffa5f09e76c09ff0818b'
+                    THEN 'e2e5b865650e39fc7ea425edf4001b19'
                   ELSE NULL
                 END
           AND NOT procedure.prosecdef

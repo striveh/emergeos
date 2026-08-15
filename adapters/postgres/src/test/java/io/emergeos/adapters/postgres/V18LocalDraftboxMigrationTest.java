@@ -85,7 +85,7 @@ class V18LocalDraftboxMigrationTest {
         ActionAttemptStore.PlanResult.Accepted.class,
         attempts.planApprovalOrFind(v1));
 
-    assertEquals(1, Flyway.configure().dataSource(dataSource).load().migrate().migrationsExecuted);
+    assertEquals(1, flyway(dataSource, "18").migrate().migrationsExecuted);
     assertEquals(
         ActionApprovalScope.LOCAL_DRAFTBOX_V1,
         jdbc.sql("SELECT execution_route FROM action_attempts WHERE attempt_id = :attemptId")

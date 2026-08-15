@@ -43,7 +43,7 @@ shipping Live仍 disabled，PR未merge/release。该证据绑定上述code-beari
 head不改变它，PR当前check状态以GitHub为准。
 回执：[Exact Local Action Approval Scope Build Note](./docs/operations/build-notes/2026-08-14-s1-exact-local-approval-scope.md)
 
-当前产品闭环增量：**Real Local Draftbox focused、PostgreSQL integration、crash/fresh-JVM、post-P1
+前一产品闭环增量：**Real Local Draftbox focused、PostgreSQL integration、crash/fresh-JVM、post-P1
 fresh root、final independent review及exact code-head CI Engineering Green；Draft PR #7；overall
 Authority / Live Red。** 用户现在可在
 exact approval后以第二个明确手势写入provider-free本地Draft，并取得
@@ -77,6 +77,79 @@ docs-only更新会产生后续新head，仍须等待该head自己的CI；现有G
 PR不得擅自转Ready，且没有merge/release/deploy；任何Engineering Green都不改变Authority/Live Red。
 回执：[Real Local Draftbox Engineering Receipt](./docs/operations/build-notes/2026-08-15-real-local-draftbox.md)
 
+当前产品闭环增量：**Append-only Logical Local Draft Undo已取得PostgreSQL adapter full、selected graph
+compatibility与post-pin UI focused Engineering Green；plugin pin已落地并独立review，两个late P1已关闭；
+fresh root first cycle因唯一stale current-schema test fixture而Red，一行test-only修复已review/focused Green；
+唯一bounded root recovery已`11/11 / 179 XML / 914 tests / 0` Engineering Green；terminal docs-only
+claims的final review已`GO / P0=0 / P1=0 / 7 P2 deferred`，Receipt/DCO/non-force push允许；
+overall Authority / Live Red。** owner已选择logical Undo option A。用户只有在批准与execute之后，才可
+通过第三个明确手势追加一条`LOCAL_DRAFT_LOGICALLY_UNDONE_V1 / simulated=false` Receipt；raw Draft
+继续是不可变`ACTIVE`，exact read projection变为`LOGICALLY_UNDONE`。first/replay/GET为
+`201/200/200`，response loss或hang进入`UNDO_UNKNOWN`且不自动POST/GET，只能由显式查询手势恢复。
+
+这是保留明文与历史的逻辑撤销：Capture/Artifact、creation attempt/transitions/Receipt与raw Draft都不
+删除或改写；没有restore、isolate retention、permanent forget、provider/Connector、legacy reconcile、
+Reflection或Working Self mutation。已确认PostgreSQL adapter full `465/465`、selected graph
+compatibility `3/3`、API classpath selected `12/12` Green，覆盖4个Undo UI场景、16个既有UI场景、
+race/no-leak、commit前rollback与commit后response-loss fresh-JVM replay。
+
+初始fat JAR parity P1与随后`12/12`、`7/7` reactor、`51.502s` packaged recovery仍保留为
+historical pre-pin/pre-late-P1 evidence；当时fat JAR `639ed678…`不是current root。显式
+`maven-jar-plugin` `3.5.0` pin已落地并独立review。late review关闭的两个P1为：
+`PostgresApiTest` reset将V19三表按child-first顺序纳入（SHA `e42994e…`）；以及
+historical Undo在inflight response后立即edit时保留独立UNKNOWN/GET recovery context（Red marker
+`REAL_LOCAL_DRAFTBOX_UI_UNDO_INFLIGHT_EDIT_RECOVERY_LOST expected=1 actual=0`）。
+
+最终UI focused gate为`7/7` Green（Store 6 + UI 1），Real UI实际执行5个Undo与16个
+legacy场景；Store/UI XML SHA前缀为`acd77b95`/`bff291bd`。new fat JAR为`a355feb4…`，
+UI resource source/target/fat parity Green，plugin-version warning absent。known nonblocking P2包括
+causal-time、hostile named/default type ACL、generic Undone hash重算、historical recovery后card文案/
+state、forced handler Acceptance、`EmergeDatabaseSnapshot`三表coverage，以及新增的two-tab
+different-nonce loser UI recovery缺口，共7项。新增P2中backend正确返回`201 + 409`、
+one Receipt，且无duplicate mutation、leak或false success；loser UI目前把exact `409`视为
+`UNDO_UNKNOWN`，显式GET取得winner canonical Undone后仍因nonce/hash不匹配而UNKNOWN。
+最窄future是补two-tab UI Acceptance，识别exact `409`并在显式GET后显示
+“由另一操作逻辑撤销”，但不得声称loser POST成功。
+
+唯一一次fresh root first cycle使用exact `./mvnw --batch-mode --no-transfer-progress clean verify`，
+于`4m25s / exit 1`结束，因此root不是Green。Contracts `59`、Core `210`、Agent Loop `41`、
+OpenAI `39`、InMemory `37`、PostgreSQL `196`与API Surefire `33`全绿；API Failsafe `22`中
+唯一失败为`RecoverableLocalActionHttpIT` readiness期待schema 18而实际为19，后三个
+reactor module `SKIPPED`。failure XML SHA-256为`628335f891e35746b62930a67c7e499a72ecd8744b3fd96738ea3307f621252b`，
+fresh fat JAR为`7ba5b19b…`。这是唯一stale current-schema fixture，不是production故障。
+
+minimum test-only fix只将`CURRENT_SCHEMA_VERSION` `18 → 19`，source SHA-256为
+`474528d20f858bd92a60ec9c4aeef70f9e2e75fe78e8a04e9da9e45270c3042a`；全仓无第二
+current-head oracle，独立review为`GO / P0=0 / P1=0 / P2=0`。修复后单次focused verify
+于`21.993s`完成`BUILD SUCCESS`，Store `6/6` + IT `1/1` Green；XML SHA-256为
+`a9afe0890ddb77b3f9254894afe499e50587b45ea46537523578a731fc11b03c` /
+`113bd4e2d3840f97dd3499e7d85972dc2bd3e9df1a347fd6e95b670e5644ac2a`，6次readiness均为
+`schemaVersion=19 / pendingMigrations=0 / schemaValid=true`。focused fat JAR `bdd5d664…`与
+nested adapter `76844d5b…` parity，source/target/nested V19均为`740bea…`且包含type
+`REVOKE`。这只是Engineering focused closure，不回写首轮root Red。
+
+随后唯一bounded root recovery使用同exact `clean verify`命令，以
+`exit 0 / BUILD SUCCESS / 09:28 / 11 of 11`结束。`179` fresh XML共`914 tests / 0 failures /
+0 errors / 0 skipped`，manifest SHA-256为
+`31d68d6d728a8f6cc8921d19dd153e5c7ae88e9d8df70be9b5efffe9695caca8`。关键XML SHA前缀为
+V9 `5387d045…`、V19 `0b5564d9…`、UndoStore `25b5690f…`、Graph61 `a12ecd6d…`、
+DurableGraph `b6ff161a…`、UndoAPI `4f608710…`、UI `e7190259…`、Crash `d09a7f81…`、
+Isolation `956f8d21…`、Recoverable `7e4abcf2…`和Pack009 `70b6041c…`。API fat JAR为
+`1a0278d8…`；nested PostgreSQL/Core与reactor parity，V19 all surfaces为`740bea…` + type
+`REVOKE` exact一次，UI `4/4` parity，adapter `130` / graph `61` payload `0 mismatch`，
+`maven-jar-plugin 3.5.0`无warning，postflight无code/test/POM drift。fresh root Engineering Green。
+
+该root运行在本次terminal docs-only update之前，只覆盖当时code/test/POM与pre-update
+docs。final independent review为`GO / P0=0 / P1=0 / 7 P2 deferred`；root-covered 41-path
+code-bearing manifest已冻结为
+`bacb5b377e9cfa4c8d14f7a771d7c0742b4c6734290fb9804b9b9f80903ae98f`。终审中的
+pre-update 45-path content/docs5/terminal-docs4 manifests只是historical，不再称final；current值
+必须在writer stop-write后由独立reviewer外部重算并封存，避免文档manifest自引用。
+Receipt、DCO commit与普通非force push已允许，exact-head CI仍待通过。Draft不得
+转Ready，也不得merge、release或deploy；任何local Green都不改变Authority / Live Red。
+回执：[S1 Append-only Logical Local Draft Undo Engineering Receipt](./docs/operations/build-notes/2026-08-16-s1-logical-local-draft-undo.md)；
+决策：[ADR-0020](./docs/architecture/decisions/0020-append-only-logical-local-draft-undo.md)。
+
 产品/工程：
 
 - 按 Capture、Revision、Action、Operations 四个纵向切片逐步引入 PostgreSQL；
@@ -98,7 +171,8 @@ PR不得擅自转Ready，且没有merge/release/deploy；任何Engineering Green
 - Day 1 启动 14 天 Founder dogfooding 和每周 2–3 次最近行为访谈；
 - 至少 3 位目标用户提交真实 Seed，观察复用或明确不复用原因；
 - 通过人 + Codex Concierge 交付母稿，并至少提出一次真实价格；
-- 当前产品只验证捕获/修订/恢复；“有来源、像本人、值得付费”由 Concierge 独立验证；
+- 当前产品只验证捕获/修订、provider-free local Draft与append-only logical Undo的本地闭包；
+  “有来源、像本人、值得付费”由 Concierge 独立验证；
 - 明确 `continue / narrow / pivot` 首个用户群与输出类型。
 
 Gate：

@@ -116,6 +116,7 @@ class Pack010DurableGraphTerminalProcessIT {
           "captures",
           "flyway_schema_history",
           "local_draft_creation_receipts",
+          "local_draft_undo_receipts",
           "local_drafts");
 
   @Container
@@ -689,6 +690,7 @@ class Pack010DurableGraphTerminalProcessIT {
               agent_graph_attributed_failure_outcomes,
               action_attempt_transitions,
               action_receipts,
+              local_draft_undo_receipts,
               local_draft_creation_receipts,
               local_drafts,
               action_attempts,

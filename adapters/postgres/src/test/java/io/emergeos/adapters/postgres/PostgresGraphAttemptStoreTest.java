@@ -1428,7 +1428,7 @@ class PostgresGraphAttemptStoreTest {
                     AND pg_catalog.encode(
                       pg_catalog.sha256(pg_catalog.convert_to(
                         procedure.prosrc, 'UTF8')), 'hex')
-                      = '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3'
+                      = '51d4368bbaff6d78ec69a6ae5ea13a746816bf478fe6d58b86319b0a041be7e9'
                   """)
               .query(String.class)
               .single());
@@ -1679,7 +1679,7 @@ class PostgresGraphAttemptStoreTest {
               SET search_path = pg_catalog, pg_temp
               AS $replacement$
               BEGIN
-                RETURN 18;
+                RETURN 19;
               END;
               $replacement$
               """)

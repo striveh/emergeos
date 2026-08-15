@@ -81,8 +81,7 @@ class RealLocalDraftboxUiHttpIT {
         servedScriptFiles.add(scriptFile.toString());
       }
       assertTrue(
-          servedScriptFiles.size() >= 2,
-          "REAL_LOCAL_DRAFTBOX_UI_SERVED_SCRIPT_SET_INCOMPLETE");
+          servedScriptFiles.size() >= 2, "REAL_LOCAL_DRAFTBOX_UI_SERVED_SCRIPT_SET_INCOMPLETE");
       Path manifest = tempDirectory.resolve("scripts.txt");
       Files.write(manifest, servedScriptFiles, StandardCharsets.UTF_8);
       copyResource(
@@ -91,21 +90,28 @@ class RealLocalDraftboxUiHttpIT {
       Path harness = tempDirectory.resolve("real-local-draftbox-ui-harness.mjs");
       copyResource("/io/emergeos/api/real-local-draftbox-ui-harness.mjs", harness);
 
+      // Keep this first: backend and UI envelope compatibility is the first independently
+      // localizable Red; once closed, the same scenario advances to the third-gesture Red.
+      Scenario logicalUndo =
+          runScenario(application.port(), harness, html, manifest, "real-undo-created", "117");
+      assertLogicalUndoThirdGesture(logicalUndo, 201, false);
+      assertExecutedRows(logicalUndo.approvalNonce());
+
       Scenario happy =
           runScenario(application.port(), harness, html, manifest, "real-created", "101");
       int executePosts = happy.number("EXECUTE_POST_COUNT");
       if (executePosts != 1) {
         System.out.printf(
-            "REAL_LOCAL_DRAFTBOX_UI_EXECUTE_POST_MISSING expected=1 actual=%d%n",
-            executePosts);
+            "REAL_LOCAL_DRAFTBOX_UI_EXECUTE_POST_MISSING expected=1 actual=%d%n", executePosts);
       }
       assertEquals(
           1,
           executePosts,
-          () -> "REAL_LOCAL_DRAFTBOX_UI_EXECUTE_POST_MISSING expected=1 actual="
-              + executePosts
-              + "\n"
-              + happy.output());
+          () ->
+              "REAL_LOCAL_DRAFTBOX_UI_EXECUTE_POST_MISSING expected=1 actual="
+                  + executePosts
+                  + "\n"
+                  + happy.output());
       assertSuccessfulSecondGesture(happy);
       assertEquals(1, happy.number("REPLAY_CANONICAL_EXACT"));
       assertEquals(1, happy.number("GET_CANONICAL_EXACT"));
@@ -122,8 +128,7 @@ class RealLocalDraftboxUiHttpIT {
       assertExplicitGetRecovery(responseLoss, false);
       assertExecutedRows(responseLoss.approvalNonce());
 
-      Scenario hang =
-          runScenario(application.port(), harness, html, manifest, "real-hang", "104");
+      Scenario hang = runScenario(application.port(), harness, html, manifest, "real-hang", "104");
       assertExplicitGetRecovery(hang, true);
       assertExecutedRows(hang.approvalNonce());
 
@@ -175,8 +180,7 @@ class RealLocalDraftboxUiHttpIT {
       }
 
       Scenario timerSpoof =
-          runScenario(
-              application.port(), harness, html, manifest, "real-timer-spoof", "113");
+          runScenario(application.port(), harness, html, manifest, "real-timer-spoof", "113");
       assertSuccessfulSecondGesture(timerSpoof);
       assertEquals(1, timerSpoof.number("TIMER_CANARY_OBSERVED"));
       assertEquals(0, timerSpoof.number("TIMER_INHERITED_SECOND_GESTURE"));
@@ -194,21 +198,40 @@ class RealLocalDraftboxUiHttpIT {
       assertExecutedRows(readyRecovery.approvalNonce());
 
       Scenario executingEdit =
-          runScenario(
-              application.port(), harness, html, manifest, "real-executing-edit", "114");
+          runScenario(application.port(), harness, html, manifest, "real-executing-edit", "114");
       assertExecutingEditRecovery(executingEdit);
       assertExecutedRows(executingEdit.approvalNonce());
 
       Scenario terminalNewArtifact =
           runScenario(
-              application.port(),
-              harness,
-              html,
-              manifest,
-              "real-terminal-new-artifact",
-              "115");
+              application.port(), harness, html, manifest, "real-terminal-new-artifact", "115");
       assertTerminalResultSeparatedFromNewArtifact(terminalNewArtifact);
       assertExecutedRows(terminalNewArtifact.approvalNonce());
+
+      Scenario logicalUndoDoubleClick =
+          runScenario(application.port(), harness, html, manifest, "real-undo-double-click", "118");
+      assertLogicalUndoThirdGesture(logicalUndoDoubleClick, 200, false);
+      assertEquals(1, logicalUndoDoubleClick.number("UNDO_REPLAY_FIXTURE_EXACT"));
+      assertExecutedRows(logicalUndoDoubleClick.approvalNonce());
+
+      Scenario logicalUndoResponseLoss =
+          runScenario(
+              application.port(), harness, html, manifest, "real-undo-response-loss", "119");
+      assertLogicalUndoThirdGesture(logicalUndoResponseLoss, 201, true);
+      assertLogicalUndoExplicitGetRecovery(logicalUndoResponseLoss, false);
+      assertExecutedRows(logicalUndoResponseLoss.approvalNonce());
+
+      Scenario logicalUndoHang =
+          runScenario(application.port(), harness, html, manifest, "real-undo-hang", "120");
+      assertLogicalUndoThirdGesture(logicalUndoHang, 201, true);
+      assertLogicalUndoExplicitGetRecovery(logicalUndoHang, true);
+      assertExecutedRows(logicalUndoHang.approvalNonce());
+
+      Scenario logicalUndoInflightEdit =
+          runScenario(
+              application.port(), harness, html, manifest, "real-undo-inflight-edit", "121");
+      assertLogicalUndoInflightEditRecovery(logicalUndoInflightEdit);
+      assertExecutedRows(logicalUndoInflightEdit.approvalNonce());
 
       assertEquals(0, queryInt("SELECT count(*) FROM action_receipts"));
     } finally {
@@ -255,8 +278,7 @@ class RealLocalDraftboxUiHttpIT {
     assertSuccessfulSecondGesture(scenario, "CANVAS_READY");
   }
 
-  private static void assertSuccessfulSecondGesture(
-      Scenario scenario, String expectedCanvasState) {
+  private static void assertSuccessfulSecondGesture(Scenario scenario, String expectedCanvasState) {
     assertExactUiPlan(scenario, expectedCanvasState);
     assertEquals(1, scenario.number("EXECUTE_GESTURE_PRESENT"));
     assertEquals(1, scenario.number("EXECUTE_CLICK_DISPATCHED"));
@@ -304,8 +326,7 @@ class RealLocalDraftboxUiHttpIT {
     assertEquals(1, scenario.number("EXECUTING_EDIT_V2_SCOPE_RECOVERY_ISOLATED"));
     assertEquals(1, scenario.number("EXECUTING_EDIT_SECOND_EDIT_DISPATCHED"));
     assertEquals(1, scenario.number("EXECUTING_EDIT_SECOND_DIRTY_HANDLERS_FORCED"));
-    assertEquals(
-        1, scenario.number("EXECUTING_EDIT_SECOND_DIRTY_FORCED_HANDLERS_NO_POST"));
+    assertEquals(1, scenario.number("EXECUTING_EDIT_SECOND_DIRTY_FORCED_HANDLERS_NO_POST"));
     assertEquals(1, scenario.number("EXECUTING_EDIT_SECOND_DIRTY_RECOVERY_RETAINED"));
     assertEquals(1, scenario.number("EXECUTING_EDIT_POST_COUNTS_STABLE"));
     assertEquals(1, scenario.number("EXECUTING_EDIT_OLD_SCOPE_POST_BLOCKED"));
@@ -426,6 +447,159 @@ class RealLocalDraftboxUiHttpIT {
     assertEquals(1, scenario.number("FAIL_CLOSED_NO_SUCCESS"));
   }
 
+  private static void assertLogicalUndoThirdGesture(
+      Scenario scenario, int expectedStatus, boolean recoveredAfterUnknown) {
+    assertLogicalUndoThirdGesture(scenario, expectedStatus, recoveredAfterUnknown, "CANVAS_READY");
+  }
+
+  private static void assertLogicalUndoThirdGesture(
+      Scenario scenario,
+      int expectedStatus,
+      boolean recoveredAfterUnknown,
+      String expectedCanvasState) {
+    int envelopeCompatible = scenario.number("UNDO_ENVELOPE_COMPATIBILITY_EXACT");
+    if (envelopeCompatible != 1) {
+      System.out.printf(
+          "REAL_LOCAL_DRAFTBOX_UI_UNDO_ENVELOPE_MISSING expected=1 actual=%d%n",
+          envelopeCompatible);
+    }
+    assertEquals(
+        1,
+        envelopeCompatible,
+        () ->
+            "REAL_LOCAL_DRAFTBOX_UI_UNDO_ENVELOPE_MISSING expected=1 actual="
+                + envelopeCompatible
+                + "\n"
+                + scenario.output());
+    int gesturePresent = scenario.number("UNDO_GESTURE_PRESENT");
+    if (gesturePresent != 1) {
+      System.out.printf(
+          "REAL_LOCAL_DRAFTBOX_UI_LOGICAL_UNDO_GESTURE_MISSING expected=1 actual=%d%n",
+          gesturePresent);
+    }
+    assertEquals(
+        1,
+        gesturePresent,
+        () ->
+            "REAL_LOCAL_DRAFTBOX_UI_LOGICAL_UNDO_GESTURE_MISSING expected=1 actual="
+                + gesturePresent
+                + "\n"
+                + scenario.output());
+    assertExactUiPlan(scenario, expectedCanvasState);
+    assertEquals(1, scenario.number("EXECUTE_GESTURE_PRESENT"));
+    assertEquals(1, scenario.number("EXECUTE_CLICK_DISPATCHED"));
+    assertEquals(1, scenario.number("EXECUTE_POST_COUNT"));
+    assertEquals(1, scenario.number("EXECUTE_RESPONSE_STRICT"));
+    assertEquals(1, scenario.number("CREATION_UNDO_CONTRACT_EXACT"));
+    assertEquals(1, scenario.number("UNDO_PRE_TERMINAL_SAFE"));
+    assertEquals(1, scenario.number("UNDO_FORCED_PRE_TERMINAL_NO_POST"));
+    assertEquals(1, scenario.number("QUIET_BEFORE_THIRD_GESTURE"));
+    assertEquals(1, scenario.number("UNDO_EXACT_BUTTON_COPY"));
+    assertEquals(1, scenario.number("UNDO_CLICK_DISPATCHED"));
+    assertEquals(1, scenario.number("UNDO_NONCE_ON_CLICK"));
+    assertEquals(1, scenario.number("UNDO_POST_COUNT"));
+    assertEquals(1, scenario.number("UNDO_POST_DURING_THIRD_GESTURE"));
+    assertEquals(0, scenario.number("UNEXPECTED_UNDO_POST_COUNT"));
+    assertEquals(1, scenario.number("UNDO_SUBMITTING_STATE_OBSERVED"));
+    assertEquals(1, scenario.number("UNDO_REQUEST_EXACT"));
+    assertEquals(1, scenario.number("UNDO_FETCH_OPTIONS_EXACT"));
+    assertEquals(expectedStatus, scenario.number("UNDO_STATUS"));
+    assertEquals(1, scenario.number("UNDO_RESPONSE_STRICT"));
+    assertEquals(1, scenario.number("UNDO_DOUBLE_CLICK_AT_MOST_ONCE"));
+    assertEquals(1, scenario.number("NO_FALSE_UNDO_CLAIM"));
+    assertEquals(1, scenario.number("NO_DESTRUCTIVE_UNDO_CLAIM"));
+    assertEquals(1, scenario.number("AUTHORITY_LIVE_ALLOWED_BOUNDARY_EXACT"));
+    assertEquals(1, scenario.number("AUTHORITY_LIVE_DENY_COMPLETE"));
+    assertEquals(1, scenario.number("AUTHORITY_LIVE_UNCHANGED"));
+    assertEquals(0, scenario.number("FORBIDDEN_ACTION_ROUTE_CALLS"));
+    assertEquals(0, scenario.number("DELETE_CALLS"));
+    assertEquals(0, scenario.number("LEGACY_ACTION_CALLS"));
+    assertEquals(0, scenario.number("RECONCILE_CALLS"));
+    assertEquals(0, scenario.number("PROVIDER_SURFACE_CALLS"));
+    if (recoveredAfterUnknown) {
+      assertEquals(1, scenario.number("UNDO_UNKNOWN_BEFORE_RECOVERY"));
+      assertEquals(1, scenario.number("UNDO_QUIET_AFTER_UNKNOWN"));
+      assertEquals(1, scenario.number("UNDO_UNKNOWN_NO_FALSE_SUCCESS"));
+    } else {
+      assertLogicalUndoRendered(scenario);
+    }
+  }
+
+  private static void assertLogicalUndoExplicitGetRecovery(
+      Scenario scenario, boolean expectedAbort) {
+    assertEquals(1, scenario.number("UNDO_RECOVERY_GESTURE_PRESENT"));
+    assertEquals(1, scenario.number("UNDO_RECOVERY_CLICK_DISPATCHED"));
+    assertEquals(1, scenario.number("UNDO_RECOVERY_GET_COUNT"));
+    assertEquals(1, scenario.number("UNDO_RECOVERY_GET_DURING_EXPLICIT_GESTURE"));
+    assertEquals(1, scenario.number("UNDO_RECOVERY_CANONICAL_EXACT"));
+    assertEquals(expectedAbort ? 1 : 0, scenario.number("UNDO_HANGING_SIGNAL_ABORTED"));
+    assertLogicalUndoRendered(scenario);
+  }
+
+  private static void assertLogicalUndoInflightEditRecovery(Scenario scenario) {
+    int historicalUnknown = scenario.number("UNDO_INFLIGHT_EDIT_HISTORICAL_UNKNOWN");
+    if (historicalUnknown != 1) {
+      System.out.printf(
+          "REAL_LOCAL_DRAFTBOX_UI_UNDO_INFLIGHT_EDIT_RECOVERY_LOST expected=1 actual=%d%n",
+          historicalUnknown);
+    }
+    assertEquals(
+        1,
+        historicalUnknown,
+        () ->
+            "REAL_LOCAL_DRAFTBOX_UI_UNDO_INFLIGHT_EDIT_RECOVERY_LOST expected=1 actual="
+                + historicalUnknown
+                + "\n"
+                + scenario.output());
+
+    assertEquals(1, scenario.number("UNDO_INFLIGHT_EDIT_TRIGGERED"));
+    assertEquals(1, scenario.number("UNDO_INFLIGHT_EDIT_GET_ONLY"));
+    assertEquals(1, scenario.number("UNDO_UNKNOWN_SECOND_EDIT_DISPATCHED"));
+    assertEquals(1, scenario.number("UNDO_UNKNOWN_SECOND_EDIT_RECOVERY_RETAINED"));
+    assertEquals(1, scenario.number("UNDO_EDIT_SAVE_CLICK_DISPATCHED"));
+    int revisionPutCount = scenario.number("ARTIFACT_REVISION_PUT_COUNT");
+    if (revisionPutCount != 1) {
+      System.out.printf(
+          "REAL_LOCAL_DRAFTBOX_UI_UNDO_INFLIGHT_EDIT_REVISION_PUT_MISSING expected=1 actual=%d%n",
+          revisionPutCount);
+    }
+    assertEquals(
+        1,
+        revisionPutCount,
+        () ->
+            "REAL_LOCAL_DRAFTBOX_UI_UNDO_INFLIGHT_EDIT_REVISION_PUT_MISSING expected=1 actual="
+                + revisionPutCount
+                + "\n"
+                + scenario.output());
+    assertEquals(1, scenario.number("UNDO_EDIT_NEW_ARTIFACT_EXACT"));
+    assertEquals(1, scenario.number("UNDO_EDIT_NEW_ARTIFACT_RECOVERY_ISOLATED"));
+    assertEquals(1, scenario.number("UNDO_EDIT_QUIET_GET_ONLY"));
+    assertEquals(1, scenario.number("UNDO_EDIT_NO_SECOND_POST"));
+    assertEquals(1, scenario.number("UNDO_RECOVERY_GESTURE_PRESENT"));
+    assertEquals(1, scenario.number("UNDO_RECOVERY_CLICK_DISPATCHED"));
+    assertEquals(1, scenario.number("UNDO_RECOVERY_GET_COUNT"));
+    assertEquals(1, scenario.number("UNDO_RECOVERY_GET_DURING_EXPLICIT_GESTURE"));
+    assertEquals(1, scenario.number("UNDO_RECOVERY_CANONICAL_EXACT"));
+    assertEquals(1, scenario.number("UNDO_HANGING_SIGNAL_ABORTED"));
+    assertEquals(1, scenario.number("UNDO_EDIT_EXPLICIT_GET_ONLY"));
+    assertEquals(1, scenario.number("UNDO_EDIT_OLD_RESULT_HISTORICAL"));
+    assertEquals(1, scenario.number("UNDO_EDIT_CONTEXTS_NOT_MIXED"));
+    assertEquals(1, scenario.number("UNDO_EFFECTIVE_STATE_RENDERED"));
+    assertEquals(1, scenario.number("CREATION_RECEIPT_RETAINED"));
+    assertEquals(1, scenario.number("UNDO_RECEIPT_RENDERED"));
+    assertEquals(1, scenario.number("UNDO_POST_COUNT"));
+    assertEquals(0, scenario.number("UNEXPECTED_UNDO_POST_COUNT"));
+    assertLogicalUndoThirdGesture(scenario, 201, true, "REVISION_SAVED");
+  }
+
+  private static void assertLogicalUndoRendered(Scenario scenario) {
+    assertEquals("LOGICALLY_UNDONE", scenario.text("APPROVAL_FINAL_STATE"));
+    assertEquals(1, scenario.number("UNDO_EFFECTIVE_STATE_RENDERED"));
+    assertEquals(1, scenario.number("CREATION_RECEIPT_RETAINED"));
+    assertEquals(1, scenario.number("UNDO_RECEIPT_RENDERED"));
+    assertEquals(1, scenario.number("UNDO_UNAVAILABLE_AFTER_SUCCESS"));
+  }
+
   private static void assertExecutedRows(String approvalNonce) throws Exception {
     assertEquals(
         1,
@@ -496,6 +670,7 @@ class RealLocalDraftboxUiHttpIT {
       throws Exception {
     String captureNonce = "11111111-1111-4111-8111-000000000" + suffix;
     String approvalNonce = "22222222-2222-4222-8222-000000000" + suffix;
+    String undoNonce = "33333333-3333-4333-8333-000000000" + suffix;
     String content = "synthetic real local draftbox UI " + mode + " " + suffix;
     String captureId = seedCapture(port, captureNonce, content);
     String output =
@@ -507,6 +682,7 @@ class RealLocalDraftboxUiHttpIT {
             captureId,
             captureNonce,
             approvalNonce,
+            undoNonce,
             content,
             mode);
     return new Scenario(mode, approvalNonce, output);
@@ -526,7 +702,8 @@ class RealLocalDraftboxUiHttpIT {
               "sourceRef": "quick-capture-ui:text",
               "dataClass": "PERSONAL"
             }
-            """.formatted(nonce, content));
+            """
+                .formatted(nonce, content));
     assertEquals(201, created.statusCode(), "REAL_LOCAL_DRAFTBOX_UI_SEED_CAPTURE_FAILED");
     return JsonPath.read(created.body(), "$.captureId");
   }
@@ -539,6 +716,7 @@ class RealLocalDraftboxUiHttpIT {
       String captureId,
       String captureNonce,
       String approvalNonce,
+      String undoNonce,
       String content,
       String mode)
       throws Exception {
@@ -553,7 +731,8 @@ class RealLocalDraftboxUiHttpIT {
                 captureNonce,
                 approvalNonce,
                 content,
-                mode)
+                mode,
+                undoNonce)
             .redirectErrorStream(true)
             .start();
     boolean finished = process.waitFor(20, TimeUnit.SECONDS);
@@ -666,9 +845,7 @@ class RealLocalDraftboxUiHttpIT {
 
   private static void assertPrivateNoStore(HttpResponse<?> response, String marker) {
     assertEquals(
-        "private, no-store",
-        response.headers().firstValue("Cache-Control").orElse(null),
-        marker);
+        "private, no-store", response.headers().firstValue("Cache-Control").orElse(null), marker);
   }
 
   private static int outputInt(String output, String key) {

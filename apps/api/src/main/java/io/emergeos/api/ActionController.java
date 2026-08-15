@@ -5,11 +5,13 @@ import io.emergeos.core.application.ExecuteLocalDraftCommand;
 import io.emergeos.core.application.LocalDraftboxService;
 import io.emergeos.core.application.PlanLocalApprovalCommand;
 import io.emergeos.core.application.RecoverableActionService;
+import io.emergeos.core.application.UndoLocalDraftCommand;
 import io.emergeos.core.domain.ActionAttempt;
 import io.emergeos.core.domain.ActionApprovalScope;
 import io.emergeos.core.domain.ActionReceipt;
 import io.emergeos.core.domain.ActionTransition;
 import io.emergeos.core.domain.LocalDraftCreationReceipt;
+import io.emergeos.core.domain.LocalDraftUndoReceipt;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
@@ -60,7 +62,8 @@ class ActionController {
                 request.approvalNonce(),
                 request.approvedScopeSchema(),
                 request.approvedScopeHash()));
-    ApprovalActionResponse body = ApprovalActionResponse.from(approval.attempt());
+    ApprovalActionResponse body =
+        ApprovalActionResponse.from(drafts.project(approval.attempt()));
     URI location = URI.create("/api/v1/action-approvals/" + approval.attempt().attemptId());
     return approval.created()
         ? ResponseEntity.created(location).body(body)
@@ -78,7 +81,8 @@ class ActionController {
 
   @GetMapping("/action-approvals/{attemptId}")
   ApprovalActionResponse getApproval(@PathVariable("attemptId") String attemptId) {
-    return ApprovalActionResponse.from(actions.getExplicitApproval(attemptId));
+    return ApprovalActionResponse.from(
+        drafts.project(actions.getExplicitApproval(attemptId)));
   }
 
   @PostMapping("/action-approvals/{attemptId}/execute")
@@ -89,9 +93,31 @@ class ActionController {
         drafts.execute(
             new ExecuteLocalDraftCommand(
                 attemptId, request.scopeSchema(), request.scopeHash()));
-    ApprovalActionResponse body = ApprovalActionResponse.from(execution.attempt());
+    ApprovalActionResponse body =
+        ApprovalActionResponse.from(drafts.project(execution.attempt()));
     URI location = URI.create("/api/v1/action-approvals/" + attemptId);
     return execution.created()
+        ? ResponseEntity.created(location).body(body)
+        : ResponseEntity.ok().location(location).body(body);
+  }
+
+  @PostMapping("/action-approvals/{attemptId}/undo")
+  ResponseEntity<ApprovalActionResponse> undoApproval(
+      @PathVariable("attemptId") String attemptId,
+      @RequestBody UndoApprovalRequest request) {
+    LocalDraftboxService.Undo undo =
+        drafts.undo(
+            new UndoLocalDraftCommand(
+                attemptId,
+                request.undoNonce(),
+                request.scopeSchema(),
+                request.scopeHash()));
+    ApprovalActionResponse body =
+        ApprovalActionResponse.from(
+            new LocalDraftboxService.Projection(
+                undo.creationAttempt(), undo.receipt()));
+    URI location = URI.create("/api/v1/action-approvals/" + attemptId);
+    return undo.created()
         ? ResponseEntity.created(location).body(body)
         : ResponseEntity.ok().location(location).body(body);
   }
@@ -125,6 +151,9 @@ class ActionController {
       String approvedScopeHash) {}
 
   record ExecuteApprovalRequest(String scopeSchema, String scopeHash) {}
+
+  record UndoApprovalRequest(
+      String undoNonce, String scopeSchema, String scopeHash) {}
 
   record ActionResponse(
       String attemptId,
@@ -170,9 +199,17 @@ class ActionController {
       ProvenanceResponse provenance,
       ApprovalActionDetailResponse action,
       ApprovalArtifactResponse artifact,
-      String executionState) {
+      String executionState,
+      LocalDraftUndoReceiptResponse undoReceipt,
+      boolean undoAvailable) {
 
     static ApprovalActionResponse from(ActionAttempt attempt) {
+      return from(new LocalDraftboxService.Projection(attempt, null));
+    }
+
+    static ApprovalActionResponse from(LocalDraftboxService.Projection projection) {
+      ActionAttempt attempt = projection.creationAttempt();
+      LocalDraftUndoReceipt undoReceipt = projection.undoReceipt();
       return new ApprovalActionResponse(
           attempt.attemptId(),
           attempt.status().name(),
@@ -202,14 +239,18 @@ class ActionController {
               attempt.capability().maxCalls()),
           attempt.transitions().stream().map(TransitionResponse::from).toList(),
           approvalReceipt(attempt),
-          LocalDraftResponse.from(attempt),
+          LocalDraftResponse.from(attempt, undoReceipt),
           attempt.approvalScope().scopeSchema(),
           attempt.approvalScope().scopeHash(),
           ApprovalPrincipalResponse.from(attempt.approvalScope()),
           ProvenanceResponse.from(attempt.approvalScope()),
           ApprovalActionDetailResponse.from(attempt.approvalScope()),
           ApprovalArtifactResponse.from(attempt.approvalScope()),
-          attempt.localDraftReceipt() == null ? "NOT_EXECUTED" : "EXECUTED");
+          attempt.localDraftReceipt() == null ? "NOT_EXECUTED" : "EXECUTED",
+          undoReceipt == null
+              ? null
+              : LocalDraftUndoReceiptResponse.from(undoReceipt),
+          attempt.localDraftReceipt() != null && undoReceipt == null);
     }
 
     private static ApprovalReceiptResponse approvalReceipt(ActionAttempt attempt) {
@@ -373,6 +414,45 @@ class ActionController {
     }
   }
 
+  record LocalDraftUndoReceiptResponse(
+      String receiptType,
+      String receiptId,
+      String creationAttemptId,
+      String draftId,
+      String creationReceiptId,
+      String artifactId,
+      int artifactVersion,
+      String artifactHash,
+      String scopeSchema,
+      String scopeHash,
+      String undoNonce,
+      String effect,
+      String retention,
+      String outcome,
+      Instant occurredAt,
+      boolean simulated) {
+
+    static LocalDraftUndoReceiptResponse from(LocalDraftUndoReceipt receipt) {
+      return new LocalDraftUndoReceiptResponse(
+          receipt.receiptType(),
+          receipt.receiptId(),
+          receipt.creationAttemptId(),
+          receipt.draftId(),
+          receipt.creationReceiptId(),
+          receipt.artifactId(),
+          receipt.artifactVersion(),
+          receipt.artifactHash(),
+          receipt.scopeSchema(),
+          receipt.scopeHash(),
+          receipt.undoNonce(),
+          receipt.effect(),
+          receipt.retention(),
+          receipt.outcome().name(),
+          receipt.occurredAt(),
+          receipt.simulated());
+    }
+  }
+
   record LocalDraftResponse(
       String draftId,
       String state,
@@ -381,14 +461,15 @@ class ActionController {
       String artifactHash,
       Instant createdAt) {
 
-    static LocalDraftResponse from(ActionAttempt attempt) {
+    static LocalDraftResponse from(
+        ActionAttempt attempt, LocalDraftUndoReceipt undoReceipt) {
       LocalDraftCreationReceipt receipt = attempt.localDraftReceipt();
       if (receipt == null) {
         return null;
       }
       return new LocalDraftResponse(
           receipt.draftId(),
-          "ACTIVE",
+          undoReceipt == null ? "ACTIVE" : LocalDraftUndoReceipt.EFFECT,
           attempt.plan().artifactId(),
           attempt.plan().artifactVersion(),
           attempt.plan().artifactHash(),

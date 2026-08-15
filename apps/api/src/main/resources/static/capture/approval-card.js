@@ -2,6 +2,7 @@
   const TRUSTED_ARTIFACT_EVENT = "emergeos:trusted-artifact";
   const ARTIFACT_INVALIDATED_EVENT = "emergeos:artifact-invalidated";
   const SCOPE_SCHEMA = "emergeos.action-approval-scope.v1";
+  const UNDO_SCOPE_SCHEMA = "emergeos.local-draft-undo-scope.v1";
   const MAX_RESPONSE_BYTES = 262144;
   const APPROVAL_TIMEOUT_MILLIS = 10000;
   const EXECUTION_ROUTE = "LOCAL_DRAFTBOX_V2";
@@ -48,6 +49,8 @@
   const retry = document.querySelector("#approval-retry");
   const execute = document.querySelector("#approval-execute");
   const checkExecution = document.querySelector("#approval-check-execution");
+  const undo = document.querySelector("#approval-undo");
+  const checkUndo = document.querySelector("#approval-undo-recover");
   const status = document.querySelector("#approval-status");
   const result = document.querySelector("#approval-result");
   const resultContext = document.querySelector("#approval-result-context");
@@ -55,6 +58,8 @@
   const draftSummary = document.querySelector("#approval-draft-summary");
   const receipt = document.querySelector("#approval-receipt");
   const receiptSummary = document.querySelector("#approval-receipt-summary");
+  const undoReceiptLine = document.querySelector("#approval-undo-receipt");
+  const undoReceiptSummary = document.querySelector("#approval-undo-receipt-summary");
   const undoBoundary = document.querySelector("#approval-undo-boundary");
 
   if (
@@ -71,6 +76,8 @@
     !retry ||
     !execute ||
     !checkExecution ||
+    !undo ||
+    !checkUndo ||
     !status ||
     !result ||
     !resultContext ||
@@ -78,6 +85,8 @@
     !draftSummary ||
     !receipt ||
     !receiptSummary ||
+    !undoReceiptLine ||
+    !undoReceiptSummary ||
     !undoBoundary
   ) {
     return;
@@ -89,6 +98,8 @@
   let plannedExecution = null;
   let recoverableExecution = null;
   let recoverableExecutionHistorical = false;
+  let recoverableUndo = null;
+  let recoverableUndoHistorical = false;
   let terminalResult = null;
   let requestPending = false;
   let artifactEpoch = 0;
@@ -96,6 +107,9 @@
 
   const hasUnresolvedHistoricalExecution = () =>
     recoverableExecutionHistorical && recoverableExecution !== null;
+
+  const hasUnresolvedHistoricalUndo = () =>
+    recoverableUndoHistorical && recoverableUndo !== null;
 
   const setState = (state, message, alert = false) => {
     card.dataset.state = state;
@@ -113,6 +127,7 @@
     submit.disabled =
       busy ||
       hasUnresolvedHistoricalExecution() ||
+      hasUnresolvedHistoricalUndo() ||
       !trustedArtifact ||
       !trustedScope;
     retry.disabled =
@@ -123,12 +138,20 @@
     execute.disabled =
       busy ||
       hasUnresolvedHistoricalExecution() ||
+      hasUnresolvedHistoricalUndo() ||
       !plannedExecution ||
       card.dataset.state !== "PLANNED";
     checkExecution.disabled =
       busy ||
       !recoverableExecution ||
       (!recoverableExecutionHistorical && card.dataset.state !== "UNKNOWN");
+    undo.disabled =
+      busy ||
+      card.dataset.state !== "SUCCEEDED" ||
+      terminalResult?.draft?.state !== "ACTIVE" ||
+      terminalResult?.undoAvailable !== true;
+    checkUndo.disabled =
+      busy || !recoverableUndo || card.dataset.state !== "UNDO_UNKNOWN";
     card.setAttribute?.("aria-busy", String(busy));
   };
 
@@ -139,6 +162,13 @@
     checkExecution.disabled = true;
   };
 
+  const hideUndoControls = () => {
+    undo.hidden = true;
+    undo.disabled = true;
+    checkUndo.hidden = true;
+    checkUndo.disabled = true;
+  };
+
   const hideResult = () => {
     result.hidden = true;
     result.removeAttribute?.("data-context");
@@ -147,15 +177,22 @@
     draftSummary.hidden = true;
     receipt.hidden = true;
     receiptSummary.hidden = true;
+    undoReceiptLine.hidden = true;
+    undoReceiptSummary.hidden = true;
     undoBoundary.hidden = true;
+    hideUndoControls();
     resultContext.textContent = "历史执行结果；不授权当前 Artifact";
     draftSummary.textContent = "";
     receiptSummary.textContent = "";
+    undoReceiptSummary.textContent = "";
     if (!draftSummary.parentElement) {
       localDraft.textContent = "";
     }
     if (!receiptSummary.parentElement) {
       receipt.textContent = "";
+    }
+    if (!undoReceiptSummary.parentElement) {
+      undoReceiptLine.textContent = "";
     }
   };
 
@@ -167,6 +204,8 @@
     result.setAttribute?.("data-context", "HISTORICAL");
     resultContext.textContent = "历史执行结果；不授权当前 Artifact";
     resultContext.hidden = false;
+    undo.hidden = true;
+    undo.disabled = true;
   };
 
   const showHistoricalExecutionUnknown = () => {
@@ -174,6 +213,7 @@
     submit.disabled = true;
     retry.hidden = true;
     retry.disabled = true;
+    hideUndoControls();
     execute.hidden = true;
     execute.disabled = true;
     checkExecution.hidden = false;
@@ -187,6 +227,31 @@
     setState(
       "UNKNOWN",
       "历史 attempt 的执行结果未知。旧批准已永久禁止再次执行；只能由你明确查询同一 attempt 的持久状态。",
+      true,
+    );
+  };
+
+  const showHistoricalUndoUnknown = () => {
+    submit.hidden = true;
+    submit.disabled = true;
+    retry.hidden = true;
+    retry.disabled = true;
+    hideExecutionControls();
+    undo.hidden = true;
+    undo.disabled = true;
+    checkUndo.hidden = recoverableUndo === null;
+    checkUndo.disabled = requestPending || recoverableUndo === null;
+    if (terminalResult) {
+      markTerminalResultHistorical();
+    } else {
+      hideResult();
+      checkUndo.hidden = recoverableUndo === null;
+      checkUndo.disabled = requestPending || recoverableUndo === null;
+    }
+    card.hidden = false;
+    setState(
+      "UNDO_UNKNOWN",
+      "历史 attempt 的逻辑撤销结果未知。旧 operation 已永久禁止再次 POST；只能由你明确查询同一 attempt 的持久状态。",
       true,
     );
   };
@@ -208,6 +273,11 @@
       hasUnresolvedHistoricalExecution() ||
       (recoverableExecution !== null &&
         ["EXECUTING", "UNKNOWN"].includes(card.dataset.state));
+    const preserveAmbiguousUndo =
+      hasUnresolvedHistoricalUndo() ||
+      (recoverableUndo !== null &&
+        (card.dataset.state === "UNDO_UNKNOWN" ||
+          (card.dataset.state === "UNDOING" && requestController !== null)));
     artifactEpoch += 1;
     requestController?.abort?.();
     requestController = null;
@@ -222,6 +292,7 @@
     retry.hidden = true;
     retry.disabled = true;
     hideExecutionControls();
+    hideUndoControls();
     if (!preserveHistoricalResult) {
       hideResult();
     }
@@ -235,6 +306,13 @@
     }
     recoverableExecution = null;
     recoverableExecutionHistorical = false;
+    if (preserveAmbiguousUndo) {
+      recoverableUndoHistorical = true;
+      showHistoricalUndoUnknown();
+      return;
+    }
+    recoverableUndo = null;
+    recoverableUndoHistorical = false;
     if (preserveHistoricalResult) {
       markTerminalResultHistorical();
     }
@@ -417,6 +495,66 @@
     ).join("");
   };
 
+  const canonicalUndoScopeValues = (creation, undoNonce) => [
+    "CONFIGURED_LOCAL_PRINCIPAL",
+    creation.approvalPrincipal.configuredPrincipalId,
+    "EXPLICIT_LOCAL_OWNER_INPUT",
+    "LOCAL_DRAFTBOX_LOGICAL_UNDO_V1",
+    "LOGICALLY_UNDO_LOCAL_DRAFT",
+    `local://drafts/${creation.localDraft.draftId}`,
+    creation.localDraft.draftId,
+    creation.attemptId,
+    creation.receipt.receiptId,
+    creation.localDraft.artifactId,
+    String(creation.localDraft.artifactVersion),
+    creation.localDraft.artifactHash,
+    "ACTIVE",
+    "CAPTURE_ARTIFACT_HISTORY_RETAINED",
+    "local-draft-undo-v1",
+    "emergeos.local-draftbox",
+    "emergeos:local-draftbox",
+    `local-draftbox:${creation.approvalPrincipal.configuredPrincipalId}`,
+    undoNonce,
+    "1",
+  ];
+
+  const recomputeUndoScopeHash = async (creation, undoNonce) => {
+    const subtle = globalThis.crypto?.subtle;
+    const TextEncoderConstructor = globalThis.TextEncoder;
+    if (
+      !subtle ||
+      typeof subtle.digest !== "function" ||
+      typeof TextEncoderConstructor !== "function"
+    ) {
+      throw clientUnavailable("UNDO_SCOPE_CRYPTO_UNAVAILABLE");
+    }
+    const encoder = new TextEncoderConstructor();
+    const schemaBytes = encoder.encode(UNDO_SCOPE_SCHEMA);
+    const valueBytes = canonicalUndoScopeValues(creation, undoNonce).map((value) =>
+      encoder.encode(value),
+    );
+    const totalLength =
+      schemaBytes.byteLength +
+      1 +
+      valueBytes.reduce((total, value) => total + 4 + value.byteLength, 0);
+    const canonical = new Uint8Array(totalLength);
+    const view = new DataView(canonical.buffer);
+    canonical.set(schemaBytes, 0);
+    let offset = schemaBytes.byteLength;
+    canonical[offset] = 0;
+    offset += 1;
+    for (const value of valueBytes) {
+      view.setUint32(offset, value.byteLength, false);
+      offset += 4;
+      canonical.set(value, offset);
+      offset += value.byteLength;
+    }
+    const digest = await subtle.digest("SHA-256", canonical);
+    return Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+  };
+
   const freezeScope = (body) =>
     Object.freeze({
       scopeSchema: body.scopeSchema,
@@ -518,6 +656,10 @@
     retry.hidden = true;
     retry.disabled = true;
     hideExecutionControls();
+    if (recoverableUndoHistorical && recoverableUndo) {
+      showHistoricalUndoUnknown();
+      return;
+    }
     if (recoverableExecutionHistorical && recoverableExecution) {
       showHistoricalExecutionUnknown();
       return;
@@ -594,11 +736,17 @@
       plannedExecution = null;
       displayVerifiedScope(artifact, scope);
       card.hidden = false;
-      submit.hidden = hasUnresolvedHistoricalExecution();
-      submit.disabled = hasUnresolvedHistoricalExecution();
+      submit.hidden =
+        hasUnresolvedHistoricalExecution() || hasUnresolvedHistoricalUndo();
+      submit.disabled =
+        hasUnresolvedHistoricalExecution() || hasUnresolvedHistoricalUndo();
       submit.textContent = "记录本次批准";
       retry.hidden = true;
       hideExecutionControls();
+      if (recoverableUndoHistorical && recoverableUndo) {
+        showHistoricalUndoUnknown();
+        return;
+      }
       if (recoverableExecutionHistorical && recoverableExecution) {
         checkExecution.hidden = false;
         if (terminalResult) {
@@ -714,6 +862,8 @@
         "action",
         "artifact",
         "executionState",
+        "undoReceipt",
+        "undoAvailable",
       ]) &&
       safeIdentifier(body.attemptId) &&
       location === `/api/v1/action-approvals/${body.attemptId}` &&
@@ -775,6 +925,8 @@
       validInstant(transition.occurredAt) &&
       body.receipt === null &&
       body.localDraft === null &&
+      body.undoReceipt === null &&
+      body.undoAvailable === false &&
       body.scopeSchema === scope.scopeSchema &&
       body.scopeHash === scope.scopeHash &&
       samePrincipal(body.approvalPrincipal, scope.approvalPrincipal) &&
@@ -882,6 +1034,8 @@
       "action",
       "artifact",
       "executionState",
+      "undoReceipt",
+      "undoAvailable",
     ]) &&
     body.attemptId === execution.attemptId &&
     samePlan(body.plan, execution.plan) &&
@@ -893,6 +1047,51 @@
     sameAction(body.action, execution.scope.action) &&
     sameArtifact(body.artifact, execution.scope.artifact);
 
+  const validateLogicalUndoReceipt = (body, execution, expectedUndo = null) => {
+    const undoReceipt = body?.undoReceipt;
+    return (
+      hasExactKeys(undoReceipt, [
+        "receiptType",
+        "receiptId",
+        "creationAttemptId",
+        "draftId",
+        "creationReceiptId",
+        "artifactId",
+        "artifactVersion",
+        "artifactHash",
+        "scopeSchema",
+        "scopeHash",
+        "undoNonce",
+        "effect",
+        "retention",
+        "outcome",
+        "occurredAt",
+        "simulated",
+      ]) &&
+      undoReceipt.receiptType === "LOCAL_DRAFT_LOGICALLY_UNDONE_V1" &&
+      safeIdentifier(undoReceipt.receiptId) &&
+      undoReceipt.creationAttemptId === execution.attemptId &&
+      undoReceipt.draftId === body.localDraft.draftId &&
+      undoReceipt.creationReceiptId === body.receipt.receiptId &&
+      undoReceipt.artifactId === execution.artifact.artifactId &&
+      undoReceipt.artifactVersion === execution.artifact.artifactVersion &&
+      undoReceipt.artifactHash === execution.artifact.artifactHash &&
+      undoReceipt.scopeSchema === UNDO_SCOPE_SCHEMA &&
+      HASH_PATTERN.test(undoReceipt.scopeHash ?? "") &&
+      safeIdentifier(undoReceipt.undoNonce) &&
+      undoReceipt.effect === "LOGICALLY_UNDONE" &&
+      undoReceipt.retention === "CAPTURE_ARTIFACT_HISTORY_RETAINED" &&
+      undoReceipt.outcome === "SUCCEEDED" &&
+      validInstant(undoReceipt.occurredAt) &&
+      Date.parse(undoReceipt.occurredAt) >= Date.parse(body.receipt.occurredAt) &&
+      undoReceipt.simulated === false &&
+      (expectedUndo === null ||
+        (undoReceipt.undoNonce === expectedUndo.undoNonce &&
+          undoReceipt.scopeSchema === expectedUndo.scopeSchema &&
+          undoReceipt.scopeHash === expectedUndo.scopeHash))
+    );
+  };
+
   const validatePersistedPlanned = (body, execution) =>
     hasBoundApprovalEnvelope(body, execution) &&
     body.status === "PLANNED" &&
@@ -902,9 +1101,11 @@
     body.transitions.length === 1 &&
     sameTransition(body.transitions[0], execution.plannedTransition) &&
     body.receipt === null &&
-    body.localDraft === null;
+    body.localDraft === null &&
+    body.undoReceipt === null &&
+    body.undoAvailable === false;
 
-  const validateTerminalExecution = (body, execution) => {
+  const validateTerminalExecution = (body, execution, expectedUndo = null) => {
     const completed = body?.transitions?.[1];
     return (
       hasBoundApprovalEnvelope(body, execution) &&
@@ -928,7 +1129,6 @@
         "createdAt",
       ]) &&
       safeIdentifier(body.localDraft.draftId) &&
-      body.localDraft.state === "ACTIVE" &&
       body.localDraft.artifactId === execution.artifact.artifactId &&
       body.localDraft.artifactVersion === execution.artifact.artifactVersion &&
       body.localDraft.artifactHash === execution.artifact.artifactHash &&
@@ -949,9 +1149,44 @@
       body.receipt.outcome === "SUCCEEDED" &&
       validInstant(body.receipt.occurredAt) &&
       body.receipt.occurredAt === body.localDraft.createdAt &&
-      body.receipt.simulated === false
+      body.receipt.simulated === false &&
+      ((body.localDraft.state === "ACTIVE" &&
+        body.undoReceipt === null &&
+        body.undoAvailable === true) ||
+        (body.localDraft.state === "LOGICALLY_UNDONE" &&
+          body.undoAvailable === false &&
+          validateLogicalUndoReceipt(body, execution, expectedUndo)))
     );
   };
+
+  const sameCreationProjection = (body, operation, expectedState) => {
+    const creation = operation.creation;
+    return (
+      body.localDraft.state === expectedState &&
+      body.localDraft.draftId === creation.localDraft.draftId &&
+      body.localDraft.artifactId === creation.localDraft.artifactId &&
+      body.localDraft.artifactVersion === creation.localDraft.artifactVersion &&
+      body.localDraft.artifactHash === creation.localDraft.artifactHash &&
+      body.localDraft.createdAt === creation.localDraft.createdAt &&
+      body.receipt.receiptType === creation.receipt.receiptType &&
+      body.receipt.receiptId === creation.receipt.receiptId &&
+      body.receipt.attemptId === creation.receipt.attemptId &&
+      body.receipt.draftId === creation.receipt.draftId &&
+      body.receipt.outcome === creation.receipt.outcome &&
+      body.receipt.occurredAt === creation.receipt.occurredAt &&
+      body.receipt.simulated === creation.receipt.simulated &&
+      Array.isArray(body.transitions) &&
+      body.transitions.length === 2 &&
+      creation.transitions.length === 2 &&
+      sameTransition(body.transitions[0], creation.transitions[0]) &&
+      sameTransition(body.transitions[1], creation.transitions[1])
+    );
+  };
+
+  const validateLogicalUndoResult = (body, operation) =>
+    validateTerminalExecution(body, operation.execution, operation) &&
+    body.localDraft.state === "LOGICALLY_UNDONE" &&
+    sameCreationProjection(body, operation, "LOGICALLY_UNDONE");
 
   const setSummaryText = (container, summary, value) => {
     summary.textContent = value;
@@ -969,14 +1204,38 @@
   const renderTerminalExecution = (body, execution) => {
     const preserveDifferentCurrentArtifact = hasDifferentCurrentArtifact(execution);
     const historicalResult =
-      recoverableExecutionHistorical || preserveDifferentCurrentArtifact;
+      recoverableExecutionHistorical ||
+      recoverableUndoHistorical ||
+      preserveDifferentCurrentArtifact;
+    const retainedUndo =
+      recoverableUndo?.execution === execution ? recoverableUndo : null;
     const draft = Object.freeze({ ...body.localDraft });
     const durableReceipt = Object.freeze({ ...body.receipt });
+    const durableUndoReceipt = body.undoReceipt
+      ? Object.freeze({ ...body.undoReceipt })
+      : null;
+    const creation =
+      retainedUndo?.creation ??
+      Object.freeze({
+        attemptId: body.attemptId,
+        approvalPrincipal: Object.freeze({ ...body.approvalPrincipal }),
+        localDraft: Object.freeze({ ...body.localDraft, state: "ACTIVE" }),
+        receipt: durableReceipt,
+        transitions: Object.freeze(
+          body.transitions.map((transition) => Object.freeze({ ...transition })),
+        ),
+      });
     terminalResult = Object.freeze({
       draft,
       receipt: durableReceipt,
+      undoReceipt: durableUndoReceipt,
+      undoAvailable: body.undoAvailable,
       artifact: execution.artifact,
+      execution,
+      creation,
     });
+    recoverableUndo = draft.state === "ACTIVE" ? retainedUndo : null;
+    recoverableUndoHistorical = false;
     plannedExecution = null;
     recoverableExecution = null;
     recoverableExecutionHistorical = false;
@@ -995,7 +1254,17 @@
     draftSummary.hidden = false;
     receipt.hidden = false;
     receiptSummary.hidden = false;
+    undoReceiptLine.hidden = durableUndoReceipt === null;
+    undoReceiptSummary.hidden = durableUndoReceipt === null;
     undoBoundary.hidden = false;
+    checkUndo.hidden = true;
+    checkUndo.disabled = true;
+    undo.hidden = draft.state === "ACTIVE" ? historicalResult : false;
+    undo.disabled =
+      requestPending ||
+      historicalResult ||
+      draft.state !== "ACTIVE" ||
+      body.undoAvailable !== true;
     setSummaryText(
       localDraft,
       draftSummary,
@@ -1006,6 +1275,19 @@
       receiptSummary,
       `Receipt ${durableReceipt.receiptType} · Receipt ID ${durableReceipt.receiptId} · Attempt ID ${durableReceipt.attemptId} · Draft ID ${durableReceipt.draftId} · Outcome ${durableReceipt.outcome} · simulated=false`,
     );
+    if (durableUndoReceipt) {
+      setSummaryText(
+        undoReceiptLine,
+        undoReceiptSummary,
+        `Undo Receipt ${durableUndoReceipt.receiptType} · Receipt ID ${durableUndoReceipt.receiptId} · Effect ${durableUndoReceipt.effect} · Retention ${durableUndoReceipt.retention} · Outcome ${durableUndoReceipt.outcome} · simulated=false`,
+      );
+      undoBoundary.textContent =
+        "逻辑状态变化已核验；本地明文、Capture、Artifact、创建 Receipt 与历史均保留。";
+    } else {
+      undoReceiptSummary.textContent = "";
+      undoBoundary.textContent =
+        "逻辑撤销只改变本地草稿的有效状态；本地明文、Capture、Artifact、创建 Receipt 与历史均保留。";
+    }
     if (historicalResult) {
       markTerminalResultHistorical();
     }
@@ -1021,10 +1303,17 @@
       `${execution.scope.action.risk} · Policy ${execution.scope.action.policyVersion}`;
     boundaryText.textContent =
       "已执行精确批准；下方仅展示本地草稿与独立 Receipt 的安全摘要。";
-    setState(
-      "SUCCEEDED",
-      "持久化结果已核验 · 状态 SUCCEEDED · executionState EXECUTED。",
-    );
+    if (draft.state === "LOGICALLY_UNDONE") {
+      setState(
+        "LOGICALLY_UNDONE",
+        "持久化结果已核验 · 有效状态 LOGICALLY_UNDONE · 原创建 Receipt 与 Undo Receipt 均为只读摘要。",
+      );
+    } else {
+      setState(
+        "SUCCEEDED",
+        "持久化结果已核验 · 状态 SUCCEEDED · executionState EXECUTED。",
+      );
+    }
   };
 
   const readStrictProblem = async (response) => {
@@ -1484,10 +1773,408 @@
     }
   };
 
+  const hasCurrentUndoOperation = (operation, snapshot) =>
+    operation !== null &&
+    snapshot !== null &&
+    recoverableUndo === operation &&
+    operation.undoNonce === recoverableUndo.undoNonce &&
+    operation.attemptId === operation.execution.attemptId &&
+    operation.attemptId === operation.creation.attemptId &&
+    operation.epoch === artifactEpoch &&
+    operation.artifact === trustedArtifact &&
+    operation.artifact === operation.execution.artifact &&
+    snapshot === terminalResult &&
+    snapshot.execution === operation.execution &&
+    snapshot.creation === operation.creation &&
+    snapshot.artifact === operation.artifact &&
+    snapshot.draft.state === "ACTIVE";
+
+  const hasHistoricalUndoOperation = (operation, snapshot) =>
+    operation !== null &&
+    snapshot !== null &&
+    recoverableUndoHistorical &&
+    recoverableUndo === operation &&
+    operation.undoNonce === recoverableUndo.undoNonce &&
+    operation.attemptId === operation.execution.attemptId &&
+    operation.attemptId === operation.creation.attemptId &&
+    snapshot === terminalResult &&
+    snapshot.execution === operation.execution &&
+    snapshot.creation === operation.creation &&
+    snapshot.artifact === operation.artifact &&
+    operation.artifact === operation.execution.artifact &&
+    snapshot.draft.state === "ACTIVE";
+
+  const hasRecoverableUndoOperation = (operation, snapshot) =>
+    hasCurrentUndoOperation(operation, snapshot) ||
+    hasHistoricalUndoOperation(operation, snapshot);
+
+  const ownsUndoController = (operation, snapshot, controller) =>
+    requestController === controller &&
+    hasRecoverableUndoOperation(operation, snapshot);
+
+  const hasLiveUndoFence = (operation, snapshot, controller) =>
+    ownsUndoController(operation, snapshot, controller) &&
+    !controller.signal.aborted;
+
+  const showUndoBlocked = (message) => {
+    recoverableUndo = null;
+    recoverableUndoHistorical = false;
+    submit.hidden = true;
+    retry.hidden = true;
+    hideExecutionControls();
+    undo.hidden = true;
+    undo.disabled = true;
+    checkUndo.hidden = true;
+    checkUndo.disabled = true;
+    setState("UNDO_BLOCKED", message, true);
+  };
+
+  const showUndoUnknown = (operation, kind = "TRANSPORT_UNKNOWN") => {
+    recoverableUndo = operation;
+    recoverableUndoHistorical = false;
+    submit.hidden = true;
+    submit.disabled = true;
+    retry.hidden = true;
+    retry.disabled = true;
+    hideExecutionControls();
+    undo.hidden = true;
+    undo.disabled = true;
+    checkUndo.hidden = false;
+    checkUndo.disabled = requestPending;
+    undoReceiptLine.hidden = true;
+    undoReceiptSummary.hidden = true;
+    undoReceiptSummary.textContent = "";
+    undoBoundary.hidden = false;
+    undoBoundary.textContent =
+      "请求结果未知；本地明文、Capture、Artifact、创建 Receipt 与历史仍保持原样。";
+    const reason =
+      kind === "INVALID_RESPONSE"
+        ? "服务端回执不满足可信协议，"
+        : "请求超时、连接中断或响应丢失，";
+    setState(
+      "UNDO_UNKNOWN",
+      `${reason}逻辑撤销结果未知。页面不会自动 POST、重试或 GET；只能由你明确核验同一 attempt 的持久状态。`,
+      true,
+    );
+  };
+
+  const beginLogicalUndo = async () => {
+    if (
+      requestPending ||
+      hasUnresolvedHistoricalUndo() ||
+      card.dataset.state !== "SUCCEEDED" ||
+      !terminalResult ||
+      terminalResult.draft.state !== "ACTIVE" ||
+      terminalResult.undoAvailable !== true ||
+      !terminalResult.execution ||
+      !terminalResult.creation
+    ) {
+      return;
+    }
+
+    const snapshot = terminalResult;
+    const execution = snapshot.execution;
+    const epoch = artifactEpoch;
+    const artifact = trustedArtifact;
+    if (execution.epoch !== epoch || execution.artifact !== artifact) {
+      return;
+    }
+    let operation =
+      recoverableUndo?.execution === execution ? recoverableUndo : null;
+    if (operation !== null && !hasCurrentUndoOperation(operation, snapshot)) {
+      return;
+    }
+    let controller = null;
+    let timeoutId = null;
+    let requestStarted = false;
+    let staleCompletion = false;
+    setBusy(true);
+    submit.hidden = true;
+    retry.hidden = true;
+    hideExecutionControls();
+    undo.hidden = true;
+    undo.disabled = true;
+    checkUndo.hidden = true;
+    checkUndo.disabled = true;
+    setState(
+      "UNDOING",
+      "正在提交逻辑状态变更；在可信终态回执到达前不会宣称结果。",
+    );
+
+    try {
+      if (!operation) {
+        const undoNonce = randomApprovalNonce();
+        if (!undoNonce) {
+          throw clientUnavailable("UNDO_NONCE_UNAVAILABLE");
+        }
+        const scopeHash = await recomputeUndoScopeHash(
+          snapshot.creation,
+          undoNonce,
+        );
+        if (
+          terminalResult !== snapshot ||
+          card.dataset.state !== "UNDOING" ||
+          artifactEpoch !== epoch ||
+          trustedArtifact !== artifact
+        ) {
+          staleCompletion = true;
+          return;
+        }
+        const request = Object.freeze({
+          undoNonce,
+          scopeSchema: UNDO_SCOPE_SCHEMA,
+          scopeHash,
+        });
+        operation = Object.freeze({
+          execution,
+          creation: snapshot.creation,
+          attemptId: execution.attemptId,
+          epoch,
+          artifact,
+          undoNonce,
+          scopeSchema: UNDO_SCOPE_SCHEMA,
+          scopeHash,
+          body: JSON.stringify(request),
+        });
+        recoverableUndo = operation;
+      }
+
+      const AbortControllerConstructor = globalThis.AbortController;
+      if (
+        typeof AbortControllerConstructor !== "function" ||
+        typeof globalThis.fetch !== "function" ||
+        typeof globalThis.setTimeout !== "function" ||
+        typeof globalThis.clearTimeout !== "function"
+      ) {
+        throw clientUnavailable("UNDO_CLIENT_UNAVAILABLE");
+      }
+
+      controller = new AbortControllerConstructor();
+      requestController = controller;
+      timeoutId = globalThis.setTimeout(
+        () => controller.abort(),
+        APPROVAL_TIMEOUT_MILLIS,
+      );
+      const attemptPath =
+        `/api/v1/action-approvals/${encodeURIComponent(execution.attemptId)}`;
+      requestStarted = true;
+      const response = await fetch(`${attemptPath}/undo`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: operation.body,
+        signal: controller.signal,
+        credentials: "same-origin",
+        cache: "no-store",
+        redirect: "error",
+      });
+      if (!hasLiveUndoFence(operation, snapshot, controller)) {
+        await cancelResponseBody(response);
+        if (ownsUndoController(operation, snapshot, controller)) {
+          throw transportUnknown("UNDO_RESPONSE_AFTER_ABORT");
+        }
+        staleCompletion = true;
+        return;
+      }
+      if (
+        ![200, 201].includes(response.status) ||
+        response.headers.get("cache-control") !== "private, no-store" ||
+        response.headers.get("location") !== attemptPath
+      ) {
+        await cancelResponseBody(response);
+        throw invalidResponse("UNDO_RESPONSE_HEADERS_INVALID");
+      }
+      const body = await readBoundedJson(response, JSON_MEDIA_TYPE);
+      if (!hasLiveUndoFence(operation, snapshot, controller)) {
+        if (ownsUndoController(operation, snapshot, controller)) {
+          throw transportUnknown("UNDO_BODY_AFTER_ABORT");
+        }
+        staleCompletion = true;
+        return;
+      }
+      if (!validateLogicalUndoResult(body, operation)) {
+        throw invalidResponse("UNDO_RESPONSE_BINDING_INVALID");
+      }
+      renderTerminalExecution(body, execution);
+    } catch (failure) {
+      if (
+        terminalResult !== snapshot ||
+        artifactEpoch !== epoch ||
+        trustedArtifact !== artifact ||
+        (operation !== null && recoverableUndo !== operation) ||
+        (controller !== null && requestController !== controller)
+      ) {
+        staleCompletion = true;
+        return;
+      }
+      const typedFailure =
+        failure instanceof ApprovalClientError
+          ? failure
+          : transportUnknown(
+              controller?.signal?.aborted
+                ? "UNDO_TIMEOUT_OR_ABORT"
+                : "UNDO_TRANSPORT_UNKNOWN",
+            );
+      if (!requestStarted || !operation) {
+        showUndoBlocked(
+          "当前浏览器无法安全准备逻辑撤销请求；没有发送请求，原本地草稿状态保持不变。",
+        );
+      } else {
+        showUndoUnknown(operation, typedFailure.kind);
+      }
+    } finally {
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+      if (
+        !staleCompletion &&
+        controller !== null &&
+        requestController === controller
+      ) {
+        requestController = null;
+        setBusy(false);
+      } else if (!staleCompletion && controller === null && requestPending) {
+        setBusy(false);
+      }
+    }
+  };
+
+  const recoverLogicalUndo = async (operation) => {
+    const snapshot = terminalResult;
+    const historicalRecovery = recoverableUndoHistorical;
+    const operationStillRecoverable = () =>
+      historicalRecovery
+        ? hasHistoricalUndoOperation(operation, snapshot)
+        : hasCurrentUndoOperation(operation, snapshot);
+    if (
+      requestPending ||
+      card.dataset.state !== "UNDO_UNKNOWN" ||
+      !operationStillRecoverable()
+    ) {
+      return;
+    }
+
+    const AbortControllerConstructor = globalThis.AbortController;
+    if (
+      typeof AbortControllerConstructor !== "function" ||
+      typeof globalThis.fetch !== "function" ||
+      typeof globalThis.setTimeout !== "function" ||
+      typeof globalThis.clearTimeout !== "function"
+    ) {
+      if (historicalRecovery) {
+        showHistoricalUndoUnknown();
+      } else {
+        showUndoUnknown(operation, "CLIENT_UNAVAILABLE");
+      }
+      return;
+    }
+
+    const controller = new AbortControllerConstructor();
+    requestController = controller;
+    let timeoutId = null;
+    let staleCompletion = false;
+    setBusy(true);
+    checkUndo.disabled = true;
+    setState(
+      "UNDO_UNKNOWN",
+      "正在核验同一 attempt 的持久状态；不会发送逻辑撤销 POST。",
+    );
+    try {
+      timeoutId = globalThis.setTimeout(
+        () => controller.abort(),
+        APPROVAL_TIMEOUT_MILLIS,
+      );
+      const response = await fetch(
+        `/api/v1/action-approvals/${encodeURIComponent(operation.execution.attemptId)}`,
+        {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+          credentials: "same-origin",
+          cache: "no-store",
+          redirect: "error",
+        },
+      );
+      if (!hasLiveUndoFence(operation, snapshot, controller)) {
+        await cancelResponseBody(response);
+        if (ownsUndoController(operation, snapshot, controller)) {
+          throw transportUnknown("UNDO_LOOKUP_RESPONSE_AFTER_ABORT");
+        }
+        staleCompletion = true;
+        return;
+      }
+      if (
+        response.status !== 200 ||
+        response.headers.get("cache-control") !== "private, no-store"
+      ) {
+        await cancelResponseBody(response);
+        throw invalidResponse("UNDO_LOOKUP_HEADERS_INVALID");
+      }
+      const body = await readBoundedJson(response, JSON_MEDIA_TYPE);
+      if (!hasLiveUndoFence(operation, snapshot, controller)) {
+        if (ownsUndoController(operation, snapshot, controller)) {
+          throw transportUnknown("UNDO_LOOKUP_BODY_AFTER_ABORT");
+        }
+        staleCompletion = true;
+        return;
+      }
+      if (validateLogicalUndoResult(body, operation)) {
+        renderTerminalExecution(body, operation.execution);
+        return;
+      }
+      if (
+        validateTerminalExecution(body, operation.execution) &&
+        body.localDraft.state === "ACTIVE" &&
+        sameCreationProjection(body, operation, "ACTIVE")
+      ) {
+        renderTerminalExecution(body, operation.execution);
+        if (historicalRecovery) {
+          recoverableUndo = null;
+          recoverableUndoHistorical = false;
+          hideUndoControls();
+        }
+        return;
+      }
+      throw invalidResponse("UNDO_LOOKUP_BINDING_INVALID");
+    } catch (failure) {
+      if (
+        requestController !== controller ||
+        !operationStillRecoverable()
+      ) {
+        staleCompletion = true;
+        return;
+      }
+      const typedFailure =
+        failure instanceof ApprovalClientError
+          ? failure
+          : transportUnknown(
+              controller.signal.aborted
+                ? "UNDO_LOOKUP_TIMEOUT_OR_ABORT"
+                : "UNDO_LOOKUP_TRANSPORT_UNKNOWN",
+            );
+      if (historicalRecovery) {
+        showHistoricalUndoUnknown();
+      } else {
+        showUndoUnknown(operation, typedFailure.kind);
+      }
+    } finally {
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+      if (!staleCompletion && requestController === controller) {
+        requestController = null;
+        setBusy(false);
+      }
+    }
+  };
+
   submit.addEventListener("click", async (event) => {
     event.preventDefault?.();
     if (
       hasUnresolvedHistoricalExecution() ||
+      hasUnresolvedHistoricalUndo() ||
       requestPending ||
       !trustedArtifact ||
       !trustedScope ||
@@ -1523,7 +2210,12 @@
 
   retry.addEventListener("click", async (event) => {
     event.preventDefault?.();
-    if (requestPending || !frozenApproval || card.dataset.state !== "UNKNOWN") {
+    if (
+      requestPending ||
+      hasUnresolvedHistoricalUndo() ||
+      !frozenApproval ||
+      card.dataset.state !== "UNKNOWN"
+    ) {
       return;
     }
     await postApproval(frozenApproval);
@@ -1531,7 +2223,10 @@
 
   execute.addEventListener("click", async (event) => {
     event.preventDefault?.();
-    if (hasUnresolvedHistoricalExecution()) {
+    if (
+      hasUnresolvedHistoricalExecution() ||
+      hasUnresolvedHistoricalUndo()
+    ) {
       return;
     }
     const execution = plannedExecution;
@@ -1548,6 +2243,20 @@
       return;
     }
     await recoverExecution(execution);
+  });
+
+  undo.addEventListener("click", async (event) => {
+    event.preventDefault?.();
+    await beginLogicalUndo();
+  });
+
+  checkUndo.addEventListener("click", async (event) => {
+    event.preventDefault?.();
+    const operation = recoverableUndo;
+    if (!operation) {
+      return;
+    }
+    await recoverLogicalUndo(operation);
   });
 
   document.addEventListener(TRUSTED_ARTIFACT_EVENT, (event) => {

@@ -61,6 +61,7 @@ RFC 记录提议与讨论，并可进入 Accepted、Rejected 或 Withdrawn；ADR
 - [Dormant typed V16 stage-verify-commit attestor ADR](./architecture/decisions/0017-dormant-typed-v16-stage-verify-commit-attestor.md)
 - [Fresh-JVM verified exact-pico overlay reader ADR](./architecture/decisions/0018-fresh-jvm-verified-exact-pico-overlay-reader.md)
 - [Apache-2.0、DCO 与公开治理 ADR](./architecture/decisions/0019-open-source-license-and-contributions.md)
+- [Append-only logical local Draft Undo ADR](./architecture/decisions/0020-append-only-logical-local-draft-undo.md)
 - [RFC-0001：持久 AgentRun、Safe Trace 与 HarnessRunBundle](./rfcs/0001-persistent-agent-run-trace-and-bundle.md)
 - [RFC-0002：真实模型 synthetic egress 与计量边界](./rfcs/0002-real-model-synthetic-egress-and-metering.md)
 - [RFC-0003：read-only Tool post-dispatch deadline truth](./rfcs/0003-post-dispatch-read-only-tool-deadline-truth.md)

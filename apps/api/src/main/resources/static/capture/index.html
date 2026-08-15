@@ -196,6 +196,24 @@
                 >
                   查询执行结果
                 </button>
+                <button
+                  id="approval-undo"
+                  class="secondary-action"
+                  type="button"
+                  hidden
+                  disabled
+                >
+                  逻辑撤销本地草稿（保留明文与历史）
+                </button>
+                <button
+                  id="approval-undo-recover"
+                  class="secondary-action"
+                  type="button"
+                  hidden
+                  disabled
+                >
+                  核验撤销结果
+                </button>
               </div>
               <p
                 id="approval-status"
@@ -217,6 +235,9 @@
                 </p>
                 <p id="approval-receipt" class="approval-result-line" hidden>
                   <span id="approval-receipt-summary"></span>
+                </p>
+                <p id="approval-undo-receipt" class="approval-result-line" hidden>
+                  <span id="approval-undo-receipt-summary"></span>
                 </p>
                 <p id="approval-undo-boundary" class="approval-undo-boundary" hidden>
                   撤销暂未开放；本版本不会提供 Undo 操作。

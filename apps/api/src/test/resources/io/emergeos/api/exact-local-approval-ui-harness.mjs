@@ -12,9 +12,12 @@ const [
   approvalNonce,
   captureContent,
   mode = "created",
+  undoNonceArgument,
 ] = process.argv.slice(2);
 
 const realLocalDraftboxMode = mode.startsWith("real-");
+const logicalUndoMode = mode.startsWith("real-undo-");
+const undoNonce = undoNonceArgument ?? "33333333-3333-4333-8333-000000000000";
 const previewDriftField = mode.startsWith("real-preview-")
   ? mode.slice("real-preview-".length, -"-drift".length)
   : null;
@@ -26,9 +29,12 @@ if (
   !expectedCaptureId ||
   !captureNonce ||
   !approvalNonce ||
-  !captureContent
+  !captureContent ||
+  (logicalUndoMode && !undoNonceArgument)
 ) {
-  throw new Error("page, script, loopback URL, Capture identity, nonces, and content are required");
+  throw new Error(
+    "page, script, loopback URL, Capture identity, capture/approval/undo nonces, and content are required",
+  );
 }
 
 const nodeMajor = Number.parseInt(process.versions.node.split(".")[0], 10);
@@ -293,7 +299,9 @@ const cryptoFacade = new Proxy(webcrypto, {
     if (property === "randomUUID") {
       return () => {
         uuidCalls += 1;
-        return uuidCalls === 1 ? captureNonce : approvalNonce;
+        if (uuidCalls === 1) return captureNonce;
+        if (uuidCalls === 2) return approvalNonce;
+        return logicalUndoMode ? undoNonce : approvalNonce;
       };
     }
     const value = Reflect.get(target, property, target);
@@ -403,10 +411,60 @@ let revisedArtifact = null;
 let executedArtifactSnapshot = null;
 let executedScopeSnapshot = null;
 let executingAttemptId = null;
+let creationAttemptSnapshot = null;
+let plannedUndoContractExact = 0;
+let logicalUndoEnvelopeBlocked = false;
+let creationUndoContractExact = 0;
+let undoEnvelopeCompatibilityExact = 0;
+let undoPreTerminalSafe = 0;
+let undoForcedPreTerminalNoPost = 0;
+let quietBeforeThirdGesture = 0;
+let undoGesturePresent = 0;
+let undoExactButtonCopy = 0;
+let undoClickDispatched = 0;
+let undoPostCount = 0;
+let undoPostDuringThirdGesture = 0;
+let unexpectedUndoPostCount = 0;
+let undoSubmittingStateObserved = 0;
+let undoRequestExact = 0;
+let undoFetchOptionsExact = 0;
+let undoStatus = 0;
+let undoResponseStrict = 0;
+let undoCanonicalBodyText = null;
+let undoResponseBody = null;
+let undoNonceOnClick = 0;
+let undoDoubleClickAtMostOnce = 0;
+let undoReplayFixtureExact = 0;
+let undoUnknownBeforeRecovery = 0;
+let undoUnknownNoFalseSuccess = 0;
+let undoQuietAfterUnknown = 0;
+let undoRecoveryGesturePresent = 0;
+let undoRecoveryClickDispatched = 0;
+let undoRecoveryGetCount = 0;
+let undoRecoveryGetDuringExplicitGesture = 0;
+let undoRecoveryCanonicalExact = 0;
+let undoHangingSignalAborted = 0;
+let undoInflightEditTriggered = 0;
+let undoInflightEditHistoricalUnknown = 0;
+let undoInflightEditGetOnly = 0;
+let undoUnknownSecondEditDispatched = 0;
+let undoUnknownSecondEditRecoveryRetained = 0;
+let undoEditSaveClickDispatched = 0;
+let undoEditNewArtifactExact = 0;
+let undoEditNewArtifactRecoveryIsolated = 0;
+let undoEditQuietGetOnly = 0;
+let undoEditExplicitGetOnly = 0;
+let undoEditOldResultHistorical = 0;
+let undoEditContextsNotMixed = 0;
+let undoEditNoSecondPost = 0;
+let forbiddenActionRouteCalls = 0;
+let deleteCalls = 0;
 const gestureContext = new AsyncLocalStorage();
 const noGestureToken = "NO_GESTURE";
 const secondGestureToken = `execute:${approvalNonce}`;
 const recoveryGestureToken = `recover:${approvalNonce}`;
+const thirdGestureToken = `undo:${undoNonce}`;
+const undoRecoveryGestureToken = `undo-recover:${undoNonce}`;
 let dropFirstApprovalResponse = mode === "response-loss";
 let accelerateApprovalTimeout = false;
 
@@ -440,6 +498,74 @@ const canonicalScopeHash = (scope) => {
     hash.update(bytes);
   }
   return hash.digest("hex");
+};
+
+const canonicalUndoScope = (creation) => {
+  const scopeSchema = "emergeos.local-draft-undo-scope.v1";
+  if (
+    typeof creation?.approvalPrincipal?.configuredPrincipalId !== "string" ||
+    creation.approvalPrincipal.configuredPrincipalId.length === 0 ||
+    typeof creation?.localDraft?.draftId !== "string" ||
+    creation.localDraft.draftId.length === 0 ||
+    typeof creation?.attemptId !== "string" ||
+    creation.attemptId.length === 0 ||
+    typeof creation?.receipt?.receiptId !== "string" ||
+    creation.receipt.receiptId.length === 0 ||
+    typeof creation?.localDraft?.artifactId !== "string" ||
+    creation.localDraft.artifactId.length === 0 ||
+    !Number.isInteger(creation?.localDraft?.artifactVersion) ||
+    creation.localDraft.artifactVersion < 1 ||
+    !/^[0-9a-f]{64}$/.test(creation?.localDraft?.artifactHash ?? "")
+  ) {
+    return null;
+  }
+  const values = [
+    "CONFIGURED_LOCAL_PRINCIPAL",
+    creation?.approvalPrincipal?.configuredPrincipalId,
+    "EXPLICIT_LOCAL_OWNER_INPUT",
+    "LOCAL_DRAFTBOX_LOGICAL_UNDO_V1",
+    "LOGICALLY_UNDO_LOCAL_DRAFT",
+    `local://drafts/${creation?.localDraft?.draftId}`,
+    creation?.localDraft?.draftId,
+    creation?.attemptId,
+    creation?.receipt?.receiptId,
+    creation?.localDraft?.artifactId,
+    String(creation?.localDraft?.artifactVersion),
+    creation?.localDraft?.artifactHash,
+    "ACTIVE",
+    "CAPTURE_ARTIFACT_HISTORY_RETAINED",
+    "local-draft-undo-v1",
+    "emergeos.local-draftbox",
+    "emergeos:local-draftbox",
+    `local-draftbox:${creation?.approvalPrincipal?.configuredPrincipalId}`,
+    undoNonce,
+    "1",
+  ];
+  if (values.some((value) => typeof value !== "string" || value.length === 0)) {
+    return null;
+  }
+  const hash = createHash("sha256");
+  hash.update(new TextEncoder().encode(scopeSchema));
+  hash.update(Uint8Array.of(0));
+  for (const value of values) {
+    const bytes = new TextEncoder().encode(value);
+    const length = new Uint8Array(4);
+    new DataView(length.buffer).setUint32(0, bytes.byteLength, false);
+    hash.update(length);
+    hash.update(bytes);
+  }
+  return Object.freeze({ scopeSchema, scopeHash: hash.digest("hex") });
+};
+
+const exactUndoRequest = (creation) => {
+  const scope = canonicalUndoScope(creation);
+  return scope
+    ? Object.freeze({
+        undoNonce,
+        scopeSchema: scope.scopeSchema,
+        scopeHash: scope.scopeHash,
+      })
+    : null;
 };
 
 const driftPreview = (source) => {
@@ -569,11 +695,54 @@ const captureActualProblemContract = async (response) => {
   }
 };
 
+const allowedLogicalUndoMutationRequest = (path, method) => {
+  if (
+    mode === "real-undo-inflight-edit" &&
+    method === "PUT" &&
+    artifactPath !== null &&
+    path === artifactPath
+  ) {
+    return true;
+  }
+  if (method !== "POST") return false;
+  const approvalPath = artifact?.artifactId
+    ? `/api/v1/artifacts/${encodeURIComponent(artifact.artifactId)}/action-approvals`
+    : null;
+  const executePath = approvalAttempt?.attemptId
+    ? `/api/v1/action-approvals/${encodeURIComponent(approvalAttempt.attemptId)}/execute`
+    : null;
+  const undoPath = creationAttemptSnapshot?.attemptId
+    ? `/api/v1/action-approvals/${encodeURIComponent(creationAttemptSnapshot.attemptId)}/undo`
+    : null;
+  return (
+    path === "/api/v1/captures" ||
+    path === "/api/v1/agent-drafts" ||
+    (approvalPath !== null && path === approvalPath) ||
+    (executePath !== null && path === executePath) ||
+    (undoPath !== null && path === undoPath)
+  );
+};
+
 const wrappedFetch = async (input, options = {}) => {
   if (typeof input !== "string" || !input.startsWith("/")) {
     throw new Error("served UI fetch must stay same-origin and relative");
   }
   const method = (options.method ?? "GET").toUpperCase();
+  if (logicalUndoMode && method === "DELETE") {
+    deleteCalls += 1;
+    forbiddenActionRouteCalls += 1;
+    forbiddenActionCalls += 1;
+    throw new Error("logical undo UI must never issue DELETE");
+  }
+  if (
+    logicalUndoMode &&
+    method !== "GET" &&
+    !allowedLogicalUndoMutationRequest(input, method)
+  ) {
+    forbiddenActionRouteCalls += 1;
+    forbiddenActionCalls += 1;
+    throw new Error(`logical undo UI called a non-allowlisted mutation route: ${method}`);
+  }
   if (/^\/api\/v1\/artifacts\/[^/]+\/actions$/.test(input)) {
     forbiddenActionCalls += 1;
     legacyActionCalls += 1;
@@ -604,9 +773,17 @@ const wrappedFetch = async (input, options = {}) => {
 
   const approvalGetMatch = input.match(/^\/api\/v1\/action-approvals\/([^/]+)$/);
   if (approvalGetMatch && method === "GET") {
-    recoveryGetCount += 1;
-    if (gestureContext.getStore() === recoveryGestureToken) {
-      recoveryGetDuringExplicitGesture += 1;
+    const resolvingUndo = logicalUndoMode && undoPostCount > 0;
+    if (resolvingUndo) {
+      undoRecoveryGetCount += 1;
+      if (gestureContext.getStore() === undoRecoveryGestureToken) {
+        undoRecoveryGetDuringExplicitGesture += 1;
+      }
+    } else {
+      recoveryGetCount += 1;
+      if (gestureContext.getStore() === recoveryGestureToken) {
+        recoveryGetDuringExplicitGesture += 1;
+      }
     }
     if (
       mode === "real-executing-edit" &&
@@ -623,15 +800,200 @@ const wrappedFetch = async (input, options = {}) => {
     const response = await nativeFetch(new URL(input, appBaseUrl), options);
     try {
       const bodyText = await response.clone().text();
-      recoveryCanonicalExact =
-        response.status === 200 &&
+      if (resolvingUndo) {
+        undoRecoveryCanonicalExact =
+          response.status === 200 &&
+          response.headers.get("cache-control") === "private, no-store" &&
+          approvalGetMatch[1] === creationAttemptSnapshot?.attemptId &&
+          bodyText === undoCanonicalBodyText
+            ? 1
+            : 0;
+      } else {
+        recoveryCanonicalExact =
+          response.status === 200 &&
+          response.headers.get("cache-control") === "private, no-store" &&
+          approvalGetMatch[1] === approvalAttempt?.attemptId &&
+          bodyText === executeCanonicalBodyText
+            ? 1
+            : 0;
+      }
+    } catch (_failure) {
+      if (resolvingUndo) {
+        undoRecoveryCanonicalExact = 0;
+      } else {
+        recoveryCanonicalExact = 0;
+      }
+    }
+    return response;
+  }
+
+  const undoMatch = input.match(/^\/api\/v1\/action-approvals\/([^/]+)\/undo$/);
+  if (undoMatch && method === "POST") {
+    undoPostCount += 1;
+    if (gestureContext.getStore() === thirdGestureToken) {
+      undoPostDuringThirdGesture += 1;
+    } else {
+      unexpectedUndoPostCount += 1;
+    }
+    undoSubmittingStateObserved =
+      elements.get("approval-card")?.dataset?.state === "UNDOING" ? 1 : 0;
+    const requestBody = typeof options.body === "string" ? options.body : "";
+    let request = null;
+    try {
+      request = JSON.parse(requestBody);
+    } catch (_failure) {
+      request = null;
+    }
+    const expectedRequest = exactUndoRequest(creationAttemptSnapshot);
+    undoRequestExact =
+      request &&
+      expectedRequest &&
+      Object.keys(request).sort().join(",") === "scopeHash,scopeSchema,undoNonce" &&
+      request.undoNonce === expectedRequest.undoNonce &&
+      request.scopeSchema === expectedRequest.scopeSchema &&
+      request.scopeHash === expectedRequest.scopeHash &&
+      undoMatch[1] === creationAttemptSnapshot?.attemptId
+        ? 1
+        : 0;
+    undoFetchOptionsExact =
+      options.credentials === "same-origin" &&
+      options.cache === "no-store" &&
+      options.redirect === "error" &&
+      options.signal &&
+      typeof options.signal.addEventListener === "function"
+        ? 1
+        : 0;
+
+    // The hang fault is injected only after the real loopback transaction and response have
+    // completed. Do not let the accelerated UI timeout abort the evidence-producing request.
+    const nativeUndoOptions =
+      ["real-undo-hang", "real-undo-inflight-edit"].includes(mode)
+        ? Object.fromEntries(
+            Object.entries(options).filter(([key]) => key !== "signal"),
+          )
+        : options;
+    const response = await nativeFetch(
+      new URL(input, appBaseUrl),
+      nativeUndoOptions,
+    );
+    undoStatus = response.status;
+    try {
+      const bodyText = await response.clone().text();
+      const body = JSON.parse(bodyText);
+      const topLevelKeys = Object.keys(body ?? {}).sort().join(",");
+      const draftKeys = Object.keys(body?.localDraft ?? {}).sort().join(",");
+      const undoReceiptKeys = Object.keys(body?.undoReceipt ?? {}).sort().join(",");
+      const sameCreationTruth = [
+        "action",
+        "approval",
+        "approvalPrincipal",
+        "artifact",
+        "attemptId",
+        "capability",
+        "executionState",
+        "plan",
+        "provenance",
+        "receipt",
+        "scopeHash",
+        "scopeSchema",
+        "status",
+        "transitions",
+      ].every(
+        (key) =>
+          JSON.stringify(body?.[key]) === JSON.stringify(creationAttemptSnapshot?.[key]),
+      );
+      undoResponseStrict =
+        [200, 201].includes(response.status) &&
         response.headers.get("cache-control") === "private, no-store" &&
-        approvalGetMatch[1] === approvalAttempt?.attemptId &&
-        bodyText === executeCanonicalBodyText
+        response.headers.get("location") ===
+          `/api/v1/action-approvals/${creationAttemptSnapshot?.attemptId}` &&
+        topLevelKeys ===
+          "action,approval,approvalPrincipal,artifact,attemptId,capability,executionState,localDraft,plan,provenance,receipt,scopeHash,scopeSchema,status,transitions,undoAvailable,undoReceipt" &&
+        sameCreationTruth &&
+        body?.status === "SUCCEEDED" &&
+        body?.executionState === "EXECUTED" &&
+        body?.capability?.usedCalls === 1 &&
+        body?.capability?.maxCalls === 1 &&
+        draftKeys === "artifactHash,artifactId,artifactVersion,createdAt,draftId,state" &&
+        body?.localDraft?.draftId === creationAttemptSnapshot?.localDraft?.draftId &&
+        body?.localDraft?.artifactId === creationAttemptSnapshot?.localDraft?.artifactId &&
+        body?.localDraft?.artifactVersion ===
+          creationAttemptSnapshot?.localDraft?.artifactVersion &&
+        body?.localDraft?.artifactHash === creationAttemptSnapshot?.localDraft?.artifactHash &&
+        body?.localDraft?.state === "LOGICALLY_UNDONE" &&
+        body?.undoAvailable === false &&
+        undoReceiptKeys ===
+          "artifactHash,artifactId,artifactVersion,creationAttemptId,creationReceiptId,draftId,effect,occurredAt,outcome,receiptId,receiptType,retention,scopeHash,scopeSchema,simulated,undoNonce" &&
+        body?.undoReceipt?.receiptType === "LOCAL_DRAFT_LOGICALLY_UNDONE_V1" &&
+        typeof body?.undoReceipt?.receiptId === "string" &&
+        body.undoReceipt.receiptId.length > 0 &&
+        body?.undoReceipt?.creationAttemptId === creationAttemptSnapshot?.attemptId &&
+        body?.undoReceipt?.draftId === creationAttemptSnapshot?.localDraft?.draftId &&
+        body?.undoReceipt?.creationReceiptId ===
+          creationAttemptSnapshot?.receipt?.receiptId &&
+        body?.undoReceipt?.artifactId === creationAttemptSnapshot?.localDraft?.artifactId &&
+        body?.undoReceipt?.artifactVersion ===
+          creationAttemptSnapshot?.localDraft?.artifactVersion &&
+        body?.undoReceipt?.artifactHash === creationAttemptSnapshot?.localDraft?.artifactHash &&
+        body?.undoReceipt?.scopeSchema === expectedRequest?.scopeSchema &&
+        body?.undoReceipt?.scopeHash === expectedRequest?.scopeHash &&
+        body?.undoReceipt?.undoNonce === undoNonce &&
+        body?.undoReceipt?.effect === "LOGICALLY_UNDONE" &&
+        body?.undoReceipt?.retention === "CAPTURE_ARTIFACT_HISTORY_RETAINED" &&
+        body?.undoReceipt?.outcome === "SUCCEEDED" &&
+        body?.undoReceipt?.simulated === false &&
+        Number.isFinite(Date.parse(body?.undoReceipt?.occurredAt ?? ""))
           ? 1
           : 0;
+      undoCanonicalBodyText = bodyText;
+      undoResponseBody = body;
+      approvalAttempt = body;
     } catch (_failure) {
-      recoveryCanonicalExact = 0;
+      undoResponseStrict = 0;
+    }
+
+    if (mode === "real-undo-inflight-edit" && undoInflightEditTriggered === 0) {
+      const outcomeContent = elements.get("outcome-canvas-content");
+      const undoingBeforeEdit =
+        elements.get("approval-card")?.dataset?.state === "UNDOING";
+      let dispatched = 0;
+      if (outcomeContent) {
+        outcomeContent.focus();
+        outcomeContent.textContent = `${outcomeContent.textContent} undo inflight edit`;
+        try {
+          dispatched = await fire(outcomeContent, "input");
+        } catch (_failure) {
+          dispatched = 0;
+        }
+      }
+      undoInflightEditTriggered =
+        undoingBeforeEdit &&
+        dispatched === 1 &&
+        undoPostCount === 1 &&
+        undoResponseStrict === 1 &&
+        options.signal?.aborted
+          ? 1
+          : 0;
+    }
+
+    if (mode === "real-undo-response-loss") {
+      throw new TypeError("synthetic committed logical undo response loss");
+    }
+    if (["real-undo-hang", "real-undo-inflight-edit"].includes(mode)) {
+      return new Promise((_resolve, reject) => {
+        const rejectAborted = () => {
+          undoHangingSignalAborted = options.signal?.aborted ? 1 : 0;
+          reject(
+            options.signal?.reason ??
+              new DOMException("synthetic logical undo timeout", "AbortError"),
+          );
+        };
+        if (options.signal?.aborted) {
+          rejectAborted();
+          return;
+        }
+        options.signal?.addEventListener("abort", rejectAborted, { once: true });
+      });
     }
     return response;
   }
@@ -713,11 +1075,24 @@ const wrappedFetch = async (input, options = {}) => {
       );
     }
 
-    const response = await nativeFetch(new URL(input, appBaseUrl), options);
+    // For the real-hang fault, first let the loopback transaction and its strict 201 body
+    // evidence finish. Only the response returned to the served UI remains pending on the
+    // original accelerated signal below.
+    const nativeExecuteOptions =
+      mode === "real-hang"
+        ? Object.fromEntries(
+            Object.entries(options).filter(([key]) => key !== "signal"),
+          )
+        : options;
+    const response = await nativeFetch(
+      new URL(input, appBaseUrl),
+      nativeExecuteOptions,
+    );
     executeStatus = response.status;
     try {
       const bodyText = await response.clone().text();
       const body = JSON.parse(bodyText);
+      const topLevelKeys = Object.keys(body ?? {}).sort().join(",");
       const receiptKeys = Object.keys(body?.receipt ?? {}).sort().join(",");
       const draftKeys = Object.keys(body?.localDraft ?? {}).sort().join(",");
       executeResponseStrict =
@@ -754,7 +1129,16 @@ const wrappedFetch = async (input, options = {}) => {
         body.receipt.simulated === false
           ? 1
           : 0;
+      creationUndoContractExact =
+        logicalUndoMode &&
+        topLevelKeys ===
+          "action,approval,approvalPrincipal,artifact,attemptId,capability,executionState,localDraft,plan,provenance,receipt,scopeHash,scopeSchema,status,transitions,undoAvailable,undoReceipt" &&
+        body?.undoReceipt === null &&
+        body?.undoAvailable === true
+          ? 1
+          : 0;
       executeCanonicalBodyText = bodyText;
+      creationAttemptSnapshot = JSON.parse(JSON.stringify(body));
       executedArtifactSnapshot = Object.freeze({
         artifactId: body?.localDraft?.artifactId,
         artifactVersion: body?.localDraft?.artifactVersion,
@@ -948,13 +1332,28 @@ const wrappedFetch = async (input, options = {}) => {
     const response = await nativeFetch(new URL(input, appBaseUrl), options);
     approvalStatus = response.status;
     await captureActualProblemContract(response);
-    if (!(await exactApprovalResponse(response, request))) {
+    const exactApprovalContract = await exactApprovalResponse(response, request);
+    if (!exactApprovalContract) {
       approvalResponseStrict = 0;
     }
     try {
       approvalAttempt = await response.clone().json();
+      plannedUndoContractExact =
+        logicalUndoMode &&
+        exactApprovalContract &&
+        Object.keys(approvalAttempt ?? {}).sort().join(",") ===
+          "action,approval,approvalPrincipal,artifact,attemptId,capability,executionState,localDraft,plan,provenance,receipt,scopeHash,scopeSchema,status,transitions,undoAvailable,undoReceipt" &&
+        approvalAttempt?.status === "PLANNED" &&
+        approvalAttempt?.executionState === "NOT_EXECUTED" &&
+        approvalAttempt?.receipt === null &&
+        approvalAttempt?.localDraft === null &&
+        approvalAttempt?.undoReceipt === null &&
+        approvalAttempt?.undoAvailable === false
+          ? 1
+          : 0;
     } catch (_failure) {
       approvalAttempt = null;
+      plannedUndoContractExact = 0;
     }
     if (dropFirstApprovalResponse) {
       dropFirstApprovalResponse = false;
@@ -965,11 +1364,12 @@ const wrappedFetch = async (input, options = {}) => {
 
   const response = await nativeFetch(new URL(input, appBaseUrl), options);
   if (
-    [
-      "real-executing-edit",
-      "real-executing-edit-ready-recovery",
-      "real-terminal-new-artifact",
-    ].includes(mode) &&
+      [
+        "real-executing-edit",
+        "real-executing-edit-ready-recovery",
+        "real-terminal-new-artifact",
+        "real-undo-inflight-edit",
+      ].includes(mode) &&
     artifactPath !== null &&
     input === artifactPath &&
     method === "PUT"
@@ -1139,6 +1539,25 @@ const approvalButtons = () =>
       element.tagName === "BUTTON" &&
       (/approval|approve/i.test(element.id) || /批准/.test(element.textContent)),
   );
+const undoButtons = () =>
+  [...elements.values()].filter(
+    (element) =>
+      element.tagName === "BUTTON" &&
+      (/undo/i.test(element.id) || /Undo|撤销/.test(element.textContent)),
+  );
+const undoTrigger = () =>
+  undoButtons().find(
+    (element) => element.textContent.trim() === "逻辑撤销本地草稿（保留明文与历史）",
+  ) ??
+  elements.get("approval-undo") ??
+  null;
+const undoRecoveryTrigger = () =>
+  undoButtons().find(
+    (element) =>
+      element.id === "approval-check-undo" ||
+      element.id === "approval-undo-recover" ||
+      /查询.*撤销.*结果|确认.*撤销.*结果/.test(element.textContent),
+  ) ?? null;
 const approvalTrigger = () =>
   approvalButtons().find((element) => /记录本次批准/.test(element.textContent)) ??
   approvalButtons()[0] ??
@@ -1262,11 +1681,29 @@ if (trigger) {
       );
     } else if (approvalReady) {
       approvalClickDispatched = await fire(trigger, "click");
-      await waitFor(
-        () => elements.get("approval-card")?.dataset?.state === "PLANNED",
-        "real local draftbox approval did not reach PLANNED",
-      );
-      approvalViaUi = approvalPostCount === 1 && approvalAttempt?.status === "PLANNED" ? 1 : 0;
+      try {
+        await waitFor(
+          () => elements.get("approval-card")?.dataset?.state === "PLANNED",
+          "real local draftbox approval did not reach PLANNED",
+          logicalUndoMode ? 1000 : 7000,
+        );
+        approvalViaUi =
+          approvalPostCount === 1 && approvalAttempt?.status === "PLANNED" ? 1 : 0;
+      } catch (failure) {
+        const currentState = elements.get("approval-card")?.dataset?.state;
+        if (
+          !logicalUndoMode ||
+          plannedUndoContractExact !== 1 ||
+          approvalPostCount !== 1 ||
+          currentState !== "UNKNOWN"
+        ) {
+          throw failure;
+        }
+        // The real backend returned the frozen 17-key envelope, while the currently served
+        // UI still rejected it with its old 15-key validator. This is the first bounded Red;
+        // do not seed a fixture or bypass the product UI.
+        logicalUndoEnvelopeBlocked = true;
+      }
     } else {
       const seeded = await directApproval();
       approvalScopePreview = seeded.scope;
@@ -1274,7 +1711,33 @@ if (trigger) {
       plannedFixtureUsedForRedLocalization = 1;
     }
 
-    if (!previewDriftField) {
+    if (!previewDriftField && !logicalUndoEnvelopeBlocked) {
+      if (logicalUndoMode) {
+        const visibleBeforeTerminal = [...elements.values()]
+          .filter((element) => !element.hidden)
+          .map((element) => element.textContent)
+          .filter(Boolean)
+          .join(" | ")
+          .replace(/\s+/g, " ");
+        undoPreTerminalSafe =
+          undoButtons().every((button) => button.hidden) &&
+          !/LOGICALLY_UNDONE|LOCAL_DRAFT_LOGICALLY_UNDONE_V1|撤销成功|已逻辑撤销/.test(
+            visibleBeforeTerminal,
+          )
+            ? 1
+            : 0;
+        const undoPostsBeforeForcedPreTerminal = undoPostCount;
+        const uuidCallsBeforeForcedPreTerminal = uuidCalls;
+        const prematureUndo = undoTrigger();
+        if (prematureUndo) {
+          await fire(prematureUndo, "click", thirdGestureToken);
+        }
+        undoForcedPreTerminalNoPost = await quietWindow(
+          () =>
+            undoPostCount === undoPostsBeforeForcedPreTerminal &&
+            uuidCalls === uuidCallsBeforeForcedPreTerminal,
+        );
+      }
       executePostCountBeforeSecondGesture = executePostCount;
       quietBeforeSecondGesture = await quietWindow(() => executePostCount === 0);
       const executeTrigger = [...elements.values()].find(
@@ -1339,6 +1802,426 @@ if (trigger) {
             );
           }
           terminalWaitReached = 1;
+        }
+
+        if (logicalUndoMode && executePostCount > 0) {
+          const preUndoDraftElement = elements.get("approval-local-draft");
+          const preUndoReceiptElement = elements.get("approval-receipt");
+          const preUndoDraftCopy =
+            preUndoDraftElement && !preUndoDraftElement.hidden
+              ? preUndoDraftElement.textContent
+              : "";
+          const preUndoReceiptCopy =
+            preUndoReceiptElement && !preUndoReceiptElement.hidden
+              ? preUndoReceiptElement.textContent
+              : "";
+          undoEnvelopeCompatibilityExact =
+            plannedUndoContractExact === 1 &&
+            creationUndoContractExact === 1 &&
+            elements.get("approval-card")?.dataset?.state === "SUCCEEDED" &&
+            preUndoDraftCopy.includes("ACTIVE") &&
+            preUndoDraftCopy.includes(
+              creationAttemptSnapshot?.localDraft?.draftId ?? "__missing_creation_draft__",
+            ) &&
+            preUndoReceiptCopy.includes("LOCAL_DRAFT_CREATED_V1") &&
+            preUndoReceiptCopy.includes(
+              creationAttemptSnapshot?.receipt?.receiptId ??
+                "__missing_creation_receipt__",
+            )
+              ? 1
+              : 0;
+          const logicalUndoTrigger = undoTrigger();
+          undoGesturePresent =
+            logicalUndoTrigger &&
+            !logicalUndoTrigger.hidden &&
+            !logicalUndoTrigger.disabled &&
+            creationAttemptSnapshot?.status === "SUCCEEDED" &&
+            creationAttemptSnapshot?.executionState === "EXECUTED" &&
+            creationAttemptSnapshot?.receipt?.receiptType === "LOCAL_DRAFT_CREATED_V1" &&
+            creationAttemptSnapshot?.undoAvailable === true
+              ? 1
+              : 0;
+          undoExactButtonCopy =
+            logicalUndoTrigger?.textContent.trim() ===
+            "逻辑撤销本地草稿（保留明文与历史）"
+              ? 1
+              : 0;
+          quietBeforeThirdGesture = await quietWindow(
+            () =>
+              undoPostCount === 0 &&
+              undoRecoveryGetCount === 0 &&
+              recoveryGetCount === 0,
+          );
+
+          if (undoGesturePresent) {
+            if (mode === "real-undo-double-click") {
+              const request = exactUndoRequest(creationAttemptSnapshot);
+              const replaySeed = await nativeFetch(
+                new URL(
+                  `/api/v1/action-approvals/${creationAttemptSnapshot.attemptId}/undo`,
+                  appBaseUrl,
+                ),
+                {
+                  method: "POST",
+                  headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(request),
+                  cache: "no-store",
+                },
+              );
+              let replaySeedBody = null;
+              try {
+                replaySeedBody = await replaySeed.clone().json();
+              } catch (_failure) {
+                replaySeedBody = null;
+              }
+              undoReplayFixtureExact =
+                replaySeed.status === 201 &&
+                replaySeed.headers.get("cache-control") === "private, no-store" &&
+                replaySeed.headers.get("location") ===
+                  `/api/v1/action-approvals/${creationAttemptSnapshot.attemptId}` &&
+                replaySeedBody?.localDraft?.state === "LOGICALLY_UNDONE" &&
+                replaySeedBody?.undoAvailable === false &&
+                replaySeedBody?.undoReceipt?.undoNonce === undoNonce &&
+                replaySeedBody?.undoReceipt?.scopeSchema === request?.scopeSchema &&
+                replaySeedBody?.undoReceipt?.scopeHash === request?.scopeHash
+                  ? 1
+                  : 0;
+            }
+
+            if (mode === "real-undo-hang") accelerateApprovalTimeout = true;
+            const uuidCallsBeforeUndo = uuidCalls;
+            if (mode === "real-undo-double-click") {
+              const first = fire(logicalUndoTrigger, "click", thirdGestureToken);
+              const second = fire(logicalUndoTrigger, "click", thirdGestureToken);
+              const dispatched = await Promise.all([first, second]);
+              undoClickDispatched = dispatched[0] === 1 && dispatched[1] === 1 ? 1 : 0;
+            } else {
+              undoClickDispatched = await fire(
+                logicalUndoTrigger,
+                "click",
+                thirdGestureToken,
+              );
+            }
+            undoNonceOnClick =
+              uuidCallsBeforeUndo === 2 && uuidCalls === 3 ? 1 : 0;
+            if (mode === "real-undo-inflight-edit") {
+              await waitFor(
+                () => undoInflightEditTriggered === 1,
+                "logical undo did not commit before the injected inflight edit",
+              );
+            } else {
+              await waitFor(
+                () =>
+                  ["LOGICALLY_UNDONE", "UNDO_UNKNOWN"].includes(
+                    elements.get("approval-card")?.dataset?.state,
+                  ),
+                "logical undo did not reach a bounded terminal UI state",
+              );
+            }
+            undoDoubleClickAtMostOnce = undoPostCount === 1 ? 1 : 0;
+          }
+
+          if (["real-undo-response-loss", "real-undo-hang"].includes(mode)) {
+            const unknownVisibleCopy = [...elements.values()]
+              .filter((element) => !element.hidden)
+              .map((element) => element.textContent)
+              .filter(Boolean)
+              .join(" | ")
+              .replace(/\s+/g, " ");
+            undoUnknownBeforeRecovery =
+              elements.get("approval-card")?.dataset?.state === "UNDO_UNKNOWN"
+                ? 1
+                : 0;
+            undoUnknownNoFalseSuccess =
+              !/LOGICALLY_UNDONE|LOCAL_DRAFT_LOGICALLY_UNDONE_V1|撤销成功|已逻辑撤销/.test(
+                unknownVisibleCopy,
+              )
+                ? 1
+                : 0;
+            const postsAtUnknown = undoPostCount;
+            undoQuietAfterUnknown = await quietWindow(
+              () =>
+                undoPostCount === postsAtUnknown && undoRecoveryGetCount === 0,
+            );
+            const recoveryControl = undoRecoveryTrigger();
+            const enabledControls = [
+              ...new Set([...approvalButtons(), ...undoButtons()]),
+            ].filter((button) => !button.hidden && !button.disabled);
+            undoRecoveryGesturePresent =
+              recoveryControl &&
+              !recoveryControl.hidden &&
+              !recoveryControl.disabled &&
+              enabledControls.length === 1 &&
+              enabledControls[0] === recoveryControl
+                ? 1
+                : 0;
+            if (undoRecoveryGesturePresent) {
+              accelerateApprovalTimeout = false;
+              undoRecoveryClickDispatched = await fire(
+                recoveryControl,
+                "click",
+                undoRecoveryGestureToken,
+              );
+              await waitFor(
+                () =>
+                  elements.get("approval-card")?.dataset?.state ===
+                  "LOGICALLY_UNDONE",
+                "explicit logical undo GET recovery did not reach LOGICALLY_UNDONE",
+              );
+            }
+          }
+
+          if (mode === "real-undo-inflight-edit") {
+            const historicalLabel = "历史执行结果；不授权当前 Artifact";
+            const historicalLabelVisible = () =>
+              [...elements.values()].some(
+                (element) =>
+                  !element.hidden && element.textContent.trim() === historicalLabel,
+              );
+            const enabledApprovalAndUndoControls = () => [
+              ...new Set([...approvalButtons(), ...undoButtons()]),
+            ].filter((button) => !button.hidden && !button.disabled);
+            const recoveryIsSoleEnabled = (control) => {
+              const enabled = enabledApprovalAndUndoControls();
+              return (
+                control &&
+                !control.hidden &&
+                !control.disabled &&
+                enabled.length === 1 &&
+                enabled[0] === control
+              );
+            };
+            const unknownVisibleCopy = [...elements.values()]
+              .filter((element) => !element.hidden)
+              .map((element) => element.textContent)
+              .filter(Boolean)
+              .join(" | ")
+              .replace(/\s+/g, " ");
+            const firstRecoveryControl = undoRecoveryTrigger();
+            const firstUnknownStatus =
+              elements.get("approval-status")?.textContent ?? "";
+            undoInflightEditHistoricalUnknown =
+              undoInflightEditTriggered === 1 &&
+              elements.get("approval-card")?.dataset?.state === "UNDO_UNKNOWN" &&
+              elements.get("approval-result")?.getAttribute("data-context") ===
+                "HISTORICAL" &&
+              historicalLabelVisible() &&
+              /历史/.test(firstUnknownStatus) &&
+              /撤销结果未知|逻辑撤销结果未知|结果未知/.test(firstUnknownStatus) &&
+              !/LOGICALLY_UNDONE|LOCAL_DRAFT_LOGICALLY_UNDONE_V1|撤销成功|已逻辑撤销/.test(
+                unknownVisibleCopy,
+              )
+                ? 1
+                : 0;
+            undoInflightEditGetOnly = recoveryIsSoleEnabled(firstRecoveryControl)
+              ? 1
+              : 0;
+            undoUnknownBeforeRecovery = undoInflightEditHistoricalUnknown;
+            undoUnknownNoFalseSuccess =
+              !/LOGICALLY_UNDONE|LOCAL_DRAFT_LOGICALLY_UNDONE_V1|撤销成功|已逻辑撤销/.test(
+                unknownVisibleCopy,
+              )
+                ? 1
+                : 0;
+
+            const outcomeContent = elements.get("outcome-canvas-content");
+            if (outcomeContent) {
+              outcomeContent.focus();
+              outcomeContent.textContent = `${outcomeContent.textContent} undo unknown second edit`;
+              undoUnknownSecondEditDispatched = await fire(outcomeContent, "input");
+            }
+            const secondRecoveryControl = undoRecoveryTrigger();
+            const secondUnknownStatus =
+              elements.get("approval-status")?.textContent ?? "";
+            undoUnknownSecondEditRecoveryRetained =
+              undoUnknownSecondEditDispatched === 1 &&
+              elements.get("approval-card")?.dataset?.state === "UNDO_UNKNOWN" &&
+              elements.get("approval-result")?.getAttribute("data-context") ===
+                "HISTORICAL" &&
+              historicalLabelVisible() &&
+              /历史/.test(secondUnknownStatus) &&
+              /撤销结果未知|逻辑撤销结果未知|结果未知/.test(secondUnknownStatus) &&
+              secondRecoveryControl === firstRecoveryControl &&
+              recoveryIsSoleEnabled(secondRecoveryControl)
+                ? 1
+                : 0;
+
+            const outcomeSave = elements.get("outcome-save");
+            if (outcomeSave && !outcomeSave.hidden && !outcomeSave.disabled) {
+              undoEditSaveClickDispatched = await fire(outcomeSave, "click");
+              try {
+                await waitFor(
+                  () =>
+                    artifactRevisionPutCount === 1 &&
+                    elements.get("outcome-canvas")?.dataset?.state ===
+                      "REVISION_SAVED" &&
+                    approvalScopePreview?.artifact?.artifactVersion ===
+                      revisedArtifact?.currentVersion &&
+                    approvalScopePreview?.artifact?.artifactHash ===
+                      revisedArtifact?.currentHash &&
+                    elements.get("approval-card")?.getAttribute("aria-busy") ===
+                      "false",
+                  "undo inflight edit revision did not reach a trusted v+1 scope preview",
+                );
+              } catch (_downstreamNotSettled) {
+                // Preserve zero-valued downstream markers so the ordered Java assertions
+                // localize the first broken undo-recovery invariant.
+              }
+            }
+            const currentArtifactBeforeRecovery =
+              elements.get("approval-artifact")?.textContent ?? "";
+            const currentScopeBeforeRecovery =
+              elements.get("approval-scope")?.textContent ?? "";
+            undoEditNewArtifactExact =
+              undoEditSaveClickDispatched === 1 &&
+              artifactRevisionPutCount === 1 &&
+              revisedArtifact?.artifactId === executedArtifactSnapshot?.artifactId &&
+              revisedArtifact?.currentVersion ===
+                executedArtifactSnapshot?.artifactVersion + 1 &&
+              /^[0-9a-f]{64}$/.test(revisedArtifact?.currentHash ?? "") &&
+              revisedArtifact?.currentHash !== executedArtifactSnapshot?.artifactHash &&
+              approvalScopePreview?.artifact?.artifactId === revisedArtifact?.artifactId &&
+              approvalScopePreview?.artifact?.artifactVersion ===
+                revisedArtifact?.currentVersion &&
+              approvalScopePreview?.artifact?.artifactHash === revisedArtifact?.currentHash &&
+              approvalScopePreview?.scopeHash !== executedScopeSnapshot?.scopeHash &&
+              currentArtifactBeforeRecovery.includes(
+                `v${revisedArtifact?.currentVersion}`,
+              ) &&
+              currentArtifactBeforeRecovery.includes(
+                revisedArtifact?.currentHash ?? "__missing_new_hash__",
+              ) &&
+              !currentArtifactBeforeRecovery.includes(
+                executedArtifactSnapshot?.artifactHash ?? "__missing_old_hash__",
+              ) &&
+              currentScopeBeforeRecovery.includes(
+                approvalScopePreview?.scopeHash ?? "__missing_new_scope__",
+              ) &&
+              !currentScopeBeforeRecovery.includes(
+                executedScopeSnapshot?.scopeHash ?? "__missing_old_scope__",
+              )
+                ? 1
+                : 0;
+            const recoveryAfterSave = undoRecoveryTrigger();
+            undoEditNewArtifactRecoveryIsolated =
+              undoEditNewArtifactExact === 1 &&
+              elements.get("approval-result")?.getAttribute("data-context") ===
+                "HISTORICAL" &&
+              historicalLabelVisible() &&
+              recoveryAfterSave === firstRecoveryControl &&
+              recoveryIsSoleEnabled(recoveryAfterSave)
+                ? 1
+                : 0;
+
+            const undoPostsBeforeForcedOldGesture = undoPostCount;
+            await fire(undoTrigger(), "click", thirdGestureToken);
+            undoEditQuietGetOnly = await quietWindow(
+              () =>
+                undoPostCount === undoPostsBeforeForcedOldGesture &&
+                undoPostCount === 1 &&
+                undoRecoveryGetCount === 0,
+            );
+            undoEditNoSecondPost =
+              undoEditQuietGetOnly === 1 &&
+              undoPostsBeforeForcedOldGesture === 1 &&
+              undoPostCount === 1 &&
+              unexpectedUndoPostCount === 0
+                ? 1
+                : 0;
+            undoQuietAfterUnknown = undoEditQuietGetOnly;
+            undoRecoveryGesturePresent =
+              undoInflightEditGetOnly === 1 &&
+              undoUnknownSecondEditRecoveryRetained === 1 &&
+              undoEditNewArtifactRecoveryIsolated === 1 &&
+              undoEditNoSecondPost === 1 &&
+              recoveryIsSoleEnabled(recoveryAfterSave)
+                ? 1
+                : 0;
+            if (undoRecoveryGesturePresent) {
+              undoRecoveryClickDispatched = await fire(
+                recoveryAfterSave,
+                "click",
+                undoRecoveryGestureToken,
+              );
+              await waitFor(
+                () =>
+                  undoRecoveryGetCount === 1 &&
+                  undoRecoveryCanonicalExact === 1,
+                "explicit historical logical Undo GET did not recover the old attempt",
+              );
+            }
+            undoEditExplicitGetOnly =
+              undoRecoveryClickDispatched === 1 &&
+              undoRecoveryGetCount === 1 &&
+              undoRecoveryGetDuringExplicitGesture === 1 &&
+              undoRecoveryCanonicalExact === 1 &&
+              undoPostCount === 1
+                ? 1
+                : 0;
+
+            const historicalCopy = [
+              elements.get("approval-local-draft"),
+              elements.get("approval-draft-summary"),
+              elements.get("approval-receipt"),
+              elements.get("approval-receipt-summary"),
+              elements.get("approval-undo-receipt"),
+              elements.get("approval-undo-receipt-summary"),
+              elements.get("approval-undo-boundary"),
+            ]
+              .filter((element) => element && !element.hidden)
+              .map((element) => element.textContent)
+              .filter(Boolean)
+              .join(" | ")
+              .replace(/\s+/g, " ");
+            const currentArtifactAfterRecovery =
+              elements.get("approval-artifact")?.textContent ?? "";
+            const currentScopeAfterRecovery =
+              elements.get("approval-scope")?.textContent ?? "";
+            undoEditOldResultHistorical =
+              undoEditExplicitGetOnly === 1 &&
+              undoResponseBody?.localDraft?.state === "LOGICALLY_UNDONE" &&
+              undoResponseBody?.undoReceipt?.receiptType ===
+                "LOCAL_DRAFT_LOGICALLY_UNDONE_V1" &&
+              elements.get("approval-result")?.getAttribute("data-context") ===
+                "HISTORICAL" &&
+              historicalLabelVisible() &&
+              historicalCopy.includes(
+                `Artifact v${executedArtifactSnapshot?.artifactVersion}`,
+              ) &&
+              historicalCopy.includes(
+                executedArtifactSnapshot?.artifactHash ?? "__missing_old_hash__",
+              ) &&
+              historicalCopy.includes("LOCAL_DRAFT_CREATED_V1") &&
+              historicalCopy.includes("LOCAL_DRAFT_LOGICALLY_UNDONE_V1") &&
+              historicalCopy.includes("LOGICALLY_UNDONE") &&
+              !historicalCopy.includes(
+                revisedArtifact?.currentHash ?? "__missing_new_hash__",
+              )
+                ? 1
+                : 0;
+            undoEditContextsNotMixed =
+              undoEditOldResultHistorical === 1 &&
+              currentArtifactAfterRecovery.includes(
+                `v${revisedArtifact?.currentVersion}`,
+              ) &&
+              currentArtifactAfterRecovery.includes(
+                revisedArtifact?.currentHash ?? "__missing_new_hash__",
+              ) &&
+              !currentArtifactAfterRecovery.includes(
+                executedArtifactSnapshot?.artifactHash ?? "__missing_old_hash__",
+              ) &&
+              currentScopeAfterRecovery.includes(
+                approvalScopePreview?.scopeHash ?? "__missing_new_scope__",
+              ) &&
+              !currentScopeAfterRecovery.includes(
+                executedScopeSnapshot?.scopeHash ?? "__missing_old_scope__",
+              )
+                ? 1
+                : 0;
+          }
         }
 
         if (mode === "real-executing-edit-ready-recovery") {
@@ -1843,6 +2726,7 @@ if (trigger) {
           recoveryGesturePresent =
             recoveryTrigger && !recoveryTrigger.hidden && !recoveryTrigger.disabled ? 1 : 0;
           if (recoveryGesturePresent) {
+            accelerateApprovalTimeout = false;
             recoveryClickDispatched = await fire(
               recoveryTrigger,
               "click",
@@ -2120,6 +3004,11 @@ const visibleDomCopy = visibleTextElements
   .filter(Boolean)
   .join(" | ")
   .replace(/\s+/g, " ");
+const allDomCopy = [...elements.values()]
+  .map((element) => element.textContent)
+  .filter(Boolean)
+  .join(" | ")
+  .replace(/\s+/g, " ");
 const localDraftElement = elements.get("approval-local-draft");
 const receiptElement = elements.get("approval-receipt");
 const localDraftCopy =
@@ -2152,22 +3041,149 @@ const executionSensitiveRefsHidden =
 const undoUnavailableCopy = "撤销暂未开放；本版本不会提供 Undo 操作。";
 const undoBoundaryOccurrences = visibleDomCopy.split(undoUnavailableCopy).length - 1;
 const visibleDomWithoutUndoBoundary = visibleDomCopy.replace(undoUnavailableCopy, "");
+const verifiedCreationUndoControl =
+  creationAttemptSnapshot?.status === "SUCCEEDED" &&
+  creationAttemptSnapshot?.executionState === "EXECUTED" &&
+  creationAttemptSnapshot?.receipt?.receiptType === "LOCAL_DRAFT_CREATED_V1" &&
+  creationAttemptSnapshot?.localDraft?.state === "ACTIVE" &&
+  creationAttemptSnapshot?.undoReceipt === null &&
+  creationAttemptSnapshot?.undoAvailable === true &&
+  undoTrigger()?.textContent.trim() === "逻辑撤销本地草稿（保留明文与历史）";
 const undoBoundaryExplicit =
-  undoBoundaryOccurrences === 1 && !/Undo|撤销/i.test(visibleDomWithoutUndoBoundary)
+  (undoBoundaryOccurrences === 1 && !/Undo|撤销/i.test(visibleDomWithoutUndoBoundary)) ||
+  verifiedCreationUndoControl
     ? 1
     : 0;
 const undoPositiveClaim =
   /Undo\s+(?:is\s+)?(?:available|enabled|ready)|Undo\s*(?:已开放|可用|已启用|已就绪|已支持)|撤销(?:功能|操作)?(?:现已|已经|已)?(?:可用|支持|开放|启用|就绪)|(?:现在|现已)可以撤销|可立即撤销|已撤销|撤销成功/i;
-const noFalseUndoClaim = undoPositiveClaim.test(visibleDomCopy) ? 0 : 1;
+const verifiedLogicalUndoClaim =
+  logicalUndoMode &&
+  undoResponseStrict === 1 &&
+  undoResponseBody?.localDraft?.state === "LOGICALLY_UNDONE" &&
+  undoResponseBody?.undoReceipt?.effect === "LOGICALLY_UNDONE" &&
+  (elements.get("approval-card")?.dataset?.state === "LOGICALLY_UNDONE" ||
+    (mode === "real-undo-inflight-edit" && undoEditOldResultHistorical === 1));
+const noFalseUndoClaim =
+  !undoPositiveClaim.test(visibleDomCopy) || verifiedLogicalUndoClaim ? 1 : 0;
 const undoControlsSafe = [...elements.values()]
   .filter(
     (element) =>
       element.tagName === "BUTTON" &&
       (/undo/i.test(element.id) || /Undo|撤销/.test(element.textContent)),
   )
-  .every((element) => element.hidden || element.disabled)
-  ? 1
-  : 0;
+  .every(
+    (element) =>
+      element.hidden ||
+      element.disabled ||
+      (element === undoTrigger() && verifiedCreationUndoControl),
+  )
+    ? 1
+    : 0;
+const undoReceiptElement = elements.get("approval-undo-receipt");
+const undoReceiptSummaryElement = elements.get("approval-undo-receipt-summary");
+const undoReceiptCopy = [undoReceiptElement, undoReceiptSummaryElement]
+  .filter((element) => element && !element.hidden)
+  .map((element) => element.textContent)
+  .filter(Boolean)
+  .join(" | ")
+  .replace(/\s+/g, " ");
+const undoEffectiveStateRendered =
+  localDraftElement &&
+  !localDraftElement.hidden &&
+  localDraftCopy.includes("LOGICALLY_UNDONE") &&
+  localDraftCopy.includes(undoResponseBody?.localDraft?.draftId ?? "__missing_undo_draft__")
+    ? 1
+    : 0;
+const creationReceiptRetained =
+  receiptElement &&
+  !receiptElement.hidden &&
+  receiptCopy.includes("LOCAL_DRAFT_CREATED_V1") &&
+  receiptCopy.includes(
+    creationAttemptSnapshot?.receipt?.receiptId ?? "__missing_creation_receipt__",
+  ) &&
+  receiptCopy.includes("SUCCEEDED") &&
+  /simulated\s*[=:：]\s*false/i.test(receiptCopy)
+    ? 1
+    : 0;
+const undoReceiptRendered =
+  undoReceiptCopy.includes("LOCAL_DRAFT_LOGICALLY_UNDONE_V1") &&
+  undoReceiptCopy.includes(
+    undoResponseBody?.undoReceipt?.receiptId ?? "__missing_undo_receipt__",
+  ) &&
+  undoReceiptCopy.includes("LOGICALLY_UNDONE") &&
+  undoReceiptCopy.includes("CAPTURE_ARTIFACT_HISTORY_RETAINED") &&
+  undoReceiptCopy.includes("SUCCEEDED") &&
+  /simulated\s*[=:：]\s*false/i.test(undoReceiptCopy)
+    ? 1
+    : 0;
+const undoUnavailableAfterSuccess =
+  undoResponseBody?.undoAvailable === false &&
+  undoTrigger() &&
+  !undoTrigger().hidden &&
+  undoTrigger().disabled &&
+  (!undoRecoveryTrigger() ||
+    undoRecoveryTrigger().hidden ||
+    undoRecoveryTrigger().disabled)
+    ? 1
+    : 0;
+const destructiveUndoClaim =
+  /永久(?:清空|删除|擦除|抹除)|彻底(?:清空|删除|擦除|抹除)|物理删除|清空|删除|擦除|抹除|忘记|遗忘|移除(?:明文|内容|历史)?|清除(?:明文|内容|历史)?|销毁(?:明文|内容|历史)?|恢复|重做|\b(?:delete|deleted|deletion|forget|forgotten|erase|erased|wipe|wiped|purge|purged|remove plaintext|plaintext removed|restore|restored|redo)\b/i;
+const forbiddenUndoElement = [...elements.values()].some(
+  (element) =>
+    /(?:delete|forget|erase|wipe|purge|restore|redo)/i.test(element.id) ||
+    destructiveUndoClaim.test(element.textContent ?? ""),
+);
+const noDestructiveUndoClaim =
+  destructiveUndoClaim.test(allDomCopy) || forbiddenUndoElement ? 0 : 1;
+const authorityLiveChangedClaim =
+  /\bAuthority\b|\bLive\b|生产(?:就绪|可用)|真实外部执行(?:已)?成功|外部\s*(?:provider|模型|connector)\s*(?:已)?\s*(?:调用|执行|成功)/i;
+const exactLocalPrincipal = approvalScopePreview?.approvalPrincipal?.configuredPrincipalId;
+const creationLocalOnlyBoundary =
+  creationAttemptSnapshot?.provenance?.executionRoute === "LOCAL_DRAFTBOX_V2" &&
+  creationAttemptSnapshot?.action?.targetRef === "local://drafts" &&
+  creationAttemptSnapshot?.action?.policyVersion === "local-action-v2" &&
+  creationAttemptSnapshot?.capability?.connector === "emergeos.local-draftbox" &&
+  creationAttemptSnapshot?.capability?.audience === "emergeos:local-draftbox" &&
+  creationAttemptSnapshot?.capability?.accountRef ===
+    `local-draftbox:${exactLocalPrincipal}` &&
+  creationAttemptSnapshot?.capability?.maxCalls === 1 &&
+  creationAttemptSnapshot?.capability?.usedCalls === 1;
+const undoLocalOnlyBoundary =
+  undoResponseBody === null ||
+  (undoResponseBody?.provenance?.executionRoute === "LOCAL_DRAFTBOX_V2" &&
+    undoResponseBody?.capability?.connector === "emergeos.local-draftbox" &&
+    undoResponseBody?.capability?.audience === "emergeos:local-draftbox" &&
+    undoResponseBody?.undoReceipt?.receiptType ===
+      "LOCAL_DRAFT_LOGICALLY_UNDONE_V1" &&
+    undoResponseBody?.undoReceipt?.effect === "LOGICALLY_UNDONE" &&
+    undoResponseBody?.undoReceipt?.retention ===
+      "CAPTURE_ARTIFACT_HISTORY_RETAINED" &&
+    undoResponseBody?.undoReceipt?.simulated === false);
+const exactLocalOnlyBoundary =
+  elements.get("outcome-canvas-boundary")?.textContent.trim() ===
+    "本地演示生成（Fake，无外部模型）" &&
+  approvalScopePreview?.provenance?.executionRoute === "LOCAL_DRAFTBOX_V2" &&
+  approvalScopePreview?.action?.targetRef === "local://drafts" &&
+  approvalScopePreview?.capability?.connector === "emergeos.local-draftbox" &&
+  approvalScopePreview?.capability?.audience === "emergeos:local-draftbox" &&
+  approvalScopePreview?.capability?.accountRef ===
+    `local-draftbox:${exactLocalPrincipal}` &&
+  approvalScopePreview?.capability?.maxCalls === 1 &&
+  approvalScopePreview?.capability?.usedCalls === 0 &&
+  creationLocalOnlyBoundary &&
+  undoLocalOnlyBoundary;
+const authorityLiveDenyComplete =
+  !authorityLiveChangedClaim.test(allDomCopy) &&
+  forbiddenActionCalls === 0 &&
+  providerSurfaceCalls === 0 &&
+  forbiddenActionRouteCalls === 0 &&
+  deleteCalls === 0 &&
+  legacyActionCalls === 0 &&
+  reconcileCalls === 0;
+const authorityLiveUnchanged =
+  exactLocalOnlyBoundary && authorityLiveDenyComplete
+    ? 1
+    : 0;
 const failClosedNoSuccess = !/本地草稿已创建|执行成功|状态\s*SUCCEEDED/.test(visibleDomCopy)
   ? 1
   : 0;
@@ -2303,6 +3319,60 @@ const output = {
   NO_FALSE_UNDO_CLAIM: noFalseUndoClaim,
   UNDO_BOUNDARY_EXPLICIT: undoBoundaryExplicit,
   UNDO_CONTROLS_SAFE: undoControlsSafe,
+  CREATION_UNDO_CONTRACT_EXACT: creationUndoContractExact,
+  UNDO_ENVELOPE_COMPATIBILITY_EXACT: undoEnvelopeCompatibilityExact,
+  UNDO_PRE_TERMINAL_SAFE: undoPreTerminalSafe,
+  UNDO_FORCED_PRE_TERMINAL_NO_POST: undoForcedPreTerminalNoPost,
+  QUIET_BEFORE_THIRD_GESTURE: quietBeforeThirdGesture,
+  UNDO_GESTURE_PRESENT: undoGesturePresent,
+  UNDO_EXACT_BUTTON_COPY: undoExactButtonCopy,
+  UNDO_CLICK_DISPATCHED: undoClickDispatched,
+  UNDO_NONCE_ON_CLICK: undoNonceOnClick,
+  UNDO_POST_COUNT: undoPostCount,
+  UNDO_POST_DURING_THIRD_GESTURE: undoPostDuringThirdGesture,
+  UNEXPECTED_UNDO_POST_COUNT: unexpectedUndoPostCount,
+  UNDO_SUBMITTING_STATE_OBSERVED: undoSubmittingStateObserved,
+  UNDO_REQUEST_EXACT: undoRequestExact,
+  UNDO_FETCH_OPTIONS_EXACT: undoFetchOptionsExact,
+  UNDO_STATUS: undoStatus,
+  UNDO_RESPONSE_STRICT: undoResponseStrict,
+  UNDO_DOUBLE_CLICK_AT_MOST_ONCE: undoDoubleClickAtMostOnce,
+  UNDO_REPLAY_FIXTURE_EXACT: undoReplayFixtureExact,
+  UNDO_UNKNOWN_BEFORE_RECOVERY: undoUnknownBeforeRecovery,
+  UNDO_UNKNOWN_NO_FALSE_SUCCESS: undoUnknownNoFalseSuccess,
+  UNDO_QUIET_AFTER_UNKNOWN: undoQuietAfterUnknown,
+  UNDO_RECOVERY_GESTURE_PRESENT: undoRecoveryGesturePresent,
+  UNDO_RECOVERY_CLICK_DISPATCHED: undoRecoveryClickDispatched,
+  UNDO_RECOVERY_GET_COUNT: undoRecoveryGetCount,
+  UNDO_RECOVERY_GET_DURING_EXPLICIT_GESTURE:
+    undoRecoveryGetDuringExplicitGesture,
+  UNDO_RECOVERY_CANONICAL_EXACT: undoRecoveryCanonicalExact,
+  UNDO_HANGING_SIGNAL_ABORTED: undoHangingSignalAborted,
+  UNDO_INFLIGHT_EDIT_TRIGGERED: undoInflightEditTriggered,
+  UNDO_INFLIGHT_EDIT_HISTORICAL_UNKNOWN: undoInflightEditHistoricalUnknown,
+  UNDO_INFLIGHT_EDIT_GET_ONLY: undoInflightEditGetOnly,
+  UNDO_UNKNOWN_SECOND_EDIT_DISPATCHED: undoUnknownSecondEditDispatched,
+  UNDO_UNKNOWN_SECOND_EDIT_RECOVERY_RETAINED:
+    undoUnknownSecondEditRecoveryRetained,
+  UNDO_EDIT_SAVE_CLICK_DISPATCHED: undoEditSaveClickDispatched,
+  UNDO_EDIT_NEW_ARTIFACT_EXACT: undoEditNewArtifactExact,
+  UNDO_EDIT_NEW_ARTIFACT_RECOVERY_ISOLATED:
+    undoEditNewArtifactRecoveryIsolated,
+  UNDO_EDIT_QUIET_GET_ONLY: undoEditQuietGetOnly,
+  UNDO_EDIT_EXPLICIT_GET_ONLY: undoEditExplicitGetOnly,
+  UNDO_EDIT_OLD_RESULT_HISTORICAL: undoEditOldResultHistorical,
+  UNDO_EDIT_CONTEXTS_NOT_MIXED: undoEditContextsNotMixed,
+  UNDO_EDIT_NO_SECOND_POST: undoEditNoSecondPost,
+  UNDO_EFFECTIVE_STATE_RENDERED: undoEffectiveStateRendered,
+  CREATION_RECEIPT_RETAINED: creationReceiptRetained,
+  UNDO_RECEIPT_RENDERED: undoReceiptRendered,
+  UNDO_UNAVAILABLE_AFTER_SUCCESS: undoUnavailableAfterSuccess,
+  NO_DESTRUCTIVE_UNDO_CLAIM: noDestructiveUndoClaim,
+  AUTHORITY_LIVE_ALLOWED_BOUNDARY_EXACT: exactLocalOnlyBoundary ? 1 : 0,
+  AUTHORITY_LIVE_DENY_COMPLETE: authorityLiveDenyComplete ? 1 : 0,
+  AUTHORITY_LIVE_UNCHANGED: authorityLiveUnchanged,
+  FORBIDDEN_ACTION_ROUTE_CALLS: forbiddenActionRouteCalls,
+  DELETE_CALLS: deleteCalls,
   FAIL_CLOSED_NO_SUCCESS: failClosedNoSuccess,
   PREVIEW_V2_AUTHORITY_EXACT: previewV2AuthorityExact,
   PREVIEW_DRIFT_FIELD: previewDriftField ?? "NONE",

@@ -402,6 +402,20 @@ button:disabled {
   background: #e6f5eb;
 }
 
+.approval-card[data-state="LOGICALLY_UNDONE"] .approval-status {
+  border-left-color: #315f78;
+  color: #244d63;
+  background: #edf6fa;
+}
+
+.approval-card[data-state="UNDOING"] .approval-status,
+.approval-card[data-state="UNDO_BLOCKED"] .approval-status,
+.approval-card[data-state="UNDO_UNKNOWN"] .approval-status {
+  border-left-color: #b27821;
+  color: #6d4d1d;
+  background: #fff7e8;
+}
+
 .approval-card[data-state="UNKNOWN"] .approval-status {
   border-left-color: #b27821;
   color: #6d4d1d;

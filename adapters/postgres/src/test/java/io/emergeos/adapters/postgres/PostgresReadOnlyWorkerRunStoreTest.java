@@ -126,6 +126,7 @@ class PostgresReadOnlyWorkerRunStoreTest {
               agent_run_resource_bindings,
               agent_worker_results,
               agent_runs,
+              local_draft_undo_receipts,
               local_draft_creation_receipts,
               local_drafts,
               action_receipts,

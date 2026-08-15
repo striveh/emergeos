@@ -7,6 +7,7 @@ import io.emergeos.core.application.ActionIdempotencyConflictException;
 import io.emergeos.core.application.ApprovalStaleException;
 import io.emergeos.core.application.ArtifactRevisionConflictException;
 import io.emergeos.core.application.CaptureNonceConflictException;
+import io.emergeos.core.application.LocalDraftUndoConflictException;
 import java.net.URI;
 import java.util.NoSuchElementException;
 import org.springframework.http.HttpHeaders;
@@ -73,6 +74,15 @@ class ApiExceptionHandler {
         "urn:emergeos:problem:action-approval-integrity",
         "Action approval integrity conflict",
         "Stored action approval cannot be verified.");
+  }
+
+  @ExceptionHandler(LocalDraftUndoConflictException.class)
+  ResponseEntity<ProblemDetail> localDraftUndoConflict() {
+    return privateProblem(
+        HttpStatus.CONFLICT,
+        "urn:emergeos:problem:local-draft-undo-conflict",
+        "Local draft Undo conflict",
+        "The requested local Undo conflicts with an existing Receipt.");
   }
 
   @ExceptionHandler(ArtifactRevisionConflictException.class)

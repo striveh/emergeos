@@ -6,6 +6,8 @@ import io.emergeos.core.domain.ActionAttempt;
 import io.emergeos.core.domain.ActionAttemptStatus;
 import io.emergeos.core.domain.LocalDraft;
 import io.emergeos.core.domain.LocalDraftCreationReceipt;
+import io.emergeos.core.domain.LocalDraftUndoReceipt;
+import io.emergeos.core.domain.LocalDraftUndoScope;
 import io.emergeos.core.port.LocalDraftboxStore;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -82,6 +84,220 @@ public final class PostgresLocalDraftboxStore implements LocalDraftboxStore {
                     new ActionApprovalIntegrityException());
     LocalDraft draft = requireOwnedDraft(principalId, attemptId, attempt);
     return hydrateExecutedResult(attempt, draft, outcome == TxOutcome.CREATED);
+  }
+
+  @Override
+  public UndoResult undoOwned(
+      String principalId,
+      String attemptId,
+      String undoNonce,
+      String scopeSchema,
+      String scopeHash,
+      String proposedReceiptId) {
+    requireText(principalId, "principalId");
+    requireText(attemptId, "attemptId");
+    requireText(undoNonce, "undoNonce");
+    requireText(scopeSchema, "scopeSchema");
+    requireHash(scopeHash, "scopeHash");
+    requireText(proposedReceiptId, "proposedReceiptId");
+
+    UndoTxOutcome outcome =
+        Objects.requireNonNull(
+            transactions.execute(
+                ignored ->
+                    undoInTransaction(
+                        principalId,
+                        attemptId,
+                        undoNonce,
+                        scopeSchema,
+                        scopeHash,
+                        proposedReceiptId)),
+            "local Draftbox logical Undo transaction result");
+    if (outcome == UndoTxOutcome.NOT_FOUND) {
+      return new UndoResult.NotFound();
+    }
+    if (outcome == UndoTxOutcome.STALE) {
+      return new UndoResult.Stale();
+    }
+    if (outcome == UndoTxOutcome.CONFLICT) {
+      return new UndoResult.Conflict();
+    }
+    ActionAttempt creationAttempt =
+        attempts
+            .findOwned(principalId, attemptId)
+            .orElseThrow(ActionApprovalIntegrityException::new);
+    LocalDraftUndoReceipt receipt =
+        findUndoReceiptOwned(principalId, creationAttempt)
+            .orElseThrow(ActionApprovalIntegrityException::new);
+    return hydrateUndoneResult(
+        creationAttempt, receipt, outcome == UndoTxOutcome.CREATED);
+  }
+
+  @Override
+  public Optional<LocalDraftUndoReceipt> findUndoReceiptOwned(
+      String principalId, ActionAttempt creationAttempt) {
+    requireText(principalId, "principalId");
+    Objects.requireNonNull(creationAttempt, "creationAttempt");
+    if (!principalId.equals(creationAttempt.plan().principalId())) {
+      throw new ActionApprovalIntegrityException();
+    }
+    LocalDraft draft =
+        creationAttempt.localDraftReceipt() == null
+            ? null
+            : requireOwnedDraft(
+                principalId, creationAttempt.attemptId(), creationAttempt);
+    Optional<UndoReceiptRow> found =
+        jdbc.sql(
+                """
+                SELECT receipt_id, creation_attempt_id, draft_id,
+                       creation_receipt_id, artifact_id, artifact_version,
+                       artifact_hash, scope_schema, scope_hash, undo_nonce,
+                       receipt_type, effect, retention, outcome, occurred_at,
+                       simulated
+                FROM local_draft_undo_receipts
+                WHERE principal_id = :principalId
+                  AND creation_attempt_id = :attemptId
+                """)
+            .param("principalId", principalId)
+            .param("attemptId", creationAttempt.attemptId())
+            .query(PostgresLocalDraftboxStore::mapUndoReceiptRow)
+            .optional();
+    if (found.isEmpty()) {
+      return Optional.empty();
+    }
+    if (draft == null) {
+      throw new ActionApprovalIntegrityException();
+    }
+    return Optional.of(
+        requireCanonicalUndoReceipt(
+            principalId, creationAttempt, draft, found.orElseThrow()));
+  }
+
+  private UndoTxOutcome undoInTransaction(
+      String principalId,
+      String attemptId,
+      String undoNonce,
+      String scopeSchema,
+      String scopeHash,
+      String proposedReceiptId) {
+    Optional<AttemptHead> selected =
+        jdbc.sql(
+                """
+                SELECT
+                    principal_id, attempt_id, status, state_version,
+                    capability_used_calls, approval_principal_basis,
+                    configured_principal_id, approval_origin, execution_route,
+                    scope_schema, scope_hash, action_type, target_ref,
+                    artifact_id, artifact_version, artifact_hash, risk,
+                    policy_version, connector, account_ref,
+                    capability_subject, capability_connector,
+                    capability_audience, capability_account_ref,
+                    capability_max_calls, capability_expires_at
+                FROM action_attempts
+                WHERE principal_id = :principalId
+                  AND attempt_id = :attemptId
+                FOR UPDATE
+                """)
+            .param("principalId", principalId)
+            .param("attemptId", attemptId)
+            .query(PostgresLocalDraftboxStore::mapAttemptHead)
+            .optional();
+    if (selected.isEmpty()) {
+      return UndoTxOutcome.NOT_FOUND;
+    }
+    AttemptHead head = selected.orElseThrow();
+    if (!ActionApprovalScope.LOCAL_DRAFTBOX_V2.equals(head.executionRoute())
+        || !ActionApprovalScope.EXPLICIT_LOCAL_OWNER_INPUT.equals(head.approvalOrigin())
+        || !ActionAttemptStatus.SUCCEEDED.name().equals(head.status())
+        || head.stateVersion() != 2
+        || head.capabilityUsedCalls() != 1) {
+      return UndoTxOutcome.NOT_FOUND;
+    }
+    requireExactAuthority(head);
+    ActionAttempt creationAttempt =
+        attempts
+            .findOwned(principalId, attemptId)
+            .orElseThrow(ActionApprovalIntegrityException::new);
+    LocalDraft draft = requireOwnedDraft(principalId, attemptId, creationAttempt);
+    LocalDraftCreationReceipt creationReceipt = creationAttempt.localDraftReceipt();
+    if (creationReceipt == null) {
+      throw new ActionApprovalIntegrityException();
+    }
+    LocalDraftUndoScope canonicalScope;
+    try {
+      canonicalScope =
+          LocalDraftUndoScope.forActiveDraft(
+              principalId, draft, creationReceipt, undoNonce);
+    } catch (IllegalArgumentException | NullPointerException exception) {
+      throw new ActionApprovalIntegrityException(exception);
+    }
+    if (!canonicalScope.scopeSchema().equals(scopeSchema)
+        || !canonicalScope.scopeHash().equals(scopeHash)) {
+      return UndoTxOutcome.STALE;
+    }
+
+    Optional<UndoReceiptRow> existingForAttempt =
+        loadUndoReceiptRowByAttempt(principalId, attemptId);
+    if (existingForAttempt.isPresent()) {
+      LocalDraftUndoReceipt existing =
+          requireCanonicalUndoReceipt(
+              principalId,
+              creationAttempt,
+              draft,
+              existingForAttempt.orElseThrow());
+      return sameUndoRequest(existing, canonicalScope)
+          ? UndoTxOutcome.REPLAY
+          : UndoTxOutcome.CONFLICT;
+    }
+    if (undoNonceExists(principalId, undoNonce)) {
+      return UndoTxOutcome.CONFLICT;
+    }
+
+    Optional<String> inserted =
+        jdbc.sql(
+                """
+                INSERT INTO local_draft_undo_receipts (
+                    principal_id, receipt_id, creation_attempt_id, draft_id,
+                    creation_receipt_id, artifact_id, artifact_version,
+                    artifact_hash, scope_schema, undo_nonce,
+                    receipt_type, effect, retention, outcome, simulated
+                ) VALUES (
+                    :principalId, :receiptId, :attemptId, :draftId,
+                    :creationReceiptId, :artifactId, :artifactVersion,
+                    :artifactHash, :scopeSchema, :undoNonce,
+                    'LOCAL_DRAFT_LOGICALLY_UNDONE_V1', 'LOGICALLY_UNDONE',
+                    'CAPTURE_ARTIFACT_HISTORY_RETAINED', 'SUCCEEDED', FALSE
+                )
+                ON CONFLICT DO NOTHING
+                RETURNING receipt_id
+                """)
+            .param("principalId", principalId)
+            .param("receiptId", proposedReceiptId)
+            .param("attemptId", attemptId)
+            .param("draftId", draft.draftId())
+            .param("creationReceiptId", creationReceipt.receiptId())
+            .param("artifactId", draft.artifactId())
+            .param("artifactVersion", draft.artifactVersion())
+            .param("artifactHash", draft.artifactHash())
+            .param("scopeSchema", canonicalScope.scopeSchema())
+            .param("undoNonce", undoNonce)
+            .query(String.class)
+            .optional();
+    if (inserted.isPresent()) {
+      return UndoTxOutcome.CREATED;
+    }
+
+    Optional<UndoReceiptRow> raced =
+        loadUndoReceiptRowByAttempt(principalId, attemptId);
+    if (raced.isEmpty()) {
+      return UndoTxOutcome.CONFLICT;
+    }
+    LocalDraftUndoReceipt existing =
+        requireCanonicalUndoReceipt(
+            principalId, creationAttempt, draft, raced.orElseThrow());
+    return sameUndoRequest(existing, canonicalScope)
+        ? UndoTxOutcome.REPLAY
+        : UndoTxOutcome.CONFLICT;
   }
 
   private TxOutcome executeInTransaction(
@@ -277,6 +493,115 @@ public final class PostgresLocalDraftboxStore implements LocalDraftboxStore {
     return TxOutcome.CREATED;
   }
 
+  private Optional<UndoReceiptRow> loadUndoReceiptRowByAttempt(
+      String principalId, String attemptId) {
+    return jdbc.sql(
+            """
+            SELECT receipt_id, creation_attempt_id, draft_id,
+                   creation_receipt_id, artifact_id, artifact_version,
+                   artifact_hash, scope_schema, scope_hash, undo_nonce,
+                   receipt_type, effect, retention, outcome, occurred_at,
+                   simulated
+            FROM local_draft_undo_receipts
+            WHERE principal_id = :principalId
+              AND creation_attempt_id = :attemptId
+            """)
+        .param("principalId", principalId)
+        .param("attemptId", attemptId)
+        .query(PostgresLocalDraftboxStore::mapUndoReceiptRow)
+        .optional();
+  }
+
+  private boolean undoNonceExists(String principalId, String undoNonce) {
+    return Boolean.TRUE.equals(
+        jdbc.sql(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM local_draft_undo_receipts
+                    WHERE principal_id = :principalId
+                      AND undo_nonce = :undoNonce
+                )
+                """)
+            .param("principalId", principalId)
+            .param("undoNonce", undoNonce)
+            .query(Boolean.class)
+            .single());
+  }
+
+  private static UndoReceiptRow mapUndoReceiptRow(
+      ResultSet resultSet, int rowNumber) throws SQLException {
+    try {
+      return new UndoReceiptRow(
+          new LocalDraftUndoReceipt(
+              resultSet.getString("receipt_id"),
+              resultSet.getString("creation_attempt_id"),
+              resultSet.getString("draft_id"),
+              resultSet.getString("creation_receipt_id"),
+              resultSet.getString("artifact_id"),
+              resultSet.getInt("artifact_version"),
+              resultSet.getString("artifact_hash"),
+              resultSet.getString("scope_schema"),
+              resultSet.getString("scope_hash"),
+              resultSet.getString("undo_nonce"),
+              resultSet.getTimestamp("occurred_at").toInstant()),
+          resultSet.getString("receipt_type"),
+          resultSet.getString("effect"),
+          resultSet.getString("retention"),
+          resultSet.getString("outcome"),
+          resultSet.getBoolean("simulated"));
+    } catch (IllegalArgumentException | NullPointerException exception) {
+      throw new ActionApprovalIntegrityException(exception);
+    }
+  }
+
+  private static LocalDraftUndoReceipt requireCanonicalUndoReceipt(
+      String principalId,
+      ActionAttempt creationAttempt,
+      LocalDraft draft,
+      UndoReceiptRow row) {
+    LocalDraftUndoReceipt receipt = row.receipt();
+    LocalDraftCreationReceipt creationReceipt = creationAttempt.localDraftReceipt();
+    if (creationReceipt == null
+        || !principalId.equals(draft.principalId())
+        || !creationAttempt.attemptId().equals(receipt.creationAttemptId())
+        || !draft.attemptId().equals(receipt.creationAttemptId())
+        || !draft.draftId().equals(receipt.draftId())
+        || !creationReceipt.receiptId().equals(receipt.creationReceiptId())
+        || !creationReceipt.draftId().equals(receipt.draftId())
+        || !draft.artifactId().equals(receipt.artifactId())
+        || draft.artifactVersion() != receipt.artifactVersion()
+        || !draft.artifactHash().equals(receipt.artifactHash())
+        || receipt.occurredAt().isBefore(draft.createdAt())
+        || !LocalDraftUndoReceipt.RECEIPT_TYPE.equals(row.receiptType())
+        || !LocalDraftUndoReceipt.EFFECT.equals(row.effect())
+        || !LocalDraftUndoScope.RETENTION.equals(row.retention())
+        || !ActionAttemptStatus.SUCCEEDED.name().equals(row.outcome())
+        || row.simulated()) {
+      throw new ActionApprovalIntegrityException();
+    }
+    LocalDraftUndoScope expectedScope;
+    try {
+      expectedScope =
+          LocalDraftUndoScope.forActiveDraft(
+              principalId, draft, creationReceipt, receipt.undoNonce());
+    } catch (IllegalArgumentException | NullPointerException exception) {
+      throw new ActionApprovalIntegrityException(exception);
+    }
+    if (!expectedScope.scopeSchema().equals(receipt.scopeSchema())
+        || !expectedScope.scopeHash().equals(receipt.scopeHash())) {
+      throw new ActionApprovalIntegrityException();
+    }
+    return receipt;
+  }
+
+  private static boolean sameUndoRequest(
+      LocalDraftUndoReceipt receipt, LocalDraftUndoScope scope) {
+    return receipt.undoNonce().equals(scope.undoNonce())
+        && receipt.scopeSchema().equals(scope.scopeSchema())
+        && receipt.scopeHash().equals(scope.scopeHash());
+  }
+
   private LocalDraft requireOwnedDraft(
       String principalId, String attemptId, ActionAttempt attempt) {
     LocalDraft draft =
@@ -334,6 +659,19 @@ public final class PostgresLocalDraftboxStore implements LocalDraftboxStore {
       ActionAttempt attempt, LocalDraft draft, boolean created) {
     try {
       return new ExecuteResult.Executed(attempt, draft, created);
+    } catch (ActionApprovalIntegrityException exception) {
+      throw exception;
+    } catch (IllegalArgumentException | NullPointerException exception) {
+      throw new ActionApprovalIntegrityException(exception);
+    }
+  }
+
+  private static UndoResult.Undone hydrateUndoneResult(
+      ActionAttempt creationAttempt,
+      LocalDraftUndoReceipt receipt,
+      boolean created) {
+    try {
+      return new UndoResult.Undone(creationAttempt, receipt, created);
     } catch (ActionApprovalIntegrityException exception) {
       throw exception;
     } catch (IllegalArgumentException | NullPointerException exception) {
@@ -421,7 +759,23 @@ public final class PostgresLocalDraftboxStore implements LocalDraftboxStore {
     NOT_FOUND
   }
 
+  private enum UndoTxOutcome {
+    CREATED,
+    REPLAY,
+    STALE,
+    CONFLICT,
+    NOT_FOUND
+  }
+
   private record ArtifactHead(int version, String hash) {}
+
+  private record UndoReceiptRow(
+      LocalDraftUndoReceipt receipt,
+      String receiptType,
+      String effect,
+      String retention,
+      String outcome,
+      boolean simulated) {}
 
   private record AttemptHead(
       String principalId,

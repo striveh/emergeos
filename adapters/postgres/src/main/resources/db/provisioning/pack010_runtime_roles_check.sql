@@ -126,9 +126,9 @@ BEGIN
           AND pg_catalog.encode(
                 pg_catalog.sha256(pg_catalog.convert_to(
                     procedure.prosrc, 'UTF8')), 'hex')
-                = '8cbe0f904dee8af44976b05ba9f0e8481e279a0686eb0357bc7b73b531ce10e3'
+                = '51d4368bbaff6d78ec69a6ae5ea13a746816bf478fe6d58b86319b0a041be7e9'
           AND pg_catalog.md5(procedure.prosrc)
-                = '03d284a2970c2085fbb94c91acde26d2'
+                = '5e6d50f28c89c58242b4d90f65472927'
           AND pg_catalog.has_function_privilege(
                 'emergeos_terminal_owner', procedure.oid, 'EXECUTE')
           AND NOT pg_catalog.has_function_privilege(
@@ -216,6 +216,8 @@ BEGIN
           THEN '6b86652d9d132538940ddac92752cd6a8741cff759b413d98e7e10e948c2779b'
         WHEN 18
           THEN '0f2cdc12cb4dc587eb0f5bd648fcb3778401b99e1fdd5aa9a0cc4252ba108afb'
+        WHEN 19
+          THEN 'd08a2c229ef90e16cc6e076fac68671a4f1fe6ebddec9abcfff813e4b81c1827'
         ELSE NULL
     END;
     IF expected_trigger_topology IS NULL THEN
@@ -243,17 +245,17 @@ BEGIN
                     procedure.prosrc, 'UTF8')), 'hex') =
                 CASE procedure.proname
                   WHEN 'agent_graph_require_failure_resumer_v12'
-                    THEN '2ec9d651a84a1db7b414cbe86a2e2f8b13793114bb1e29662783eea03245a3e0'
+                    THEN '40256147c9316e680e6cb276f2b4fa41e90280385e41997a23177425a9f7e36e'
                   WHEN 'agent_graph_require_executor_v10'
-                    THEN 'd3bbadacfea777b9d0a5e590ab7e068babc9594a2e50fb5600a7c2438b32777a'
+                    THEN 'd9909934e3e4e4f015857654c05b02dbe36372ef2421ccd4f8475adb108ee4e1'
                   ELSE NULL
                 END
           AND pg_catalog.md5(procedure.prosrc) =
                 CASE procedure.proname
                   WHEN 'agent_graph_require_failure_resumer_v12'
-                    THEN '2bcdf5ca7c13d22fe46d0979cc23d4d5'
+                    THEN 'b7cffa1c95261f33b62f973ffefd6ef7'
                   WHEN 'agent_graph_require_executor_v10'
-                    THEN '990d8d29e187ffa5f09e76c09ff0818b'
+                    THEN 'e2e5b865650e39fc7ea425edf4001b19'
                   ELSE NULL
                 END
           AND NOT procedure.prosecdef
@@ -1547,7 +1549,7 @@ BEGIN
                     procedure.prosrc, 'UTF8')), 'hex')
                 = CASE procedure.proname
               WHEN 'agent_graph_require_failure_resumer_v12'
-                THEN '2ec9d651a84a1db7b414cbe86a2e2f8b13793114bb1e29662783eea03245a3e0'
+                THEN '40256147c9316e680e6cb276f2b4fa41e90280385e41997a23177425a9f7e36e'
               WHEN 'agent_graph_assert_failure_terminal_resume_v12'
                 THEN 'fdad487040c702df9b58481e30158a96e1564963babd86b9d4a0d8e39bceebc3'
               ELSE NULL
@@ -1586,7 +1588,7 @@ BEGIN
             WHEN 'agent_graph_require_executor_v9'
                 THEN '90f8d826c5a2dbd8851f469322500d36'
             WHEN 'agent_graph_require_executor_v10'
-                THEN '990d8d29e187ffa5f09e76c09ff0818b'
+                THEN 'e2e5b865650e39fc7ea425edf4001b19'
             WHEN 'agent_graph_require_row_shape_v9'
               THEN '865db3bb7b9d040e21e7e67fa4592980'
             WHEN 'agent_graph_run_selector_guard_v10'
@@ -1863,7 +1865,7 @@ BEGIN
                             ',' ORDER BY procedure.proname),
                         'UTF8')),
                 'hex')
-             = '3711ff2b89dba5b36e564a8a74a5399d80be8d04178434c74503b688e5f49b9f'
+             = '0bf03dba92918a6b042370debdc818d390095e53e5d49d1aaf8b3e3f72d3ab6c'
         FROM pg_catalog.pg_proc procedure
         JOIN pg_catalog.pg_namespace namespace
           ON namespace.oid = procedure.pronamespace
