@@ -501,9 +501,20 @@ The main Agent owns the final Diff, targeted/full verification and real acceptan
 - [x] 2026-08-16: final independent release review returned
   `GO / P0=0 / P1=0 / 7 P2 deferred`; Receipt, DCO commit and non-force push are allowed,
   while Ready/merge/release/deploy remain prohibited and Authority / Live remains Red.
-- [ ] After writer stop-write, externally seal the current 45-path content, docs5 and terminal-docs4
-  manifests, then create the Receipt/DCO commit, non-force push and obtain exact-head CI. The seven
-  nonblocking P2s remain explicit until separately closed.
+- [x] 2026-08-16: first DCO commit `ca2e1af5fb904a3da17c34910f97e08e4c0ee783`
+  (`45 files`, parent `0e34f88`, tree `1f740982`) was ordinary fast-forward pushed to PR #7;
+  the PR remained `OPEN / Draft`.
+- [x] 2026-08-16: exact-head CI run `31913800072` attempt 1 failed only in `Build and test` on
+  a test-only crash-marker visibility race. Independent diagnosis classified it
+  `Product P0=0 / Product P1=0 / Release Gate CI reliability P1`; two test-only files were
+  minimally fixed, independently reviewed `GO`, and one focused 6-test run passed.
+- [x] 2026-08-16: the single post-fix clean root ran from `2026-08-16T00:05:48Z` to
+  `2026-08-16T00:15:14Z` and passed `11/11` with `179` fresh suites,
+  `916 tests / 0 failures / 0 errors / 0 skipped`. It is Engineering Green for the current
+  two test-only files and pre-update docs bytes.
+- [ ] Complete links plus independent review for the terminal docs-only claims, externally seal
+  current manifests, create the second DCO commit, non-force push and obtain new exact-head CI.
+  The seven product P2s remain unchanged and explicit.
 
 ## Decisions
 
@@ -935,8 +946,12 @@ do not count.
   outside-in Red -> focused Green；fresh root first cycle因唯一stale current-schema test fixture而Red，
   一行test-only修复已independent review + focused verify Green；唯一bounded root recovery已
   `11/11 / 179 XML / 914 tests / 0` Engineering Green；final independent review为
-  `GO / P0=0 / P1=0 / 7 P2 deferred`；Receipt/DCO/non-force push已允许，exact-head CI仍
-  PENDING，不Ready/merge/release/deploy；overall Authority / Live Red。
+  `GO / P0=0 / P1=0 / 7 P2 deferred`。首个DCO head `ca2e1af…`已ordinary push，但
+  exact-head CI attempt 1在test-only crash-marker race上失败；两文件minimum fix已review/
+  focused 6/6 Green。single post-fix clean root已`11/11 / 179 suites / 916 tests / 0F0E0S`
+  Engineering Green，覆盖current test与pre-update docs bytes；terminal docs-only claims仍需links/
+  independent review，第二DCO commit/non-force push与新exact-head CI仍PENDING；
+  PR `OPEN / Draft`，不Ready/merge/release/deploy；overall Authority / Live Red。
 - Receipt：[S1 Append-only Logical Local Draft Undo Engineering Receipt](../operations/build-notes/2026-08-16-s1-logical-local-draft-undo.md)；长期边界见
   [ADR-0020](../architecture/decisions/0020-append-only-logical-local-draft-undo.md)。
 - owner选择logical Undo option A。approval与execute之后，页面只在canonical creation truth确认
@@ -1021,6 +1036,43 @@ do not count.
   writer stop-write后由独立reviewer外部重算并封存，不把文档自身manifest内嵌回自身。
   Receipt、DCO commit与non-force push已允许，exact-head CI仍需通过；Draft不Ready，
   不merge/release/deploy。
+- first DCO commit `ca2e1af5fb904a3da17c34910f97e08e4c0ee783`（parent `0e34f88`、
+  tree `1f740982`、`45 files`）已ordinary fast-forward push到PR #7 remote branch；PR仍
+  `OPEN / Draft`。exact-head CI run `31913800072` attempt 1/job `95082643336`已terminal failure，
+  唯一失败step为`Build and test`；`SyntheticEvalCrashRestartProcessIT` line `113`观测
+  `expected CREDENTIAL_READ_STARTED, actual empty`，graph/offline后续`SKIPPED`。full job/failed-step
+  log SHA-256前缀为`1dd55b…` / `812f…`，所以该head CI不是Green。
+- independent diagnosis确认旧test-only `CREATE_NEW`在write前暴露zero-byte marker，与parent
+  `isRegularFile`形成race；durable journal phase已持久化，production blobs与`ca2e1af…`均未
+  触发Eval实现变化。结论为`Product P0=0 / Product P1=0 / Release Gate CI reliability P1`；
+  Offline同构latent race一并修复，不新增product P2，7项product P2不变。
+- minimum fix只修改两个test-only source：Synthetic Eval SHA-256
+  `6413fb1b73716420d6605e62562af873a0c06167fac1060d7546b127e264ae1f`，Offline SHA-256
+  `b60b587999052fa73ee25d1ed6a15f2eae37fecdd628935a870f8f2816061325`。只接受exact
+  phase + LF，拒绝zero/partial/wrong/CRLF，child-exit后final read且deadline cleanup保留；独立
+  fix review为`GO`。唯一focused run在`18.563s`内`BUILD SUCCESS`、`7/7` reactor
+  `SUCCESS`；Synthetic Eval/Offline各`3/3`，XML SHA-256为`18ebadf5…b76` /
+  `8f1e76f9…395`。该non-clean run中JAR mtime早于test source，只证明unchanged packaged
+  main JAR + fresh test classes，不是final artifact freshness。上轮`179/914/0`只是
+  `ca2e1af…` pre-commit same-tree historical Green，不覆盖随后两个test-only source bytes，也不
+  改变ca2 exact-head CI Red历史。
+- 两文件fix后的clean root只执行一次exact
+  `./mvnw --batch-mode --no-transfer-progress clean verify`。它从
+  `2026-08-16T00:05:48Z`运行到`2026-08-16T00:15:14Z`，总耗时`09:26`，以
+  `exit 0 / BUILD SUCCESS / 11 of 11`结束；`179`份fresh Surefire/Failsafe XML suites为
+  `916 tests / 0 failures / 0 errors / 0 skipped`，XML manifest SHA-256为
+  `7437e57ee9b60cff2934f7144836740349c2302a37b2ba13495d0df87ac7ba19`。
+- Synthetic Eval/Offline crash-restart各`3/3` Green，XML SHA-256为`4b15a0cd…5b48` /
+  `5cc39ffd…ec2`，均覆盖deterministic ready marker和original crash path。fresh Eval fat JAR为
+  `575f2b83…`，Offline normal/app JAR为`07d02216…` / `9ad318d9…`，API fat JAR为
+  `91556318…`。关键fresh XML Real UI `0476ece6…`、V19 `63b38547…`、Undo Store
+  `36147912…`、Recoverable Local Action `354bd067…`全部Green；6次readiness仍为
+  `schemaVersion=19 / pendingMigrations=0 / schemaValid=true`。
+- clean lifecycle证明post-fix source、compiled test class、report与JAR freshness一致；
+  `maven-jar-plugin 3.5.0`无warning。因此current test + pre-update docs bytes为fresh-root
+  Engineering Green。本条terminal docs-only claim运行在root之后，需links与独立review，且不
+  内嵌自指docs manifest。第二DCO commit/non-force push和新exact-head CI仍PENDING；PR保持
+  `OPEN / Draft`，Authority / Live Red，7项product P2不变。
 
 ## Outcome and next hypothesis
 
@@ -1037,9 +1089,14 @@ focused `7/7` is Green. The only first root cycle remained Red on one stale curr
 test-only correction passed independent review and a single focused Store 6 + IT 1 verification. The one bounded root
 recovery then passed `11/11 / 179 XML / 914 tests / 0`, making the then-current code/test/POM and pre-update docs
 Engineering Green. Because this terminal docs-only evidence update happened after that root, current docs manifests
-must be sealed externally after writer stop. Final review is `GO / P0=0 / P1=0 / 7 P2 deferred`; Receipt, DCO commit
-and non-force push are allowed, but exact-head CI remains pending. The seven known P2 follow-ups are nonblocking and
-still explicit. Draft remains not Ready, with no merge/release/deploy; release is not complete.
+must be sealed externally after writer stop. Final review was `GO / P0=0 / P1=0 / 7 P2 deferred`; the first DCO
+head `ca2e1af…` was ordinary pushed, but exact-head CI attempt 1 failed on a test-only crash-marker race. The
+two-file fix is independently reviewed and focused 6/6 Green, while that non-clean run did not prove artifact
+freshness. The single post-fix clean root then passed `11/11 / 179 suites / 916 tests / 0`, making current test and
+pre-update docs bytes Engineering Green with fresh source/class/report/JAR lifecycle evidence. Terminal docs-only
+claims still require links and independent review; the second DCO commit/non-force push and new exact-head CI remain
+pending. The seven known product P2 follow-ups are unchanged and nonblocking. PR #7 remains OPEN/Draft, with no Ready/merge/release/deploy;
+release is not complete.
 Stage 1 remains active because
 ADR-0004 remains Proposed, the real Connector Gate remains blocked, owner-led Teach-back/transfer/unknown-fault
 exercises plus founder dogfood/Lane B market evidence are incomplete, and logical Undo does not satisfy a

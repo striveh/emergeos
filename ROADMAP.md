@@ -81,7 +81,11 @@ PR不得擅自转Ready，且没有merge/release/deploy；任何Engineering Green
 compatibility与post-pin UI focused Engineering Green；plugin pin已落地并独立review，两个late P1已关闭；
 fresh root first cycle因唯一stale current-schema test fixture而Red，一行test-only修复已review/focused Green；
 唯一bounded root recovery已`11/11 / 179 XML / 914 tests / 0` Engineering Green；terminal docs-only
-claims的final review已`GO / P0=0 / P1=0 / 7 P2 deferred`，Receipt/DCO/non-force push允许；
+claims的final review已`GO / P0=0 / P1=0 / 7 P2 deferred`；首个DCO head `ca2e1af…`已ordinary
+push，但exact-head CI attempt 1在test-only crash-marker race上失败；两文件fix已review/
+focused 6/6 Green；single post-fix clean root已`11/11 / 179 suites / 916 tests / 0F0E0S`
+Engineering Green，覆盖current test与pre-update docs bytes；terminal docs-only claims仍需links/review，
+第二commit/push/new exact-head CI PENDING；PR `OPEN / Draft`；
 overall Authority / Live Red。** owner已选择logical Undo option A。用户只有在批准与execute之后，才可
 通过第三个明确手势追加一条`LOCAL_DRAFT_LOGICALLY_UNDONE_V1 / simulated=false` Receipt；raw Draft
 继续是不可变`ACTIVE`，exact read projection变为`LOGICALLY_UNDONE`。first/replay/GET为
@@ -145,8 +149,47 @@ code-bearing manifest已冻结为
 `bacb5b377e9cfa4c8d14f7a771d7c0742b4c6734290fb9804b9b9f80903ae98f`。终审中的
 pre-update 45-path content/docs5/terminal-docs4 manifests只是historical，不再称final；current值
 必须在writer stop-write后由独立reviewer外部重算并封存，避免文档manifest自引用。
-Receipt、DCO commit与普通非force push已允许，exact-head CI仍待通过。Draft不得
-转Ready，也不得merge、release或deploy；任何local Green都不改变Authority / Live Red。
+
+首个DCO commit `ca2e1af5fb904a3da17c34910f97e08e4c0ee783`（parent `0e34f88`、
+tree `1f740982`、`45 files`）已ordinary fast-forward push到PR #7 remote branch，PR仍
+`OPEN / Draft`。绑定该head的CI run `31913800072` attempt 1/job `95082643336`已terminal
+failure，唯一失败为`Build and test`；`SyntheticEvalCrashRestartProcessIT` line 113为
+`expected CREDENTIAL_READ_STARTED, actual empty`，graph/offline后续`SKIPPED`。job/failed-step log
+SHA-256前缀为`1dd55b…` / `812f…`，所以CI不是Green。
+
+独立诊断是旧test-only `CREATE_NEW`在write前暴露zero-byte marker，与parent
+`isRegularFile`形成race；durable journal phase已持久化，production blobs未变，
+`ca2e1af…`未触发Eval实现变化。分类为
+`Product P0=0 / Product P1=0 / Release Gate CI reliability P1`；Offline同构latent race一并修复，
+不新增product P2，7项product P2不变。
+
+两个test-only fix的Synthetic/Offline SHA-256为
+`6413fb1b73716420d6605e62562af873a0c06167fac1060d7546b127e264ae1f` /
+`b60b587999052fa73ee25d1ed6a15f2eae37fecdd628935a870f8f2816061325`。只接受exact phase + LF，
+拒绝zero/partial/wrong/CRLF，child-exit后final read且deadline cleanup保留；独立review `GO`。
+唯一focused run于`18.563s`内`BUILD SUCCESS`，`7/7` reactor SUCCESS，Synthetic/Offline各
+`3/3`，XML SHA为`18ebadf5…b76` / `8f1e76f9…395`。但JAR mtime早于test source，该
+non-clean run只证明unchanged packaged main JAR + fresh test classes，不是final artifact freshness。
+上轮`179/914/0`只是`ca2e1af…` pre-commit same-tree historical Green，不覆盖随后两个test-only
+source bytes，也不改变ca2 exact-head CI Red历史。
+
+两文件fix后的clean root只执行一次exact `./mvnw --batch-mode --no-transfer-progress clean verify`：
+start `2026-08-16T00:05:48Z`，end `2026-08-16T00:15:14Z`，total `09:26`，最终
+`exit 0 / BUILD SUCCESS / 11 of 11`。`179`份fresh Surefire/Failsafe XML suites汇总为
+`916 tests / 0 failures / 0 errors / 0 skipped`，XML manifest SHA-256为
+`7437e57ee9b60cff2934f7144836740349c2302a37b2ba13495d0df87ac7ba19`。Synthetic Eval/Offline
+各`3/3` Green，XML SHA为`4b15a0cd…5b48` / `5cc39ffd…ec2`，均覆盖deterministic ready marker与
+original crash path。fresh Eval fat JAR为`575f2b83…`，Offline normal/app JAR为
+`07d02216…` / `9ad318d9…`，API fat JAR为`91556318…`；关键fresh XML Real UI
+`0476ece6…`、V19 `63b38547…`、Undo Store `36147912…`、Recoverable Local Action
+`354bd067…`全部Green，6次readiness仍为
+`schemaVersion=19 / pendingMigrations=0 / schemaValid=true`。
+
+clean source/class/report/JAR lifecycle freshness一致，`maven-jar-plugin 3.5.0`无warning。因此
+current test + pre-update docs bytes取得fresh-root Engineering Green；terminal docs-only claims在root
+之后，仍需links与独立review，且不内嵌自指docs manifest。第二DCO commit/non-force push和新
+exact-head CI仍PENDING。Draft不得转Ready，也不得merge、release或deploy；7项product P2不变，
+任何local Green都不改变Authority / Live Red。
 回执：[S1 Append-only Logical Local Draft Undo Engineering Receipt](./docs/operations/build-notes/2026-08-16-s1-logical-local-draft-undo.md)；
 决策：[ADR-0020](./docs/architecture/decisions/0020-append-only-logical-local-draft-undo.md)。
 

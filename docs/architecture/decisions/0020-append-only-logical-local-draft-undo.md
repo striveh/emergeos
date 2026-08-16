@@ -121,8 +121,43 @@ forget或crypto-shred。当前选择A。它适合local-only、单事务、可审
   `bacb5b377e9cfa4c8d14f7a771d7c0742b4c6734290fb9804b9b9f80903ae98f`。pre-update
   45-path content/docs5/terminal-docs4 manifests只是historical snapshot，current值必须在writer
   stop-write后由独立reviewer外部重算并封存；不在文档中内嵌自指manifest。
-  Receipt、DCO commit和non-force push已允许，exact-head CI仍待通过。Draft不Ready，
-  不merge/release/deploy；所以本ADR不证明release完成或Authority / Live Green。
+  该review允许Receipt、DCO commit和non-force push，但不预报CI成功。
+- first DCO commit `ca2e1af5fb904a3da17c34910f97e08e4c0ee783`（parent `0e34f88`、
+  tree `1f740982`、`45 files`）已ordinary fast-forward push到PR #7 remote branch，PR仍
+  `OPEN / Draft`。exact-head CI run `31913800072` attempt 1/job `95082643336`已terminal failure；
+  唯一失败`Build and test`中，`SyntheticEvalCrashRestartProcessIT` line 113观测
+  `expected CREDENTIAL_READ_STARTED, actual empty`，graph/offline后续`SKIPPED`，job/failed-step log
+  SHA-256前缀为`1dd55b…` / `812f…`。因此该head CI不是Green。
+- independent diagnosis确认旧test-only `CREATE_NEW`在write前暴露zero-byte marker，与parent
+  `isRegularFile`形成race；durable journal phase已持久化，production blobs未变，
+  `ca2e1af…`未触发Eval实现变化。分类为`Product P0=0 / Product P1=0 / Release Gate
+  CI reliability P1`；Offline同构latent race一并修复，不新增product P2，7项不变。
+- minimum two-file test-only fix的Synthetic/Offline source SHA-256为
+  `6413fb1b73716420d6605e62562af873a0c06167fac1060d7546b127e264ae1f` /
+  `b60b587999052fa73ee25d1ed6a15f2eae37fecdd628935a870f8f2816061325`。它只接受exact
+  phase + LF，拒绝zero/partial/wrong/CRLF，child-exit后final read且deadline cleanup保留；独立
+  review `GO`。唯一focused run以`18.563s / BUILD SUCCESS / 7 of 7`结束，Synthetic/Offline
+  各`3/3`，XML SHA为`18ebadf5…b76` / `8f1e76f9…395`。但JAR mtime早于test source，
+  只证明unchanged packaged main JAR + fresh test classes，不是final artifact freshness。
+  上轮`179/914/0`只是`ca2e1af…` pre-commit same-tree historical Green，不覆盖随后两个
+  test-only source bytes，也不改变ca2 exact-head CI Red历史。
+- 两文件fix后的clean root只执行一次exact
+  `./mvnw --batch-mode --no-transfer-progress clean verify`：start
+  `2026-08-16T00:05:48Z`、end `2026-08-16T00:15:14Z`、total `09:26`，以
+  `exit 0 / BUILD SUCCESS / 11 of 11`结束。`179`份fresh Surefire/Failsafe XML suites汇总为
+  `916 tests / 0 failures / 0 errors / 0 skipped`；XML manifest SHA-256为
+  `7437e57ee9b60cff2934f7144836740349c2302a37b2ba13495d0df87ac7ba19`。
+- Synthetic Eval/Offline crash-restart各`3/3` Green，XML SHA为`4b15a0cd…5b48` /
+  `5cc39ffd…ec2`，两者均覆盖deterministic ready marker和original crash path。fresh Eval fat JAR
+  为`575f2b83…`，Offline normal/app JAR为`07d02216…` / `9ad318d9…`，API fat JAR为
+  `91556318…`。关键fresh XML Real UI `0476ece6…`、V19 `63b38547…`、Undo Store
+  `36147912…`与Recoverable Local Action `354bd067…`全部Green；6次readiness仍为
+  `schemaVersion=19 / pendingMigrations=0 / schemaValid=true`。
+- clean lifecycle确认post-fix source、compiled test class、report和JAR freshness一致，
+  `maven-jar-plugin 3.5.0`无warning。因此current test + pre-update docs bytes为fresh-root
+  Engineering Green。terminal docs-only claims在root之后，仍需links和独立review；不内嵌自指
+  docs manifest。第二DCO commit/non-force push与新exact-head CI仍PENDING。PR保持Draft，7项
+  product P2不变，不Ready/merge/release/deploy；所以本ADR不证明release完成或Authority / Live Green。
 
 动态工程证据与剩余Gate见
 [2026-08-16 Build Note](../../operations/build-notes/2026-08-16-s1-logical-local-draft-undo.md)。

@@ -22,6 +22,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -79,6 +80,22 @@ class SyntheticEvalCrashRestartProcessIT {
         "EVAL_REJECTED reason=ARGUMENTS_INVALID", result.output());
     assertFalse(Files.exists(home.resolve(".emergeos")));
     assertSafeOutput(result.output());
+  }
+
+  @Test
+  void readyRequiresExactAsciiPhasePayload() throws Exception {
+    String phase = "CREDENTIAL_READ_STARTED";
+    Path ready = tempDir.resolve("ready-exact-payload");
+
+    assertFalse(readyHasExactPhase(ready, phase));
+    Files.createFile(ready);
+    assertFalse(readyHasExactPhase(ready, phase));
+    Files.writeString(ready, "CREDENTIAL_READ", StandardCharsets.US_ASCII);
+    assertFalse(readyHasExactPhase(ready, phase));
+    Files.writeString(ready, phase + "\r\n", StandardCharsets.US_ASCII);
+    assertFalse(readyHasExactPhase(ready, phase));
+    Files.writeString(ready, phase + "\n", StandardCharsets.US_ASCII);
+    assertTrue(readyHasExactPhase(ready, phase));
   }
 
   private void exerciseCrashCase(CrashCase crashCase)
@@ -223,20 +240,85 @@ class SyntheticEvalCrashRestartProcessIT {
       throws Exception {
     long deadline = System.nanoTime() + START_TIMEOUT.toNanos();
     while (System.nanoTime() < deadline
-        && child.isAlive()
-        && !Files.isRegularFile(ready)) {
+        && child.isAlive()) {
+      if (readyHasExactPhase(ready, crashCase.phase())) {
+        return;
+      }
       Thread.sleep(20);
     }
-    if (!Files.isRegularFile(ready)) {
-      if (child.isAlive()) {
-        child.destroyForcibly();
-        child.waitFor();
-      }
-      fail(
-          crashCase.id()
-              + " did not become ready; output="
-              + readOutput(output));
+    byte[] observed = readReadyPayload(ready);
+    if (hasExactPhase(observed, crashCase.phase())) {
+      return;
     }
+    if (child.isAlive()) {
+      child.destroyForcibly();
+      child.waitFor();
+    }
+    fail(
+        crashCase.id()
+            + " did not become ready; expected="
+            + sanitizeReadyPayload(
+                expectedReadyPayload(crashCase.phase()))
+            + "; observed="
+            + sanitizeReadyPayload(observed)
+            + "; output="
+            + readOutput(output));
+  }
+
+  private static boolean readyHasExactPhase(
+      Path ready, String phase) throws IOException {
+    return hasExactPhase(readReadyPayload(ready), phase);
+  }
+
+  private static boolean hasExactPhase(
+      byte[] observed, String phase) {
+    return Arrays.equals(expectedReadyPayload(phase), observed);
+  }
+
+  private static byte[] expectedReadyPayload(String phase) {
+    return (phase + "\n").getBytes(StandardCharsets.US_ASCII);
+  }
+
+  private static byte[] readReadyPayload(Path ready)
+      throws IOException {
+    if (!Files.isRegularFile(ready, LinkOption.NOFOLLOW_LINKS)) {
+      return null;
+    }
+    return Files.readAllBytes(ready);
+  }
+
+  private static String sanitizeReadyPayload(byte[] payload) {
+    if (payload == null) {
+      return "<missing-or-not-regular>";
+    }
+    StringBuilder sanitized = new StringBuilder();
+    int limit = Math.min(payload.length, 128);
+    for (int index = 0; index < limit; index++) {
+      int value = payload[index] & 0xff;
+      if (value >= 0x20 && value <= 0x7e && value != '\\') {
+        sanitized.append((char) value);
+      } else if (value == '\\') {
+        sanitized.append("\\\\");
+      } else if (value == '\n') {
+        sanitized.append("\\n");
+      } else if (value == '\r') {
+        sanitized.append("\\r");
+      } else if (value == '\t') {
+        sanitized.append("\\t");
+      } else {
+        sanitized.append("\\x");
+        if (value < 0x10) {
+          sanitized.append('0');
+        }
+        sanitized.append(Integer.toHexString(value));
+      }
+    }
+    if (payload.length > limit) {
+      sanitized.append("...(+")
+          .append(payload.length - limit)
+          .append(" bytes)");
+    }
+    return sanitized.toString();
   }
 
   private static ProcessResult runToCompletion(
