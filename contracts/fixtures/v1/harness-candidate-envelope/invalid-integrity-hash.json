@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "candidateRef": "harness-candidate://child-run",
+  "attemptId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "executionSlotId": "pack010-r1",
+  "repetition": 1,
+  "childRunId": "child-run",
+  "childTaskId": "child-task",
+  "sourceRequestOrdinal": 2,
+  "sourceResponseHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "traceRootHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+  "content": "参透世界之后，仍然认真生活。🌌",
+  "contentHash": "0480985aa0f9b80f8890274c3f870c1b29760a7a31d5e519af88099a1114a314",
+  "evidenceRefs": [
+    "capture://capture-1"
+  ],
+  "obtainedEvidenceRefs": [
+    "capture://capture-1"
+  ],
+  "requiredEvidenceRef": "capture://capture-1",
+  "requiredEvidenceAvailable": true,
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "integrityHash": "0000000000000000000000000000000000000000000000000000000000000000"
+}

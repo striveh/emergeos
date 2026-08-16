@@ -16,6 +16,7 @@ import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -38,7 +39,7 @@ class GraphAttemptMigrationTest {
   @Test
   void freshInstallReachesV7WithExactAdditiveShape() {
     DataSource dataSource = schemaDataSource("fresh_graph_v7");
-    Flyway flyway = flyway(dataSource);
+    Flyway flyway = flywayAt(dataSource, 7);
     flyway.migrate();
     JdbcClient jdbc = JdbcClient.create(dataSource);
 
@@ -75,6 +76,125 @@ class GraphAttemptMigrationTest {
             .query(Long.class)
             .single());
     assertEquals(0L, graphRowCount(jdbc));
+  }
+
+  @Test
+  void freshInstallReachesV8WithExactTerminalShape() {
+    DataSource dataSource = schemaDataSource("fresh_graph_v8");
+    Flyway flyway = flywayAt(dataSource, 8);
+    flyway.migrate();
+    JdbcClient jdbc = JdbcClient.create(dataSource);
+
+    assertEquals(
+        MigrationVersion.fromVersion("8"),
+        flyway.info().current().getVersion());
+    assertEquals(
+        List.of(
+            "agent_graph_attempt_candidates",
+            "agent_graph_attempt_events",
+            "agent_graph_attempt_heads",
+            "agent_graph_attempt_provider_attributions",
+            "agent_graph_attempt_run_bindings",
+            "agent_graph_attempt_seals",
+            "agent_graph_attempt_terminal_bindings",
+            "agent_graph_attempts"),
+        jdbc.sql(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                  AND table_name LIKE 'agent_graph_%'
+                ORDER BY table_name
+                """)
+            .query(String.class)
+            .list());
+    assertEquals(
+        List.of("evidence_hash"),
+        jdbc.sql(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'agent_graph_attempt_events'
+                  AND column_name = 'evidence_hash'
+                """)
+            .query(String.class)
+            .list());
+    assertEquals(
+        List.of("provider_attribution_count"),
+        jdbc.sql(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'agent_graph_attempt_heads'
+                  AND column_name = 'provider_attribution_count'
+                """)
+            .query(String.class)
+            .list());
+    assertEquals(
+        0L,
+        jdbc.sql(
+                """
+                SELECT count(*)
+                FROM pg_constraint
+                WHERE connamespace = current_schema()::regnamespace
+                  AND conname = 'agent_graph_attempt_seals_disabled_v7'
+                """)
+            .query(Long.class)
+            .single());
+    assertEquals(0L, graphRowCountV8(jdbc));
+  }
+
+  @Test
+  void v8CheckRejectsTerminalProtocolRequestLimitDrift() {
+    DataSource dataSource =
+        schemaDataSource("terminal_request_limit_v8");
+    flywayAt(dataSource, 7).migrate();
+    V7GraphAttemptSqlSeeder.Seed seed =
+        new V7GraphAttemptSqlSeeder(dataSource).seed("limit", 1);
+    flywayAt(dataSource, 8).migrate();
+    JdbcClient jdbc = JdbcClient.create(dataSource);
+
+    jdbc.sql(
+            "ALTER TABLE agent_graph_attempts DISABLE TRIGGER USER")
+        .update();
+    try {
+      for (int invalidLimit : List.of(1, 3)) {
+        assertThrows(
+            DataIntegrityViolationException.class,
+            () ->
+                jdbc.sql(
+                        """
+                        UPDATE agent_graph_attempts
+                        SET graph_protocol_version = :protocol,
+                            maximum_provider_requests = :limit,
+                            manifest_json = jsonb_set(
+                              jsonb_set(
+                                manifest_json,
+                                '{graphProtocolVersion}',
+                                to_jsonb(CAST(:protocol AS text))
+                              ),
+                              '{maximumProviderRequests}',
+                              to_jsonb(CAST(:limit AS integer))
+                            )
+                        WHERE principal_id = :principalId
+                          AND attempt_id = :attemptId
+                        """)
+                    .param(
+                        "protocol",
+                        "postgres-graph-terminal-v1")
+                    .param("limit", invalidLimit)
+                    .param(
+                        "principalId", seed.manifest().principalId())
+                    .param("attemptId", seed.manifest().attemptId())
+                    .update());
+      }
+    } finally {
+      jdbc.sql(
+              "ALTER TABLE agent_graph_attempts ENABLE TRIGGER USER")
+          .update();
+    }
   }
 
   @Test
@@ -118,7 +238,7 @@ class GraphAttemptMigrationTest {
     LegacyRow before = legacyRow(jdbc);
     List<HistoryRow> historyBefore = history(jdbc);
 
-    Flyway current = flyway(dataSource);
+    Flyway current = flywayAt(dataSource, 7);
     current.migrate();
 
     assertEquals(
@@ -155,6 +275,82 @@ class GraphAttemptMigrationTest {
   }
 
   @Test
+  void populatedV7PrefixesUpgradeToV8WithoutTouchingLegacyRows() {
+    DataSource dataSource =
+        schemaDataSource("populated_graph_v8");
+    Flyway v7 = flywayAt(dataSource, 7);
+    v7.migrate();
+    JdbcClient jdbc = JdbcClient.create(dataSource);
+    V7GraphAttemptSqlSeeder seeder =
+        new V7GraphAttemptSqlSeeder(dataSource);
+    seeder.seed("seq-1", 1);
+    seeder.seed("seq-10", 10);
+    seeder.seed("seq-11", 11);
+
+    LegacyGraphImage before = legacyGraphImage(jdbc);
+    List<HistoryRow> historyBefore = history(jdbc);
+
+    Flyway current = flywayAt(dataSource, 8);
+    current.migrate();
+
+    assertEquals(
+        MigrationVersion.fromVersion("8"),
+        current.info().current().getVersion());
+    assertEquals(before, legacyGraphImage(jdbc));
+    assertEquals(
+        historyBefore,
+        history(jdbc).stream()
+            .filter(row -> !"8".equals(row.version()))
+            .toList());
+    assertEquals(
+        List.of(1, 10, 11),
+        jdbc.sql(
+                """
+                SELECT last_sequence
+                FROM agent_graph_attempt_heads
+                ORDER BY last_sequence
+                """)
+            .query(Integer.class)
+            .list());
+    assertEquals(
+        List.of("NOT_INVOKED", "NOT_INVOKED", "UNKNOWN"),
+        jdbc.sql(
+                """
+                SELECT billing_status
+                FROM agent_graph_attempt_heads
+                ORDER BY last_sequence
+                """)
+            .query(String.class)
+            .list());
+    assertEquals(
+        22L,
+        jdbc.sql(
+                """
+                SELECT count(*)
+                FROM agent_graph_attempt_events
+                WHERE evidence_hash IS NULL
+                """)
+            .query(Long.class)
+            .single());
+    assertEquals(
+        0L,
+        jdbc.sql(
+                """
+                SELECT
+                  (SELECT count(*)
+                   FROM agent_graph_attempt_provider_attributions)
+                  + (SELECT count(*)
+                     FROM agent_graph_attempt_candidates)
+                  + (SELECT count(*)
+                     FROM agent_graph_attempt_terminal_bindings)
+                  + (SELECT count(*)
+                     FROM agent_graph_attempt_seals)
+                """)
+            .query(Long.class)
+            .single());
+  }
+
+  @Test
   void incompatiblePartialV7FailsAtomicallyAtV6() {
     DataSource dataSource =
         schemaDataSource("partial_graph_v7");
@@ -173,7 +369,7 @@ class GraphAttemptMigrationTest {
             """)
         .update();
 
-    Flyway current = flyway(dataSource);
+    Flyway current = flywayAt(dataSource, 7);
     assertThrows(FlywayException.class, current::migrate);
     assertEquals(
         MigrationVersion.fromVersion("6"),
@@ -281,6 +477,49 @@ class GraphAttemptMigrationTest {
         .list();
   }
 
+  private static LegacyGraphImage legacyGraphImage(
+      JdbcClient jdbc) {
+    return new LegacyGraphImage(
+        rowImages(
+            jdbc,
+            "agent_graph_attempts",
+            "principal_id, attempt_id"),
+        rowImages(
+            jdbc,
+            "agent_graph_attempt_run_bindings",
+            "principal_id, attempt_id, role"),
+        rowImages(
+            jdbc,
+            "agent_graph_attempt_events",
+            "principal_id, attempt_id, sequence"),
+        rowImages(
+            jdbc,
+            "agent_graph_attempt_heads",
+            "principal_id, attempt_id"),
+        rowImages(
+            jdbc,
+            "agent_runs",
+            "principal_id, run_id"));
+  }
+
+  private static List<RowImage> rowImages(
+      JdbcClient jdbc, String table, String orderBy) {
+    return jdbc.sql(
+            "SELECT (to_jsonb(t)"
+                + " - 'evidence_hash'"
+                + " - 'provider_attribution_count')::text AS row_json,"
+                + " xmin::text AS xmin FROM "
+                + table
+                + " t ORDER BY "
+                + orderBy)
+        .query(
+            (resultSet, rowNumber) ->
+                new RowImage(
+                    resultSet.getString("row_json"),
+                    resultSet.getString("xmin")))
+        .list();
+  }
+
   private static long graphRowCount(JdbcClient jdbc) {
     return jdbc.sql(
             """
@@ -296,8 +535,33 @@ class GraphAttemptMigrationTest {
         .single();
   }
 
-  private static Flyway flyway(DataSource dataSource) {
-    return Flyway.configure().dataSource(dataSource).load();
+  private static long graphRowCountV8(JdbcClient jdbc) {
+    return jdbc.sql(
+            """
+            SELECT
+              (SELECT count(*) FROM agent_graph_attempts)
+              + (SELECT count(*)
+                 FROM agent_graph_attempt_run_bindings)
+              + (SELECT count(*) FROM agent_graph_attempt_events)
+              + (SELECT count(*) FROM agent_graph_attempt_heads)
+              + (SELECT count(*)
+                 FROM agent_graph_attempt_provider_attributions)
+              + (SELECT count(*)
+                 FROM agent_graph_attempt_candidates)
+              + (SELECT count(*)
+                 FROM agent_graph_attempt_terminal_bindings)
+              + (SELECT count(*) FROM agent_graph_attempt_seals)
+            """)
+        .query(Long.class)
+        .single();
+  }
+
+  private static Flyway flywayAt(
+      DataSource dataSource, int version) {
+    return Flyway.configure()
+        .dataSource(dataSource)
+        .target(MigrationVersion.fromVersion(String.valueOf(version)))
+        .load();
   }
 
   private static DataSource schemaDataSource(String schema) {
@@ -329,4 +593,13 @@ class GraphAttemptMigrationTest {
       Integer checksum,
       boolean success,
       String xmin) {}
+
+  private record LegacyGraphImage(
+      List<RowImage> attempts,
+      List<RowImage> bindings,
+      List<RowImage> events,
+      List<RowImage> heads,
+      List<RowImage> runs) {}
+
+  private record RowImage(String json, String xmin) {}
 }

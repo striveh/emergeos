@@ -58,11 +58,25 @@ class Pack009DurableGraphCrashProcessIT {
           "action_attempt_transitions",
           "action_attempts",
           "action_receipts",
+          "agent_graph_attempt_candidates",
           "agent_graph_attempt_events",
           "agent_graph_attempt_heads",
+          "agent_graph_attempt_provider_attributions",
           "agent_graph_attempt_run_bindings",
           "agent_graph_attempt_seals",
+          "agent_graph_attempt_terminal_bindings",
           "agent_graph_attempts",
+          "agent_graph_attributed_failure_outcomes",
+          "agent_graph_attributed_failure_terminal_resumes",
+          "agent_graph_exact_attempt_events_v16",
+          "agent_graph_exact_attempt_heads_v16",
+          "agent_graph_exact_provider_attributions_v16",
+          "agent_graph_exact_provider_validations_v16",
+          "agent_graph_exact_tx_a_requirements_v15",
+          "agent_graph_provider_profiles_v14",
+          "agent_graph_provider_session_intents",
+          "agent_graph_provider_validation_keys",
+          "agent_graph_provider_validations",
           "agent_run_resource_bindings",
           "agent_runs",
           "agent_trace_events",
@@ -70,7 +84,10 @@ class Pack009DurableGraphCrashProcessIT {
           "artifact_versions",
           "artifacts",
           "captures",
-          "flyway_schema_history");
+          "flyway_schema_history",
+          "local_draft_creation_receipts",
+          "local_draft_undo_receipts",
+          "local_drafts");
 
   @Container
   private static final PostgreSQLContainer POSTGRES =
@@ -437,6 +454,13 @@ class Pack009DurableGraphCrashProcessIT {
       assertEquals(
           0, count(connection, "action_attempt_transitions"));
       assertEquals(0, count(connection, "action_receipts"));
+      assertEquals(
+          0,
+          count(
+              connection,
+              "local_draft_creation_receipts"));
+      assertEquals(0, count(connection, "local_draft_undo_receipts"));
+      assertEquals(0, count(connection, "local_drafts"));
       assertEquals(2, count(connection, "agent_runs"));
       assertEquals(0, count(connection, "agent_trace_events"));
       assertEquals(
@@ -457,7 +481,22 @@ class Pack009DurableGraphCrashProcessIT {
           1, count(connection, "agent_graph_attempt_heads"));
       assertEquals(
           0, count(connection, "agent_graph_attempt_seals"));
-      assertEquals(7, count(connection, "flyway_schema_history"));
+      assertEquals(
+          0,
+          count(
+              connection,
+              "agent_graph_attempt_candidates"));
+      assertEquals(
+          0,
+          count(
+              connection,
+              "agent_graph_attempt_provider_attributions"));
+      assertEquals(
+          0,
+          count(
+              connection,
+              "agent_graph_attempt_terminal_bindings"));
+      assertEquals(19, count(connection, "flyway_schema_history"));
 
       try (PreparedStatement statement =
           connection.prepareStatement(

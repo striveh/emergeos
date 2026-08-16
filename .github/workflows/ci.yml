@@ -25,6 +25,12 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - name: Install real TTY test dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends expect
+          test -x /usr/bin/expect
+
       - name: Install contract tooling
         run: npm ci
 

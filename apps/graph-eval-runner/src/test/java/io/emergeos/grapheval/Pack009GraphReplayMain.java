@@ -1,6 +1,6 @@
 package io.emergeos.grapheval;
 
-import io.emergeos.adapters.postgres.PostgresGraphAttemptStore;
+import io.emergeos.adapters.postgres.Pack010GraphTerminalStoreBridge;
 import io.emergeos.core.application.GraphAttemptCoordinator;
 import io.emergeos.core.domain.GraphAttemptConflictException;
 import java.io.DataInputStream;
@@ -76,7 +76,8 @@ public final class Pack009GraphReplayMain {
     AtomicInteger challengeReads = new AtomicInteger();
     GraphAttemptCoordinator coordinator =
         new GraphAttemptCoordinator(
-            new PostgresGraphAttemptStore(dataSource));
+            Pack010GraphTerminalStoreBridge.openWriter(
+                dataSource));
     try {
       coordinator.approve(
           Pack009GraphEvalCatalog.manifest(),

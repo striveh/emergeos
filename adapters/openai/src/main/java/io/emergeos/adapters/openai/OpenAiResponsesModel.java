@@ -36,6 +36,7 @@ import com.openai.models.responses.ToolChoiceFunction;
 import com.openai.models.responses.ToolChoiceOptions;
 import io.emergeos.adapters.agentloop.AgentModel;
 import io.emergeos.adapters.agentloop.AgentModelFailure;
+import io.emergeos.contracts.CanonicalIntegrity;
 import io.emergeos.contracts.ContractValueDomains;
 import io.emergeos.contracts.IntegrityHashes;
 import io.emergeos.contracts.TaskEnvelope;
@@ -44,7 +45,9 @@ import io.emergeos.core.application.ModelExecutionProfile;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -74,6 +77,8 @@ public final class OpenAiResponsesModel implements AgentModel {
           .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
   private static final String USAGE_LIMIT_EXCEEDED =
       "MODEL_USAGE_LIMIT_EXCEEDED";
+  private static final String REVIEWED_DECISION_DOMAIN =
+      "emergeos.openai-reviewed-decision.v1";
   private static final ResponseCreateParams.PromptCacheOptions
       EXPLICIT_CACHE_ONLY =
           ResponseCreateParams.PromptCacheOptions.builder()
@@ -143,6 +148,11 @@ public final class OpenAiResponsesModel implements AgentModel {
   private final ProviderInvocationObserver
       providerInvocationObserver;
   private final ProviderAttributionObserver providerAttributionObserver;
+  private final ReviewedOpenAiClient exactResponseClient;
+  private final String exactExecutionBindingHash;
+  private final ExactProviderAttributionObserver
+      exactProviderAttributionObserver;
+  private final ExactProviderOutcomeObserver exactProviderOutcomeObserver;
 
   public OpenAiResponsesModel(
       AgentExecutionProfile profile, OpenAIClient client) {
@@ -258,12 +268,82 @@ public final class OpenAiResponsesModel implements AgentModel {
         providerAttributionObserver);
   }
 
+  /**
+   * Creates the exact reviewed-client route whose response observer receives
+   * only a raw-body hash and the complete validated attribution split.
+   */
+  public static OpenAiResponsesModel withExactResponseAttribution(
+      ModelExecutionProfile profile,
+      ReviewedOpenAiClient client,
+      ProviderInvocationObserver providerInvocationObserver,
+      ExactProviderAttributionObserver
+          exactProviderAttributionObserver) {
+    Objects.requireNonNull(client, "client");
+    return new OpenAiResponsesModel(
+        profile,
+        client.client(),
+        request -> client.requestBodyHash(request._body()),
+        providerInvocationObserver,
+        (ignoredModel, ignoredUsage) -> {},
+        client,
+        null,
+        exactProviderAttributionObserver,
+        ignoredOutcome -> {});
+  }
+
+  /**
+   * Creates the exact route whose bounded outcome observer runs only after
+   * strict attribution and decision parsing have both completed.
+   */
+  public static OpenAiResponsesModel withExactResponseOutcome(
+      ModelExecutionProfile profile,
+      ReviewedOpenAiClient client,
+      String executionBindingHash,
+      ProviderInvocationObserver providerInvocationObserver,
+      ExactProviderOutcomeObserver exactProviderOutcomeObserver) {
+    Objects.requireNonNull(client, "client");
+    requireExecutionBindingHash(executionBindingHash);
+    return new OpenAiResponsesModel(
+        profile,
+        client.client(),
+        request -> client.requestBodyHash(request._body()),
+        providerInvocationObserver,
+        (ignoredModel, ignoredUsage) -> {},
+        client,
+        executionBindingHash,
+        ignoredAttribution -> {},
+        exactProviderOutcomeObserver);
+  }
+
   private OpenAiResponsesModel(
       ModelExecutionProfile profile,
       OpenAIClient client,
       RequestHasher requestHasher,
       ProviderInvocationObserver providerInvocationObserver,
       ProviderAttributionObserver providerAttributionObserver) {
+    this(
+        profile,
+        client,
+        requestHasher,
+        providerInvocationObserver,
+        providerAttributionObserver,
+        null,
+        null,
+        ignoredAttribution -> {},
+        ignoredOutcome -> {});
+  }
+
+  private OpenAiResponsesModel(
+      ModelExecutionProfile profile,
+      OpenAIClient client,
+      RequestHasher requestHasher,
+      ProviderInvocationObserver providerInvocationObserver,
+      ProviderAttributionObserver providerAttributionObserver,
+      ReviewedOpenAiClient exactResponseClient,
+      String exactExecutionBindingHash,
+      ExactProviderAttributionObserver
+          exactProviderAttributionObserver,
+      ExactProviderOutcomeObserver exactProviderOutcomeObserver) {
     this.profile = Objects.requireNonNull(profile, "profile");
     this.client = Objects.requireNonNull(client, "client");
     this.requestHasher =
@@ -276,11 +356,28 @@ public final class OpenAiResponsesModel implements AgentModel {
         Objects.requireNonNull(
             providerAttributionObserver,
             "providerAttributionObserver");
+    this.exactResponseClient = exactResponseClient;
+    this.exactExecutionBindingHash = exactExecutionBindingHash;
+    this.exactProviderAttributionObserver =
+        Objects.requireNonNull(
+            exactProviderAttributionObserver,
+            "exactProviderAttributionObserver");
+    this.exactProviderOutcomeObserver =
+        Objects.requireNonNull(
+            exactProviderOutcomeObserver,
+            "exactProviderOutcomeObserver");
     if (!profile.modelBound()
         || !PROVIDER.equals(profile.modelProvider())
         || !PROTOCOL_VERSION.equals(profile.modelAdapterVersion())) {
       throw new IllegalArgumentException(
           "OpenAI Responses requires its exact model-bound execution profile");
+    }
+  }
+
+  private static void requireExecutionBindingHash(String value) {
+    if (value == null || !value.matches("[a-f0-9]{64}")) {
+      throw new IllegalArgumentException(
+          "executionBindingHash must be a lowercase SHA-256 digest");
     }
   }
 
@@ -339,29 +436,30 @@ public final class OpenAiResponsesModel implements AgentModel {
         }
         step = 2;
         ResponseCreateParams request = firstRequest();
-        Response response =
+        ProviderInvocation invocation =
+            providerInvocation(1, request);
+        ObservedResponse observed =
             invokeProvider(
-                providerInvocation(1, request),
-                () ->
-                    client
-                        .responses()
-                        .create(request, requestOptions(context)));
-        Attribution attribution = attribution(response);
-        providerAttributionObserver.attributed(
-            attribution.resolvedModel(), attribution.usage());
+                invocation,
+                () -> createResponse(request, requestOptions(context)));
+        Response response = observed.response();
+        Attribution attribution = attribution(invocation, observed);
+        notifyAttribution(attribution);
+        ModelStep outcome;
         if (!acceptAttribution(attribution)) {
-          return failed(
+          outcome = failed(
               attribution,
               AgentModelFailure.Code.ATTRIBUTION_MISMATCH.failureReason());
+        } else if (!attribution.withinReviewedLimits()) {
+          outcome = failed(attribution, USAGE_LIMIT_EXCEEDED);
+        } else {
+          outcome = parseToolCall(response, attribution);
         }
-        if (!attribution.withinReviewedLimits()) {
-          return failed(attribution, USAGE_LIMIT_EXCEEDED);
-        }
-        ModelStep parsed = parseToolCall(response, attribution);
-        if (parsed.decision() instanceof ToolCall) {
+        notifyOutcome(attribution, outcome);
+        if (outcome.decision() instanceof ToolCall) {
           step = 1;
         }
-        return parsed;
+        return outcome;
       }
       if (step == 1) {
         ToolResult result = requireMatchingToolResult(turn.toolResults());
@@ -377,27 +475,27 @@ public final class OpenAiResponsesModel implements AgentModel {
         step = 2;
         ResponseCreateParams request =
             secondRequest().rawParams();
-        Response response =
+        ProviderInvocation invocation =
+            providerInvocation(2, request);
+        ObservedResponse observed =
             invokeProvider(
-                providerInvocation(2, request),
-                () ->
-                    client
-                        .responses()
-                        .create(
-                            request,
-                            requestOptions(context)));
-        Attribution attribution = attribution(response);
-        providerAttributionObserver.attributed(
-            attribution.resolvedModel(), attribution.usage());
+                invocation,
+                () -> createResponse(request, requestOptions(context)));
+        Response response = observed.response();
+        Attribution attribution = attribution(invocation, observed);
+        notifyAttribution(attribution);
+        ModelStep outcome;
         if (!acceptAttribution(attribution)) {
-          return failed(
+          outcome = failed(
               attribution,
               AgentModelFailure.Code.ATTRIBUTION_MISMATCH.failureReason());
+        } else if (!attribution.withinReviewedLimits()) {
+          outcome = failed(attribution, USAGE_LIMIT_EXCEEDED);
+        } else {
+          outcome = parseFinal(response, attribution);
         }
-        if (!attribution.withinReviewedLimits()) {
-          return failed(attribution, USAGE_LIMIT_EXCEEDED);
-        }
-        return parseFinal(response, attribution);
+        notifyOutcome(attribution, outcome);
+        return outcome;
       }
       throw new AssertionError("unreachable model session state");
     }
@@ -415,6 +513,88 @@ public final class OpenAiResponsesModel implements AgentModel {
         throw new AgentModelFailure(
             AgentModelFailure.Code.EGRESS_NOT_ALLOWED);
       }
+    }
+
+    private ObservedResponse createResponse(
+        ResponseCreateParams request, RequestOptions options) {
+      if (exactResponseClient == null) {
+        return new ObservedResponse(
+            client.responses().create(request, options), null);
+      }
+      ReviewedOpenAiClient.ReviewedResponse reviewed =
+          exactResponseClient.createReviewedResponse(request, options);
+      return new ObservedResponse(
+          reviewed.response(), reviewed.responseHash());
+    }
+
+    private void notifyAttribution(Attribution attribution) {
+      providerAttributionObserver.attributed(
+          attribution.resolvedModel(), attribution.usage());
+      if (attribution.exactReceipt() != null) {
+        exactProviderAttributionObserver.attributed(
+            attribution.exactReceipt());
+      }
+    }
+
+    private void notifyOutcome(
+        Attribution attribution, ModelStep outcome) {
+      Objects.requireNonNull(outcome, "outcome");
+      if (attribution.exactReceipt() == null
+          || exactExecutionBindingHash == null) {
+        return;
+      }
+      ProviderOutcomeKind kind;
+      String failureReason = null;
+      if (outcome.decision() instanceof ToolCall) {
+        kind = ProviderOutcomeKind.TOOL_CALL;
+      } else if (outcome.decision() instanceof FinalDraft) {
+        kind = ProviderOutcomeKind.STRUCTURED_FINAL;
+      } else if (outcome.decision() instanceof Failed failed) {
+        kind = ProviderOutcomeKind.FAILED;
+        failureReason = failed.failureReason();
+      } else {
+        throw new IllegalStateException("unreviewed provider outcome kind");
+      }
+      exactProviderOutcomeObserver.observed(
+          new ProviderOutcomeReceipt(
+              attribution.exactReceipt(),
+              exactExecutionBindingHash,
+              kind,
+              profile.pricing().fingerprint(),
+              reviewedDecisionHash(
+                  attribution.exactReceipt(), outcome, kind, failureReason),
+              failureReason));
+    }
+
+    private String reviewedDecisionHash(
+        ProviderAttributionReceipt receipt,
+        ModelStep outcome,
+        ProviderOutcomeKind kind,
+        String failureReason) {
+      Map<String, Object> material = new LinkedHashMap<>();
+      material.put("protocolVersion", PROTOCOL_VERSION);
+      material.put("executionBindingHash", exactExecutionBindingHash);
+      material.put("requestOrdinal", receipt.invocation().requestOrdinal());
+      material.put("requestHash", receipt.invocation().requestHash());
+      material.put("responseHash", receipt.responseHash());
+      material.put("kind", kind.name());
+      if (outcome.decision() instanceof FinalDraft finalDraft) {
+        material.put(
+            "contentHash",
+            IntegrityHashes.utf8ContentHash(finalDraft.content()));
+        material.put(
+            "evidenceRefHashes",
+            finalDraft.evidenceRefs().stream()
+                .map(IntegrityHashes::utf8ContentHash)
+                .toList());
+      } else if (outcome.decision() instanceof Failed) {
+        material.put("failureCode", failureReason);
+      } else if (outcome.decision() instanceof ToolCall) {
+        material.put("eligibleForProviderValidation", false);
+      } else {
+        throw new IllegalStateException("unreviewed provider outcome kind");
+      }
+      return CanonicalIntegrity.hash(REVIEWED_DECISION_DOMAIN, material);
     }
 
     private boolean acceptAttribution(Attribution attribution) {
@@ -674,7 +854,11 @@ public final class OpenAiResponsesModel implements AgentModel {
     }
   }
 
-  private Attribution attribution(Response response) {
+  private Attribution attribution(
+      ProviderInvocation invocation, ObservedResponse observed) {
+    Objects.requireNonNull(invocation, "invocation");
+    Objects.requireNonNull(observed, "observed");
+    Response response = observed.response();
     final String resolvedModel;
     final ResponseUsage rawUsage;
     try {
@@ -728,7 +912,19 @@ public final class OpenAiResponsesModel implements AgentModel {
           withinReviewedLimits,
           resolvedModel.equals(profile.modelRequested())
               || resolvedModel.startsWith(
-                  profile.modelRequested() + "-"));
+                  profile.modelRequested() + "-"),
+          observed.responseHash() == null
+              ? null
+              : new ProviderAttributionReceipt(
+                  invocation,
+                  observed.responseHash(),
+                  resolvedModel,
+                  inputTokens,
+                  cachedInputTokens,
+                  outputTokens,
+                  reasoningTokens,
+                  totalTokens,
+                  cost));
     } catch (RuntimeException invalidUsage) {
       throw new AgentModelFailure(
           AgentModelFailure.Code.RESPONSE_MALFORMED);
@@ -851,7 +1047,21 @@ public final class OpenAiResponsesModel implements AgentModel {
       String resolvedModel,
       ModelUsage usage,
       boolean withinReviewedLimits,
-      boolean matchesRequestedModel) {}
+      boolean matchesRequestedModel,
+      ProviderAttributionReceipt exactReceipt) {}
+
+  private record ObservedResponse(
+      Response response, String responseHash) {
+
+    private ObservedResponse {
+      Objects.requireNonNull(response, "response");
+      if (responseHash != null
+          && !responseHash.matches("[a-f0-9]{64}")) {
+        throw new IllegalArgumentException(
+            "responseHash must be a lowercase SHA-256 digest");
+      }
+    }
+  }
 
   /**
    * Safe pre-call identity of the exact JSON request produced by the
@@ -886,6 +1096,170 @@ public final class OpenAiResponsesModel implements AgentModel {
   }
 
   /**
+   * Bounded exact response receipt for a single reviewed SDK invocation.
+   *
+   * <p>The response hash is SHA-256 over the complete content-decoded HTTP
+   * entity bytes consumed by the strict JSON parser. Status, headers, raw
+   * response bytes, response content, response id and credentials are never
+   * exposed through this record.
+   */
+  public record ProviderAttributionReceipt(
+      ProviderInvocation invocation,
+      String responseHash,
+      String modelResolved,
+      long inputTokens,
+      long cachedInputTokens,
+      long outputTokens,
+      long reasoningOutputTokens,
+      long totalTokens,
+      BigDecimal observedCostUsd) {
+
+    public ProviderAttributionReceipt {
+      Objects.requireNonNull(invocation, "invocation");
+      if (responseHash == null
+          || !responseHash.matches("[a-f0-9]{64}")) {
+        throw new IllegalArgumentException(
+            "responseHash must be a lowercase SHA-256 digest");
+      }
+      if (modelResolved == null
+          || !modelResolved.matches(
+              "[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}")) {
+        throw new IllegalArgumentException(
+            "modelResolved is outside the safe model domain");
+      }
+      ContractValueDomains.requireSafeCount(
+          inputTokens, "inputTokens");
+      ContractValueDomains.requireSafeCount(
+          cachedInputTokens, "cachedInputTokens");
+      ContractValueDomains.requireSafeCount(
+          outputTokens, "outputTokens");
+      ContractValueDomains.requireSafeCount(
+          reasoningOutputTokens, "reasoningOutputTokens");
+      ContractValueDomains.requireSafeCount(
+          totalTokens, "totalTokens");
+      if (cachedInputTokens > inputTokens
+          || reasoningOutputTokens > outputTokens
+          || Math.addExact(inputTokens, outputTokens) != totalTokens) {
+        throw new IllegalArgumentException(
+            "provider attribution token details are inconsistent");
+      }
+      observedCostUsd =
+          ContractValueDomains.requireUsd(
+              observedCostUsd, "observedCostUsd");
+    }
+  }
+
+  public enum ProviderOutcomeKind {
+    TOOL_CALL,
+    STRUCTURED_FINAL,
+    FAILED
+  }
+
+  /** Bounded exact transport receipt paired with its parsed decision kind. */
+  public static final class ProviderOutcomeReceipt {
+
+    private final ProviderAttributionReceipt attribution;
+    private final String executionBindingHash;
+    private final ProviderOutcomeKind kind;
+    private final String pricingProfileFingerprint;
+    private final String decisionHash;
+    private final String failureReason;
+
+    private ProviderOutcomeReceipt(
+        ProviderAttributionReceipt attribution,
+        String executionBindingHash,
+        ProviderOutcomeKind kind,
+        String pricingProfileFingerprint,
+        String decisionHash,
+        String failureReason) {
+      this.attribution =
+          Objects.requireNonNull(attribution, "attribution");
+      requireExecutionBindingHash(executionBindingHash);
+      this.executionBindingHash = executionBindingHash;
+      this.kind = Objects.requireNonNull(kind, "kind");
+      if (pricingProfileFingerprint == null
+          || !pricingProfileFingerprint.matches("[a-f0-9]{64}")) {
+        throw new IllegalArgumentException(
+            "provider outcome pricing fingerprint is invalid");
+      }
+      this.pricingProfileFingerprint = pricingProfileFingerprint;
+      if (decisionHash == null
+          || !decisionHash.matches("[a-f0-9]{64}")) {
+        throw new IllegalArgumentException(
+            "provider outcome decision hash is invalid");
+      }
+      this.decisionHash = decisionHash;
+      if ((kind == ProviderOutcomeKind.FAILED)
+          != (failureReason != null && !failureReason.isBlank())) {
+        throw new IllegalArgumentException(
+            "provider outcome failure reason is inconsistent");
+      }
+      this.failureReason = failureReason;
+    }
+
+    public ProviderAttributionReceipt attribution() {
+      return attribution;
+    }
+
+    String executionBindingHash() {
+      return executionBindingHash;
+    }
+
+    public ProviderOutcomeKind kind() {
+      return kind;
+    }
+
+    public String decisionHash() {
+      return decisionHash;
+    }
+
+    public String pricingProfileFingerprint() {
+      return pricingProfileFingerprint;
+    }
+
+    public String failureReason() {
+      return failureReason;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (this == other) {
+        return true;
+      }
+      if (!(other instanceof ProviderOutcomeReceipt that)) {
+        return false;
+      }
+      return attribution.equals(that.attribution)
+          && executionBindingHash.equals(that.executionBindingHash)
+          && kind == that.kind
+          && pricingProfileFingerprint.equals(
+              that.pricingProfileFingerprint)
+          && decisionHash.equals(that.decisionHash)
+          && Objects.equals(failureReason, that.failureReason);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(
+          attribution,
+          executionBindingHash,
+          kind,
+          pricingProfileFingerprint,
+          decisionHash,
+          failureReason);
+    }
+
+    @Override
+    public String toString() {
+      return "ProviderOutcomeReceipt[kind="
+          + kind
+          + ", decisionHash="
+          + decisionHash
+          + "]";
+    }
+  }
+
+  /**
    * Receives only a bounded request identity immediately before the SDK
    * create call. It does not receive raw JSON, headers or credentials.
    */
@@ -904,5 +1278,19 @@ public final class OpenAiResponsesModel implements AgentModel {
   public interface ProviderAttributionObserver {
 
     void attributed(String resolvedModel, ModelUsage usage);
+  }
+
+  /** Receives one safe exact receipt after strict response attribution. */
+  @FunctionalInterface
+  public interface ExactProviderAttributionObserver {
+
+    void attributed(ProviderAttributionReceipt attribution);
+  }
+
+  /** Receives one exact receipt only after its decision has been parsed. */
+  @FunctionalInterface
+  public interface ExactProviderOutcomeObserver {
+
+    void observed(ProviderOutcomeReceipt outcome);
   }
 }

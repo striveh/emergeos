@@ -176,14 +176,37 @@ class ActionAttemptInvariantTest {
 
     assertEquals(ActionAttemptStatus.PLANNED, planned.status());
     assertEquals(0, planned.capabilityUsedCalls());
-    assertThrows(
-        IllegalArgumentException.class,
-        () ->
-            new ActionTransition(
-                2,
-                ActionAttemptStatus.PLANNED,
-                ActionAttemptStatus.SUCCEEDED,
-                NOW.plusSeconds(1)));
+    ActionTransition directSuccess =
+        assertDoesNotThrow(
+            () ->
+                new ActionTransition(
+                    2,
+                    ActionAttemptStatus.PLANNED,
+                    ActionAttemptStatus.SUCCEEDED,
+                    NOW.plusSeconds(1)));
+    IllegalArgumentException directLegacyRejection =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                new ActionAttempt(
+                    "attempt-1",
+                    plan,
+                    approval,
+                    capability,
+                    ActionAttemptStatus.SUCCEEDED,
+                    1,
+                    List.of(planned.transitions().getFirst(), directSuccess),
+                    ActionReceipt.succeeded(
+                        "receipt-direct-success",
+                        "attempt-1",
+                        "local-draft-1",
+                        "provider-request-direct-success",
+                        "simulated://provider/requests/direct-success",
+                        NOW.plusSeconds(1),
+                        true)));
+    assertEquals(
+        "direct local success requires the local Draftbox V2 route",
+        directLegacyRejection.getMessage());
     assertThrows(
         IllegalArgumentException.class,
         () ->

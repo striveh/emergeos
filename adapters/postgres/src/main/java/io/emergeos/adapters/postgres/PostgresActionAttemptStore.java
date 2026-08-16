@@ -2,12 +2,14 @@ package io.emergeos.adapters.postgres;
 
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.domain.ActionAttempt;
+import io.emergeos.core.domain.ActionApprovalScope;
 import io.emergeos.core.domain.ActionAttemptStatus;
 import io.emergeos.core.domain.ActionCapability;
 import io.emergeos.core.domain.ActionPlan;
 import io.emergeos.core.domain.ActionReceipt;
 import io.emergeos.core.domain.ActionTransition;
 import io.emergeos.core.domain.ApprovalDecision;
+import io.emergeos.core.domain.LocalDraftCreationReceipt;
 import io.emergeos.core.port.ActionAttemptStore;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -66,14 +68,26 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
 
   @Override
   public PlanResult planOrFind(ActionAttempt proposed) {
+    requireNewPlan(proposed);
+    return Objects.requireNonNull(
+        transactions.execute(status -> planOrFindInTransaction(proposed)),
+        "ActionAttempt plan transaction result");
+  }
+
+  @Override
+  public PlanResult planApprovalOrFind(ActionAttempt proposed) {
+    requireNewPlan(proposed);
+    return Objects.requireNonNull(
+        transactions.execute(status -> planApprovalOrFindInTransaction(proposed)),
+        "Action approval plan transaction result");
+  }
+
+  private static void requireNewPlan(ActionAttempt proposed) {
     Objects.requireNonNull(proposed, "proposed");
     if (proposed.status() != ActionAttemptStatus.PLANNED
         || proposed.transitions().size() != 1) {
       throw new IllegalArgumentException("a proposed ActionAttempt must be newly PLANNED");
     }
-    return Objects.requireNonNull(
-        transactions.execute(status -> planOrFindInTransaction(proposed)),
-        "ActionAttempt plan transaction result");
   }
 
   private PlanResult planOrFindInTransaction(ActionAttempt proposed) {
@@ -85,33 +99,91 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
           proposed.transitions().getFirst(),
           0);
     }
-    Optional<AttemptIdentity> winner =
-        jdbc.sql(
-                """
-                SELECT
-                    principal_id, attempt_id, connector, account_ref, idempotency_key,
-                    action_type, target_ref, artifact_id, artifact_version, artifact_hash,
-                    risk, policy_version, capability_audience, capability_max_calls
-                FROM action_attempts
-                WHERE connector = :connector
-                  AND account_ref = :accountRef
-                  AND idempotency_key = :idempotencyKey
-                """)
-            .param("connector", proposed.connector())
-            .param("accountRef", proposed.accountRef())
-            .param("idempotencyKey", proposed.plan().idempotencyKey())
-            .query(PostgresActionAttemptStore::mapIdentity)
-            .optional();
+    Optional<AttemptIdentity> winner = findWinner(proposed);
     if (winner.isEmpty()) {
-      throw new ActionAttemptIntegrityException(
-          "ActionAttempt insert did not yield a unique-key winner");
+      throw new ActionApprovalIntegrityException();
     }
     AttemptIdentity identity = winner.orElseThrow();
     if (!identity.sameSemanticRequest(proposed)) {
       return new PlanResult.Conflict();
     }
     return new PlanResult.Accepted(
-        requireOwned(identity.principalId(), identity.attemptId()));
+        requireOwned(identity.principalId(), identity.attemptId()), inserted == 1);
+  }
+
+  private PlanResult planApprovalOrFindInTransaction(ActionAttempt proposed) {
+    Optional<AttemptIdentity> existing = findWinner(proposed);
+    if (existing.isPresent()) {
+      return canonicalWinner(proposed, existing.orElseThrow(), false);
+    }
+
+    Optional<ArtifactHead> lockedHead =
+        jdbc.sql(
+                """
+                SELECT current_version, current_hash
+                FROM artifacts
+                WHERE principal_id = :principalId
+                  AND artifact_id = :artifactId
+                FOR UPDATE
+                """)
+            .param("principalId", proposed.plan().principalId())
+            .param("artifactId", proposed.plan().artifactId())
+            .query(PostgresActionAttemptStore::mapArtifactHead)
+            .optional();
+
+    existing = findWinner(proposed);
+    if (existing.isPresent()) {
+      return canonicalWinner(proposed, existing.orElseThrow(), false);
+    }
+    if (lockedHead.isEmpty()
+        || lockedHead.orElseThrow().version() != proposed.plan().artifactVersion()
+        || !lockedHead.orElseThrow().hash().equals(proposed.plan().artifactHash())) {
+      return new PlanResult.Stale();
+    }
+
+    int inserted = insertAttempt(proposed);
+    if (inserted == 1) {
+      insertTransition(
+          proposed.plan().principalId(),
+          proposed.attemptId(),
+          proposed.transitions().getFirst(),
+          0);
+    }
+    AttemptIdentity winner =
+        findWinner(proposed)
+            .orElseThrow(
+                () ->
+                    new ActionApprovalIntegrityException());
+    return canonicalWinner(proposed, winner, inserted == 1);
+  }
+
+  private Optional<AttemptIdentity> findWinner(ActionAttempt proposed) {
+    return jdbc.sql(
+            """
+            SELECT
+                principal_id, attempt_id, connector, account_ref, idempotency_key,
+                action_type, target_ref, artifact_id, artifact_version, artifact_hash,
+                risk, policy_version, capability_audience, capability_max_calls,
+                scope_schema, scope_hash
+            FROM action_attempts
+            WHERE connector = :connector
+              AND account_ref = :accountRef
+              AND idempotency_key = :idempotencyKey
+            """)
+        .param("connector", proposed.connector())
+        .param("accountRef", proposed.accountRef())
+        .param("idempotencyKey", proposed.plan().idempotencyKey())
+        .query(PostgresActionAttemptStore::mapIdentity)
+        .optional();
+  }
+
+  private PlanResult canonicalWinner(
+      ActionAttempt proposed, AttemptIdentity winner, boolean created) {
+    if (!winner.sameSemanticRequest(proposed)) {
+      return new PlanResult.Conflict();
+    }
+    return new PlanResult.Accepted(
+        requireOwned(winner.principalId(), winner.attemptId()), created);
   }
 
   @Override
@@ -193,6 +265,8 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
                   AND a.artifact_hash = :artifactHash
                   AND a.risk = :risk
                   AND a.policy_version = :policyVersion
+                  AND a.approval_origin = :eligibleApprovalOrigin
+                  AND a.execution_route = :eligibleExecutionRoute
                   AND a.plan_expires_at = :expiresAt
                   AND a.capability_id = :capabilityId
                   AND a.capability_subject = :subject
@@ -240,6 +314,8 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
             .param("artifactHash", expected.plan().artifactHash())
             .param("risk", expected.plan().risk().name())
             .param("policyVersion", expected.plan().policyVersion())
+            .param("eligibleApprovalOrigin", ActionApprovalScope.LEGACY_SERVER_IMPLICIT)
+            .param("eligibleExecutionRoute", ActionApprovalScope.SIMULATED_PROVIDER_V1)
             .param("expiresAt", Timestamp.from(expected.plan().expiresAt()))
             .param("capabilityId", expected.capability().capabilityId())
             .param("subject", expected.capability().subject())
@@ -338,8 +414,7 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
             .param("usedCalls", claimed.capabilityUsedCalls())
             .update();
     if (updated != 1) {
-      throw new ActionAttemptIntegrityException(
-          "ActionAttempt changed while completing a claimed provider call");
+      throw new ActionApprovalIntegrityException();
     }
     insertTransition(
         claimed.plan().principalId(),
@@ -366,19 +441,86 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
     AttemptRow attempt = rows.getFirst().attempt();
     List<ActionTransition> transitions =
         rows.stream().map(AttemptReadRow::transition).toList();
-    return Optional.of(assemble(attempt, transitions));
+    LocalDraftCreationReceipt localDraftReceipt =
+        findLocalDraftCreationReceipt(attempt).orElse(null);
+    try {
+      return Optional.of(assemble(attempt, transitions, localDraftReceipt));
+    } catch (ActionApprovalIntegrityException exception) {
+      throw exception;
+    } catch (IllegalArgumentException | NullPointerException exception) {
+      throw new ActionApprovalIntegrityException(exception);
+    }
+  }
+
+  private Optional<LocalDraftCreationReceipt> findLocalDraftCreationReceipt(
+      AttemptRow attempt) {
+    if (!ActionApprovalScope.LOCAL_DRAFTBOX_V2.equals(attempt.executionRoute())
+        || !hydrateAttemptStatus(attempt.status()).isTerminal()) {
+      return Optional.empty();
+    }
+    boolean tablePresent =
+        jdbc.sql(
+                "SELECT to_regclass(current_schema() || "
+                    + "'.local_draft_creation_receipts') IS NOT NULL")
+            .query(Boolean.class)
+            .single();
+    if (!tablePresent) {
+      throw new ActionApprovalIntegrityException();
+    }
+    Optional<LocalReceiptRow> stored =
+        jdbc.sql(
+                """
+                SELECT receipt_id, attempt_id, draft_id, receipt_type,
+                       outcome, occurred_at, simulated
+                FROM local_draft_creation_receipts
+                WHERE principal_id = :principalId
+                  AND attempt_id = :attemptId
+                """)
+            .param("principalId", attempt.principalId())
+            .param("attemptId", attempt.attemptId())
+            .query(PostgresActionAttemptStore::mapLocalReceiptReadRow)
+            .optional();
+    if (stored.isEmpty()) {
+      return Optional.empty();
+    }
+    LocalReceiptRow row = stored.orElseThrow();
+    if (!LocalDraftCreationReceipt.RECEIPT_TYPE.equals(row.receiptType())
+        || !ActionAttemptStatus.SUCCEEDED.name().equals(row.outcome())
+        || row.simulated()) {
+      throw new ActionApprovalIntegrityException();
+    }
+    try {
+      return Optional.of(
+          new LocalDraftCreationReceipt(
+              row.receiptId(), row.attemptId(), row.draftId(), row.occurredAt()));
+    } catch (ActionApprovalIntegrityException exception) {
+      throw exception;
+    } catch (IllegalArgumentException | NullPointerException exception) {
+      throw new ActionApprovalIntegrityException(exception);
+    }
+  }
+
+  private static ActionAttemptStatus hydrateAttemptStatus(String storedStatus) {
+    try {
+      return ActionAttemptStatus.valueOf(storedStatus);
+    } catch (ActionApprovalIntegrityException exception) {
+      throw exception;
+    } catch (IllegalArgumentException | NullPointerException exception) {
+      throw new ActionApprovalIntegrityException(exception);
+    }
   }
 
   private ActionAttempt requireOwned(String principalId, String attemptId) {
     return findOwned(principalId, attemptId)
         .orElseThrow(
             () ->
-                new ActionAttemptIntegrityException(
-                    "ActionAttempt write completed without a committed row"));
+                new ActionApprovalIntegrityException());
   }
 
   private ActionAttempt assemble(
-      AttemptRow row, List<ActionTransition> transitions) {
+      AttemptRow row,
+      List<ActionTransition> transitions,
+      LocalDraftCreationReceipt localDraftReceipt) {
     ActionPlan plan =
         new ActionPlan(
             row.planId(),
@@ -414,6 +556,28 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
             row.capabilityIdempotencyKey(),
             row.capabilityExpiresAt(),
             row.capabilityMaxCalls());
+    ActionApprovalScope scope =
+        new ActionApprovalScope(
+            row.approvalPrincipalBasis(),
+            row.configuredPrincipalId(),
+            row.approvalOrigin(),
+            row.executionRoute(),
+            row.actionType(),
+            row.targetRef(),
+            row.artifactId(),
+            row.artifactVersion(),
+            row.artifactHash(),
+            RiskLevel.valueOf(row.risk()),
+            row.policyVersion(),
+            row.capabilityConnector(),
+            row.capabilityAudience(),
+            row.capabilityAccountRef(),
+            row.scopeCapabilityTtlMicros(),
+            row.capabilityMaxCalls());
+    if (!ActionApprovalScope.SCHEMA.equals(row.scopeSchema())
+        || !scope.scopeHash().equals(row.scopeHash())) {
+      throw new ActionApprovalIntegrityException();
+    }
     return new ActionAttempt(
         row.attemptId(),
         plan,
@@ -422,7 +586,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
         ActionAttemptStatus.valueOf(row.status()),
         row.capabilityUsedCalls(),
         transitions,
-        row.receipt());
+        row.receipt(),
+        scope,
+        localDraftReceipt);
   }
 
   private int insertAttempt(ActionAttempt attempt) {
@@ -442,6 +608,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
                 capability_audience, capability_account_ref,
                 capability_plan_id, capability_plan_hash, capability_artifact_hash,
                 capability_idempotency_key, capability_expires_at,
+                approval_principal_basis, configured_principal_id,
+                approval_origin, execution_route, scope_schema, scope_hash,
+                scope_capability_ttl_micros,
                 created_at, updated_at
             ) VALUES (
                 :principalId, :attemptId, :connector, :accountRef, :idempotencyKey,
@@ -454,6 +623,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
                 :audience, :capabilityAccountRef,
                 :capabilityPlanId, :capabilityPlanHash, :capabilityArtifactHash,
                 :capabilityIdempotencyKey, :capabilityExpiresAt,
+                :approvalPrincipalBasis, :configuredPrincipalId,
+                :approvalOrigin, :executionRoute, :scopeSchema, :scopeHash,
+                :scopeCapabilityTtlMicros,
                 :plannedAt, :plannedAt
             )
             ON CONFLICT DO NOTHING
@@ -486,6 +658,13 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
         .param("capabilityArtifactHash", capability.artifactHash())
         .param("capabilityIdempotencyKey", capability.idempotencyKey())
         .param("capabilityExpiresAt", Timestamp.from(capability.expiresAt()))
+        .param("approvalPrincipalBasis", attempt.approvalScope().principalBasis())
+        .param("configuredPrincipalId", attempt.approvalScope().configuredPrincipalId())
+        .param("approvalOrigin", attempt.approvalScope().approvalOrigin())
+        .param("executionRoute", attempt.approvalScope().executionRoute())
+        .param("scopeSchema", attempt.approvalScope().scopeSchema())
+        .param("scopeHash", attempt.approvalScope().scopeHash())
+        .param("scopeCapabilityTtlMicros", attempt.approvalScope().capabilityTtlMicros())
         .param("plannedAt", Timestamp.from(plannedAt))
         .update();
   }
@@ -558,64 +737,103 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
         resultSet.getString("risk"),
         resultSet.getString("policy_version"),
         resultSet.getString("capability_audience"),
-        resultSet.getInt("capability_max_calls"));
+        resultSet.getInt("capability_max_calls"),
+        resultSet.getString("scope_schema"),
+        resultSet.getString("scope_hash"));
+  }
+
+  private static ArtifactHead mapArtifactHead(ResultSet resultSet, int rowNumber)
+      throws SQLException {
+    return new ArtifactHead(
+        resultSet.getInt("current_version"), resultSet.getString("current_hash"));
   }
 
   private static AttemptReadRow mapAttemptReadRow(ResultSet resultSet, int rowNumber)
       throws SQLException {
-    String receiptOutcome = resultSet.getString("receipt_outcome");
-    ActionReceipt receipt =
-        receiptOutcome == null
-            ? null
-            : new ActionReceipt(
-                resultSet.getString("receipt_id"),
-                resultSet.getString("attempt_id"),
-                ActionAttemptStatus.valueOf(receiptOutcome),
-                resultSet.getString("external_id"),
-                resultSet.getString("reason_code"),
-                resultSet.getString("provider_request_id"),
-                resultSet.getString("raw_response_ref"),
-                resultSet.getTimestamp("receipt_occurred_at").toInstant(),
-                resultSet.getBoolean("simulated"));
-    AttemptRow attempt =
-        new AttemptRow(
-            resultSet.getString("principal_id"),
-            resultSet.getString("attempt_id"),
-            resultSet.getString("status"),
-            resultSet.getInt("capability_used_calls"),
-            resultSet.getInt("capability_max_calls"),
-            resultSet.getString("idempotency_key"),
-            resultSet.getString("plan_id"),
-            resultSet.getString("plan_hash"),
-            resultSet.getString("action_type"),
-            resultSet.getString("target_ref"),
-            resultSet.getString("artifact_id"),
-            resultSet.getInt("artifact_version"),
-            resultSet.getString("artifact_hash"),
-            resultSet.getString("risk"),
-            resultSet.getString("policy_version"),
-            resultSet.getTimestamp("plan_expires_at").toInstant(),
-            resultSet.getString("approval_id"),
-            resultSet.getTimestamp("approved_at").toInstant(),
-            resultSet.getString("capability_id"),
-            resultSet.getString("capability_subject"),
-            resultSet.getString("capability_connector"),
-            resultSet.getString("capability_audience"),
-            resultSet.getString("capability_account_ref"),
-            resultSet.getString("capability_plan_id"),
-            resultSet.getString("capability_plan_hash"),
-            resultSet.getString("capability_artifact_hash"),
-            resultSet.getString("capability_idempotency_key"),
-            resultSet.getTimestamp("capability_expires_at").toInstant(),
-            receipt);
-    String from = resultSet.getString("transition_from_status");
-    ActionTransition transition =
-        new ActionTransition(
-            resultSet.getInt("transition_sequence"),
-            from == null ? null : ActionAttemptStatus.valueOf(from),
-            ActionAttemptStatus.valueOf(resultSet.getString("transition_to_status")),
-            resultSet.getTimestamp("transition_occurred_at").toInstant());
-    return new AttemptReadRow(attempt, transition);
+    try {
+      String receiptOutcome = resultSet.getString("receipt_outcome");
+      ActionReceipt receipt =
+          receiptOutcome == null
+              ? null
+              : new ActionReceipt(
+                  resultSet.getString("receipt_id"),
+                  resultSet.getString("attempt_id"),
+                  ActionAttemptStatus.valueOf(receiptOutcome),
+                  resultSet.getString("external_id"),
+                  resultSet.getString("reason_code"),
+                  resultSet.getString("provider_request_id"),
+                  resultSet.getString("raw_response_ref"),
+                  resultSet.getTimestamp("receipt_occurred_at").toInstant(),
+                  resultSet.getBoolean("simulated"));
+      AttemptRow attempt =
+          new AttemptRow(
+              resultSet.getString("principal_id"),
+              resultSet.getString("attempt_id"),
+              resultSet.getString("status"),
+              resultSet.getInt("capability_used_calls"),
+              resultSet.getInt("capability_max_calls"),
+              resultSet.getString("idempotency_key"),
+              resultSet.getString("plan_id"),
+              resultSet.getString("plan_hash"),
+              resultSet.getString("action_type"),
+              resultSet.getString("target_ref"),
+              resultSet.getString("artifact_id"),
+              resultSet.getInt("artifact_version"),
+              resultSet.getString("artifact_hash"),
+              resultSet.getString("risk"),
+              resultSet.getString("policy_version"),
+              resultSet.getTimestamp("plan_expires_at").toInstant(),
+              resultSet.getString("approval_id"),
+              resultSet.getTimestamp("approved_at").toInstant(),
+              resultSet.getString("capability_id"),
+              resultSet.getString("capability_subject"),
+              resultSet.getString("capability_connector"),
+              resultSet.getString("capability_audience"),
+              resultSet.getString("capability_account_ref"),
+              resultSet.getString("capability_plan_id"),
+              resultSet.getString("capability_plan_hash"),
+              resultSet.getString("capability_artifact_hash"),
+              resultSet.getString("capability_idempotency_key"),
+              resultSet.getTimestamp("capability_expires_at").toInstant(),
+              resultSet.getString("approval_principal_basis"),
+              resultSet.getString("configured_principal_id"),
+              resultSet.getString("approval_origin"),
+              resultSet.getString("execution_route"),
+              resultSet.getString("scope_schema"),
+              resultSet.getString("scope_hash"),
+              resultSet.getLong("scope_capability_ttl_micros"),
+              receipt);
+      String from = resultSet.getString("transition_from_status");
+      ActionTransition transition =
+          new ActionTransition(
+              resultSet.getInt("transition_sequence"),
+              from == null ? null : ActionAttemptStatus.valueOf(from),
+              ActionAttemptStatus.valueOf(resultSet.getString("transition_to_status")),
+              resultSet.getTimestamp("transition_occurred_at").toInstant());
+      return new AttemptReadRow(attempt, transition);
+    } catch (ActionApprovalIntegrityException exception) {
+      throw exception;
+    } catch (IllegalArgumentException | NullPointerException exception) {
+      throw new ActionApprovalIntegrityException(exception);
+    }
+  }
+
+  private static LocalReceiptRow mapLocalReceiptReadRow(ResultSet resultSet, int rowNumber)
+      throws SQLException {
+    try {
+      return new LocalReceiptRow(
+          resultSet.getString("receipt_id"),
+          resultSet.getString("attempt_id"),
+          resultSet.getString("draft_id"),
+          resultSet.getString("receipt_type"),
+          resultSet.getString("outcome"),
+          resultSet.getTimestamp("occurred_at").toInstant(),
+          resultSet.getBoolean("simulated"));
+    } catch (ActionApprovalIntegrityException exception) {
+      throw exception;
+    } catch (IllegalArgumentException | NullPointerException exception) {
+      throw new ActionApprovalIntegrityException(exception);
+    }
   }
 
   private record AttemptIdentity(
@@ -632,7 +850,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
       String risk,
       String policyVersion,
       String audience,
-      int maxCalls) {
+      int maxCalls,
+      String scopeSchema,
+      String scopeHash) {
 
     private boolean sameSemanticRequest(ActionAttempt proposed) {
       return principalId.equals(proposed.plan().principalId())
@@ -647,7 +867,9 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
           && risk.equals(proposed.plan().risk().name())
           && policyVersion.equals(proposed.plan().policyVersion())
           && audience.equals(proposed.audience())
-          && maxCalls == proposed.capability().maxCalls();
+          && maxCalls == proposed.capability().maxCalls()
+          && scopeSchema.equals(proposed.approvalScope().scopeSchema())
+          && scopeHash.equals(proposed.approvalScope().scopeHash());
     }
   }
 
@@ -680,15 +902,27 @@ public final class PostgresActionAttemptStore implements ActionAttemptStore {
       String capabilityArtifactHash,
       String capabilityIdempotencyKey,
       Instant capabilityExpiresAt,
+      String approvalPrincipalBasis,
+      String configuredPrincipalId,
+      String approvalOrigin,
+      String executionRoute,
+      String scopeSchema,
+      String scopeHash,
+      long scopeCapabilityTtlMicros,
       ActionReceipt receipt) {}
 
   private record AttemptReadRow(
       AttemptRow attempt, ActionTransition transition) {}
 
-  private static final class ActionAttemptIntegrityException extends RuntimeException {
+  private record ArtifactHead(int version, String hash) {}
 
-    private ActionAttemptIntegrityException(String message) {
-      super(message);
-    }
-  }
+  private record LocalReceiptRow(
+      String receiptId,
+      String attemptId,
+      String draftId,
+      String receiptType,
+      String outcome,
+      Instant occurredAt,
+      boolean simulated) {}
+
 }

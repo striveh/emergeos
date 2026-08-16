@@ -1,16 +1,19 @@
 package io.emergeos.api;
 
-import io.emergeos.core.application.ActionIdempotencyConflictException;
-import io.emergeos.core.application.CaptureNonceConflictException;
-import io.emergeos.core.application.ArtifactRevisionConflictException;
+import io.emergeos.adapters.postgres.ActionApprovalIntegrityException;
 import io.emergeos.adapters.postgres.AgentRunConflictException;
 import io.emergeos.adapters.postgres.AgentRunIntegrityException;
+import io.emergeos.core.application.ActionIdempotencyConflictException;
+import io.emergeos.core.application.ApprovalStaleException;
+import io.emergeos.core.application.ArtifactRevisionConflictException;
+import io.emergeos.core.application.CaptureNonceConflictException;
+import io.emergeos.core.application.LocalDraftUndoConflictException;
 import java.net.URI;
 import java.util.NoSuchElementException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -53,6 +56,33 @@ class ApiExceptionHandler {
     problem.setTitle("Action idempotency conflict");
     problem.setType(URI.create("urn:emergeos:problem:action-idempotency-conflict"));
     return problem;
+  }
+
+  @ExceptionHandler(ApprovalStaleException.class)
+  ResponseEntity<ProblemDetail> approvalStale() {
+    return privateProblem(
+        HttpStatus.PRECONDITION_FAILED,
+        "urn:emergeos:problem:approval-stale",
+        "Action approval stale",
+        "The approved action scope is not the current local scope.");
+  }
+
+  @ExceptionHandler(ActionApprovalIntegrityException.class)
+  ResponseEntity<ProblemDetail> actionApprovalIntegrity() {
+    return privateProblem(
+        HttpStatus.CONFLICT,
+        "urn:emergeos:problem:action-approval-integrity",
+        "Action approval integrity conflict",
+        "Stored action approval cannot be verified.");
+  }
+
+  @ExceptionHandler(LocalDraftUndoConflictException.class)
+  ResponseEntity<ProblemDetail> localDraftUndoConflict() {
+    return privateProblem(
+        HttpStatus.CONFLICT,
+        "urn:emergeos:problem:local-draft-undo-conflict",
+        "Local draft Undo conflict",
+        "The requested local Undo conflicts with an existing Receipt.");
   }
 
   @ExceptionHandler(ArtifactRevisionConflictException.class)

@@ -21,6 +21,7 @@ public record GraphAttemptEvent(
     Integer requestOrdinal,
     String requestHash,
     String modelRequested,
+    String evidenceHash,
     String previousHeadHash,
     String eventHash,
     String currentHeadHash) {
@@ -29,6 +30,8 @@ public record GraphAttemptEvent(
       "emergeos.graph-attempt-journal-empty.v1";
   private static final String EVENT_DOMAIN =
       "emergeos.graph-attempt-event.v1";
+  private static final String TERMINAL_EVENT_DOMAIN =
+      "emergeos.graph-attempt-event.v2";
   private static final String CHAIN_DOMAIN =
       "emergeos.graph-attempt-journal.v1";
 
@@ -67,6 +70,11 @@ public record GraphAttemptEvent(
             ? null
             : GraphAttemptDomains.modelIdentifier(
                 modelRequested, "modelRequested");
+    evidenceHash =
+        evidenceHash == null
+            ? null
+            : GraphAttemptDomains.hash(
+                evidenceHash, "evidenceHash");
     previousHeadHash =
         GraphAttemptDomains.hash(
             previousHeadHash, "previousHeadHash");
@@ -86,7 +94,8 @@ public record GraphAttemptEvent(
         challengeHash,
         requestOrdinal,
         requestHash,
-        modelRequested);
+        modelRequested,
+        evidenceHash);
     String computedEvent =
         computeEventHash(
             sequence,
@@ -102,6 +111,7 @@ public record GraphAttemptEvent(
             requestOrdinal,
             requestHash,
             modelRequested,
+            evidenceHash,
             previousHeadHash);
     if (!computedEvent.equals(eventHash)
         || !CanonicalIntegrity.chain(
@@ -123,6 +133,7 @@ public record GraphAttemptEvent(
         occurredAt,
         null,
         GraphAttemptPhase.MARKED,
+        null,
         null,
         null,
         null,
@@ -165,6 +176,93 @@ public record GraphAttemptEvent(
         providerIntent == null
             ? null
             : providerIntent.modelRequested(),
+        null,
+        cursor.headHash());
+  }
+
+  public static GraphAttemptEvent providerAttributed(
+      GraphAttemptCursor cursor,
+      GraphRunSelection child,
+      GraphProviderAttribution attribution,
+      Instant occurredAt) {
+    Objects.requireNonNull(child, "child");
+    Objects.requireNonNull(attribution, "attribution");
+    if (child.role() != GraphRunRole.CHILD) {
+      throw new IllegalArgumentException(
+          "provider attribution belongs to the child Run");
+    }
+    return create(
+        cursor.lastSequence() + 1,
+        GraphAttemptEventType.PROVIDER_ATTRIBUTED,
+        occurredAt,
+        cursor.phase(),
+        GraphAttemptPhase.PROVIDER_ATTRIBUTED,
+        child.role(),
+        child.runId(),
+        child.taskId(),
+        null,
+        null,
+        attribution.requestOrdinal(),
+        null,
+        null,
+        attribution.attributionHash(),
+        cursor.headHash());
+  }
+
+  public static GraphAttemptEvent terminal(
+      GraphAttemptCursor cursor,
+      GraphAttemptEventType type,
+      GraphAttemptPhase phaseTo,
+      GraphRunSelection selection,
+      GraphTerminalBinding binding,
+      Instant occurredAt) {
+    Objects.requireNonNull(selection, "selection");
+    Objects.requireNonNull(binding, "binding");
+    if ((type != GraphAttemptEventType.CHILD_TERMINAL
+            && type != GraphAttemptEventType.PARENT_TERMINAL)
+        || selection.role() != binding.role()
+        || !selection.runId().equals(binding.runId())
+        || !selection.taskId().equals(binding.taskId())) {
+      throw new IllegalArgumentException(
+          "terminal event does not match its exact graph binding");
+    }
+    return create(
+        cursor.lastSequence() + 1,
+        type,
+        occurredAt,
+        cursor.phase(),
+        phaseTo,
+        selection.role(),
+        selection.runId(),
+        selection.taskId(),
+        null,
+        null,
+        null,
+        null,
+        null,
+        binding.terminalHash(),
+        cursor.headHash());
+  }
+
+  public static GraphAttemptEvent sealed(
+      GraphAttemptCursor cursor,
+      String sealHash,
+      Instant occurredAt) {
+    return create(
+        cursor.lastSequence() + 1,
+        GraphAttemptEventType.TERMINAL_SEALED,
+        occurredAt,
+        cursor.phase(),
+        GraphAttemptPhase.TERMINAL,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        sealHash,
         cursor.headHash());
   }
 
@@ -226,6 +324,7 @@ public record GraphAttemptEvent(
       Integer requestOrdinal,
       String requestHash,
       String modelRequested,
+      String evidenceHash,
       String previousHeadHash) {
     String eventHash =
         computeEventHash(
@@ -242,6 +341,7 @@ public record GraphAttemptEvent(
             requestOrdinal,
             requestHash,
             modelRequested,
+            evidenceHash,
             previousHeadHash);
     String currentHeadHash =
         CanonicalIntegrity.chain(
@@ -260,6 +360,7 @@ public record GraphAttemptEvent(
         requestOrdinal,
         requestHash,
         modelRequested,
+        evidenceHash,
         previousHeadHash,
         eventHash,
         currentHeadHash);
@@ -279,6 +380,7 @@ public record GraphAttemptEvent(
       Integer requestOrdinal,
       String requestHash,
       String modelRequested,
+      String evidenceHash,
       String previousHeadHash) {
     Map<String, Object> material = new LinkedHashMap<>();
     material.put("modelRequested", modelRequested);
@@ -295,7 +397,12 @@ public record GraphAttemptEvent(
     material.put("sequence", sequence);
     material.put("taskId", taskId);
     material.put("type", type);
-    return CanonicalIntegrity.hash(EVENT_DOMAIN, material);
+    if (evidenceHash == null) {
+      return CanonicalIntegrity.hash(EVENT_DOMAIN, material);
+    }
+    material.put("evidenceHash", evidenceHash);
+    return CanonicalIntegrity.hash(
+        TERMINAL_EVENT_DOMAIN, material);
   }
 
   private static void requireShape(
@@ -309,7 +416,8 @@ public record GraphAttemptEvent(
       String challengeHash,
       Integer ordinal,
       String requestHash,
-      String modelRequested) {
+      String modelRequested,
+      String evidenceHash) {
     boolean runFields =
         role != null && runId != null && taskId != null;
     boolean requestFields =
@@ -322,6 +430,17 @@ public record GraphAttemptEvent(
         ordinal == null
             && requestHash == null
             && modelRequested == null;
+    boolean attributionFields =
+        ordinal != null
+            && requestHash == null
+            && modelRequested == null
+            && evidenceHash != null;
+    boolean evidenceOnly =
+        ordinal == null
+            && requestHash == null
+            && modelRequested == null
+            && evidenceHash != null;
+    boolean noEvidence = evidenceHash == null;
     boolean approvalFields =
         actor != null && challengeHash != null;
     boolean noApprovalFields =
@@ -333,6 +452,7 @@ public record GraphAttemptEvent(
                   && to == GraphAttemptPhase.MARKED
                   && noRunFields
                   && noRequestFields
+                  && noEvidence
                   && noApprovalFields;
           case OPERATOR_APPROVED ->
               from == GraphAttemptPhase.MARKED
@@ -340,6 +460,7 @@ public record GraphAttemptEvent(
                       == GraphAttemptPhase.OPERATOR_APPROVED
                   && noRunFields
                   && noRequestFields
+                  && noEvidence
                   && approvalFields;
           case PARENT_AUTHORIZED ->
               from == GraphAttemptPhase.OPERATOR_APPROVED
@@ -348,6 +469,7 @@ public record GraphAttemptEvent(
                   && role == GraphRunRole.PARENT
                   && runFields
                   && noRequestFields
+                  && noEvidence
                   && noApprovalFields;
           case PARENT_STARTED ->
               from == GraphAttemptPhase.PARENT_AUTHORIZED
@@ -355,6 +477,7 @@ public record GraphAttemptEvent(
                   && role == GraphRunRole.PARENT
                   && runFields
                   && noRequestFields
+                  && noEvidence
                   && noApprovalFields;
           case CHILD_AUTHORIZED ->
               from == GraphAttemptPhase.PARENT_RUNNING
@@ -363,6 +486,7 @@ public record GraphAttemptEvent(
                   && role == GraphRunRole.CHILD
                   && runFields
                   && noRequestFields
+                  && noEvidence
                   && noApprovalFields;
           case CHILD_STARTED ->
               from == GraphAttemptPhase.CHILD_AUTHORIZED
@@ -370,6 +494,7 @@ public record GraphAttemptEvent(
                   && role == GraphRunRole.CHILD
                   && runFields
                   && noRequestFields
+                  && noEvidence
                   && noApprovalFields;
           case CHILD_EGRESS_CONSUMED ->
               from == GraphAttemptPhase.CHILD_RUNNING
@@ -377,6 +502,7 @@ public record GraphAttemptEvent(
                   && role == GraphRunRole.CHILD
                   && runFields
                   && noRequestFields
+                  && noEvidence
                   && noApprovalFields;
           case CREDENTIAL_READ_STARTED ->
               from == GraphAttemptPhase.EGRESS_CONSUMED
@@ -384,6 +510,7 @@ public record GraphAttemptEvent(
                   && role == GraphRunRole.CHILD
                   && runFields
                   && noRequestFields
+                  && noEvidence
                   && noApprovalFields;
           case CLIENT_CREATED ->
               from == GraphAttemptPhase.CREDENTIAL_READING
@@ -391,6 +518,7 @@ public record GraphAttemptEvent(
                   && role == GraphRunRole.CHILD
                   && runFields
                   && noRequestFields
+                  && noEvidence
                   && noApprovalFields;
           case MODEL_CREATED ->
               from == GraphAttemptPhase.CLIENT_READY
@@ -398,16 +526,48 @@ public record GraphAttemptEvent(
                   && role == GraphRunRole.CHILD
                   && runFields
                   && noRequestFields
+                  && noEvidence
                   && noApprovalFields;
           case PROVIDER_INTENT ->
-              from == GraphAttemptPhase.MODEL_READY
+              (from == GraphAttemptPhase.MODEL_READY
+                      || from
+                          == GraphAttemptPhase.PROVIDER_ATTRIBUTED)
                   && to == GraphAttemptPhase.PROVIDER_PENDING
                   && role == GraphRunRole.CHILD
                   && runFields
                   && requestFields
-                  && ordinal == 1
+                  && (ordinal == 1 || ordinal == 2)
+                  && noEvidence
                   && noApprovalFields;
-          default -> false;
+          case PROVIDER_ATTRIBUTED ->
+              from == GraphAttemptPhase.PROVIDER_PENDING
+                  && to
+                      == GraphAttemptPhase.PROVIDER_ATTRIBUTED
+                  && role == GraphRunRole.CHILD
+                  && runFields
+                  && attributionFields
+                  && (ordinal == 1 || ordinal == 2)
+                  && noApprovalFields;
+          case CHILD_TERMINAL ->
+              from == GraphAttemptPhase.PROVIDER_ATTRIBUTED
+                  && to == GraphAttemptPhase.CHILD_TERMINAL
+                  && role == GraphRunRole.CHILD
+                  && runFields
+                  && evidenceOnly
+                  && noApprovalFields;
+          case PARENT_TERMINAL ->
+              from == GraphAttemptPhase.CHILD_TERMINAL
+                  && to == GraphAttemptPhase.PARENT_TERMINAL
+                  && role == GraphRunRole.PARENT
+                  && runFields
+                  && evidenceOnly
+                  && noApprovalFields;
+          case TERMINAL_SEALED ->
+              from == GraphAttemptPhase.PARENT_TERMINAL
+                  && to == GraphAttemptPhase.TERMINAL
+                  && noRunFields
+                  && evidenceOnly
+                  && noApprovalFields;
         };
     if (!valid) {
       throw new IllegalArgumentException(

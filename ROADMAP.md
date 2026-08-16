@@ -33,6 +33,166 @@ S3 回执：[Recoverable local Action Build Note](./docs/operations/build-notes/
 
 S4 回执：[Operating and Gate-Closure Build Note](./docs/operations/build-notes/2026-07-29-s4-operating-gate-closure.md)
 
+前一产品闭环增量：**Exact Local Action Approval Scope focused + root clean + exact code-head CI
+Engineering Green；overall Authority / Live Red。** DCO commit
+`27da843dcb9deb9ae4008f1812dafd537a748cf3`的
+[Draft PR #6](https://github.com/striveh/emergeos/pull/6)在回执截止时为`Draft / Open / CLEAN`；
+[CI run 31771125144](https://github.com/striveh/emergeos/actions/runs/31771125144)为
+`SUCCESS / BUILD SUCCESS`（`24m42s`）。Fresh local root为11/11 reactor、170 XML、893 tests全绿；
+shipping Live仍 disabled，PR未merge/release。该证据绑定上述code-bearing commit/run；后续docs-only
+head不改变它，PR当前check状态以GitHub为准。
+回执：[Exact Local Action Approval Scope Build Note](./docs/operations/build-notes/2026-08-14-s1-exact-local-approval-scope.md)
+
+前一产品闭环增量：**Real Local Draftbox focused、PostgreSQL integration、crash/fresh-JVM、post-P1
+fresh root、final independent review及exact code-head CI Engineering Green；Draft PR #7；overall
+Authority / Live Red。** 用户现在可在
+exact approval后以第二个明确手势写入provider-free本地Draft，并取得
+`LOCAL_DRAFT_CREATED_V1 / simulated=false` typed Receipt；response loss只允许显式GET恢复，fresh JVM
+返回同一canonical truth，历史`LOCAL_DRAFTBOX_V1`仍fail closed。Undo尚未实现，owner需选择
+A logical undo（推荐）、B isolate retention或C permanent forget；ReflectionCandidate与founder
+dogfood尚未执行。首轮两条stale V1 Acceptance已修复并Green；
+recovery在graph-eval-runner暴露两个V18 test fixture兼容性缺口，以
+`164 XML / 820 tests / 1F + 3E`终止。两个fixture经最小静态修正后，新的root cycle一次完成
+`11/11 reactor / 175 XML / 904 tests / 0`；该结果只绑定late P1修复前的bytes。随后独立终审发现唯一
+P1：READY卡片把`REVERSIBLE`误译为“可撤销”，但Undo尚未实现；outside-in Acceptance以
+`EXACT_LOCAL_APPROVAL_UI_TARGET_RISK_MISSING`精确Red，minimum copy修复后focused Exact与
+PostgreSQL 6 + 三个指定IT的combined Gate均Green。production UI bytes已变化，因此新的post-P1
+`clean verify`另起一次fresh cycle并一次完成`11/11 reactor / 175 XML / 904 tests / 0`；XML/JAR
+manifests分别为`7d0d98716ec45efc85aa5ffb635f12cc0f5500db3218ae226862cd0e6bd4ba95`与
+`bd4ac24ef8a8dcfdae51e6ce62eb39f6b166a76a02421afac40bd34aaaf4ad20`。旧`904/904`仍只作为
+pre-P1历史，不能替代这轮post-P1 evidence。final release-candidate independent review为
+`GO / P0=0 / P1=0 / P2=0`；reviewer独立复现root、manifests及54-file scope，并确认无secret、
+`CLAUDE.md`、test hook或out-of-scope文件。
+
+DCO code-bearing commit
+[`195c15683f8ddadcf17ec313771b5e66c4c7ec37`](https://github.com/striveh/emergeos/commit/195c15683f8ddadcf17ec313771b5e66c4c7ec37)
+已普通push到`origin/agent/real-local-draftbox-undo`；54-path manifest为
+`8ed8b20d19f0abdb7a531737300baa5ecb5946c23e2fd433b674a7f4c14d874d`。
+[Draft PR #7](https://github.com/striveh/emergeos/pull/7)在本回执截止时为
+`OPEN / Draft / CLEAN`，base `main`、head exact `195c156…`；绑定该code head的
+[CI run 31872883333](https://github.com/striveh/emergeos/actions/runs/31872883333)已
+`completed / success`，job `94984100618`耗时`18m43s`，Maven于`17:59`报`BUILD SUCCESS`。
+CI只有非阻断的Actions v4 Node20/setup-java deprecation warning，不是功能失败。当前这笔Receipt
+docs-only更新会产生后续新head，仍须等待该head自己的CI；现有Green只证明code-bearing `195c156…`。
+PR不得擅自转Ready，且没有merge/release/deploy；任何Engineering Green都不改变Authority/Live Red。
+回执：[Real Local Draftbox Engineering Receipt](./docs/operations/build-notes/2026-08-15-real-local-draftbox.md)
+
+当前产品闭环增量：**Append-only Logical Local Draft Undo已取得PostgreSQL adapter full、selected graph
+compatibility与post-pin UI focused Engineering Green；plugin pin已落地并独立review，两个late P1已关闭；
+fresh root first cycle因唯一stale current-schema test fixture而Red，一行test-only修复已review/focused Green；
+唯一bounded root recovery已`11/11 / 179 XML / 914 tests / 0` Engineering Green；terminal docs-only
+claims的final review已`GO / P0=0 / P1=0 / 7 P2 deferred`；首个DCO head `ca2e1af…`已ordinary
+push，但exact-head CI attempt 1在test-only crash-marker race上失败；两文件fix已review/
+focused 6/6 Green；single post-fix clean root已`11/11 / 179 suites / 916 tests / 0F0E0S`
+Engineering Green，覆盖current test与pre-update docs bytes；terminal docs-only claims仍需links/review，
+第二commit/push/new exact-head CI PENDING；PR `OPEN / Draft`；
+overall Authority / Live Red。** owner已选择logical Undo option A。用户只有在批准与execute之后，才可
+通过第三个明确手势追加一条`LOCAL_DRAFT_LOGICALLY_UNDONE_V1 / simulated=false` Receipt；raw Draft
+继续是不可变`ACTIVE`，exact read projection变为`LOGICALLY_UNDONE`。first/replay/GET为
+`201/200/200`，response loss或hang进入`UNDO_UNKNOWN`且不自动POST/GET，只能由显式查询手势恢复。
+
+这是保留明文与历史的逻辑撤销：Capture/Artifact、creation attempt/transitions/Receipt与raw Draft都不
+删除或改写；没有restore、isolate retention、permanent forget、provider/Connector、legacy reconcile、
+Reflection或Working Self mutation。已确认PostgreSQL adapter full `465/465`、selected graph
+compatibility `3/3`、API classpath selected `12/12` Green，覆盖4个Undo UI场景、16个既有UI场景、
+race/no-leak、commit前rollback与commit后response-loss fresh-JVM replay。
+
+初始fat JAR parity P1与随后`12/12`、`7/7` reactor、`51.502s` packaged recovery仍保留为
+historical pre-pin/pre-late-P1 evidence；当时fat JAR `639ed678…`不是current root。显式
+`maven-jar-plugin` `3.5.0` pin已落地并独立review。late review关闭的两个P1为：
+`PostgresApiTest` reset将V19三表按child-first顺序纳入（SHA `e42994e…`）；以及
+historical Undo在inflight response后立即edit时保留独立UNKNOWN/GET recovery context（Red marker
+`REAL_LOCAL_DRAFTBOX_UI_UNDO_INFLIGHT_EDIT_RECOVERY_LOST expected=1 actual=0`）。
+
+最终UI focused gate为`7/7` Green（Store 6 + UI 1），Real UI实际执行5个Undo与16个
+legacy场景；Store/UI XML SHA前缀为`acd77b95`/`bff291bd`。new fat JAR为`a355feb4…`，
+UI resource source/target/fat parity Green，plugin-version warning absent。known nonblocking P2包括
+causal-time、hostile named/default type ACL、generic Undone hash重算、historical recovery后card文案/
+state、forced handler Acceptance、`EmergeDatabaseSnapshot`三表coverage，以及新增的two-tab
+different-nonce loser UI recovery缺口，共7项。新增P2中backend正确返回`201 + 409`、
+one Receipt，且无duplicate mutation、leak或false success；loser UI目前把exact `409`视为
+`UNDO_UNKNOWN`，显式GET取得winner canonical Undone后仍因nonce/hash不匹配而UNKNOWN。
+最窄future是补two-tab UI Acceptance，识别exact `409`并在显式GET后显示
+“由另一操作逻辑撤销”，但不得声称loser POST成功。
+
+唯一一次fresh root first cycle使用exact `./mvnw --batch-mode --no-transfer-progress clean verify`，
+于`4m25s / exit 1`结束，因此root不是Green。Contracts `59`、Core `210`、Agent Loop `41`、
+OpenAI `39`、InMemory `37`、PostgreSQL `196`与API Surefire `33`全绿；API Failsafe `22`中
+唯一失败为`RecoverableLocalActionHttpIT` readiness期待schema 18而实际为19，后三个
+reactor module `SKIPPED`。failure XML SHA-256为`628335f891e35746b62930a67c7e499a72ecd8744b3fd96738ea3307f621252b`，
+fresh fat JAR为`7ba5b19b…`。这是唯一stale current-schema fixture，不是production故障。
+
+minimum test-only fix只将`CURRENT_SCHEMA_VERSION` `18 → 19`，source SHA-256为
+`474528d20f858bd92a60ec9c4aeef70f9e2e75fe78e8a04e9da9e45270c3042a`；全仓无第二
+current-head oracle，独立review为`GO / P0=0 / P1=0 / P2=0`。修复后单次focused verify
+于`21.993s`完成`BUILD SUCCESS`，Store `6/6` + IT `1/1` Green；XML SHA-256为
+`a9afe0890ddb77b3f9254894afe499e50587b45ea46537523578a731fc11b03c` /
+`113bd4e2d3840f97dd3499e7d85972dc2bd3e9df1a347fd6e95b670e5644ac2a`，6次readiness均为
+`schemaVersion=19 / pendingMigrations=0 / schemaValid=true`。focused fat JAR `bdd5d664…`与
+nested adapter `76844d5b…` parity，source/target/nested V19均为`740bea…`且包含type
+`REVOKE`。这只是Engineering focused closure，不回写首轮root Red。
+
+随后唯一bounded root recovery使用同exact `clean verify`命令，以
+`exit 0 / BUILD SUCCESS / 09:28 / 11 of 11`结束。`179` fresh XML共`914 tests / 0 failures /
+0 errors / 0 skipped`，manifest SHA-256为
+`31d68d6d728a8f6cc8921d19dd153e5c7ae88e9d8df70be9b5efffe9695caca8`。关键XML SHA前缀为
+V9 `5387d045…`、V19 `0b5564d9…`、UndoStore `25b5690f…`、Graph61 `a12ecd6d…`、
+DurableGraph `b6ff161a…`、UndoAPI `4f608710…`、UI `e7190259…`、Crash `d09a7f81…`、
+Isolation `956f8d21…`、Recoverable `7e4abcf2…`和Pack009 `70b6041c…`。API fat JAR为
+`1a0278d8…`；nested PostgreSQL/Core与reactor parity，V19 all surfaces为`740bea…` + type
+`REVOKE` exact一次，UI `4/4` parity，adapter `130` / graph `61` payload `0 mismatch`，
+`maven-jar-plugin 3.5.0`无warning，postflight无code/test/POM drift。fresh root Engineering Green。
+
+该root运行在本次terminal docs-only update之前，只覆盖当时code/test/POM与pre-update
+docs。final independent review为`GO / P0=0 / P1=0 / 7 P2 deferred`；root-covered 41-path
+code-bearing manifest已冻结为
+`bacb5b377e9cfa4c8d14f7a771d7c0742b4c6734290fb9804b9b9f80903ae98f`。终审中的
+pre-update 45-path content/docs5/terminal-docs4 manifests只是historical，不再称final；current值
+必须在writer stop-write后由独立reviewer外部重算并封存，避免文档manifest自引用。
+
+首个DCO commit `ca2e1af5fb904a3da17c34910f97e08e4c0ee783`（parent `0e34f88`、
+tree `1f740982`、`45 files`）已ordinary fast-forward push到PR #7 remote branch，PR仍
+`OPEN / Draft`。绑定该head的CI run `31913800072` attempt 1/job `95082643336`已terminal
+failure，唯一失败为`Build and test`；`SyntheticEvalCrashRestartProcessIT` line 113为
+`expected CREDENTIAL_READ_STARTED, actual empty`，graph/offline后续`SKIPPED`。job/failed-step log
+SHA-256前缀为`1dd55b…` / `812f…`，所以CI不是Green。
+
+独立诊断是旧test-only `CREATE_NEW`在write前暴露zero-byte marker，与parent
+`isRegularFile`形成race；durable journal phase已持久化，production blobs未变，
+`ca2e1af…`未触发Eval实现变化。分类为
+`Product P0=0 / Product P1=0 / Release Gate CI reliability P1`；Offline同构latent race一并修复，
+不新增product P2，7项product P2不变。
+
+两个test-only fix的Synthetic/Offline SHA-256为
+`6413fb1b73716420d6605e62562af873a0c06167fac1060d7546b127e264ae1f` /
+`b60b587999052fa73ee25d1ed6a15f2eae37fecdd628935a870f8f2816061325`。只接受exact phase + LF，
+拒绝zero/partial/wrong/CRLF，child-exit后final read且deadline cleanup保留；独立review `GO`。
+唯一focused run于`18.563s`内`BUILD SUCCESS`，`7/7` reactor SUCCESS，Synthetic/Offline各
+`3/3`，XML SHA为`18ebadf5…b76` / `8f1e76f9…395`。但JAR mtime早于test source，该
+non-clean run只证明unchanged packaged main JAR + fresh test classes，不是final artifact freshness。
+上轮`179/914/0`只是`ca2e1af…` pre-commit same-tree historical Green，不覆盖随后两个test-only
+source bytes，也不改变ca2 exact-head CI Red历史。
+
+两文件fix后的clean root只执行一次exact `./mvnw --batch-mode --no-transfer-progress clean verify`：
+start `2026-08-16T00:05:48Z`，end `2026-08-16T00:15:14Z`，total `09:26`，最终
+`exit 0 / BUILD SUCCESS / 11 of 11`。`179`份fresh Surefire/Failsafe XML suites汇总为
+`916 tests / 0 failures / 0 errors / 0 skipped`，XML manifest SHA-256为
+`7437e57ee9b60cff2934f7144836740349c2302a37b2ba13495d0df87ac7ba19`。Synthetic Eval/Offline
+各`3/3` Green，XML SHA为`4b15a0cd…5b48` / `5cc39ffd…ec2`，均覆盖deterministic ready marker与
+original crash path。fresh Eval fat JAR为`575f2b83…`，Offline normal/app JAR为
+`07d02216…` / `9ad318d9…`，API fat JAR为`91556318…`；关键fresh XML Real UI
+`0476ece6…`、V19 `63b38547…`、Undo Store `36147912…`、Recoverable Local Action
+`354bd067…`全部Green，6次readiness仍为
+`schemaVersion=19 / pendingMigrations=0 / schemaValid=true`。
+
+clean source/class/report/JAR lifecycle freshness一致，`maven-jar-plugin 3.5.0`无warning。因此
+current test + pre-update docs bytes取得fresh-root Engineering Green；terminal docs-only claims在root
+之后，仍需links与独立review，且不内嵌自指docs manifest。第二DCO commit/non-force push和新
+exact-head CI仍PENDING。Draft不得转Ready，也不得merge、release或deploy；7项product P2不变，
+任何local Green都不改变Authority / Live Red。
+回执：[S1 Append-only Logical Local Draft Undo Engineering Receipt](./docs/operations/build-notes/2026-08-16-s1-logical-local-draft-undo.md)；
+决策：[ADR-0020](./docs/architecture/decisions/0020-append-only-logical-local-draft-undo.md)。
+
 产品/工程：
 
 - 按 Capture、Revision、Action、Operations 四个纵向切片逐步引入 PostgreSQL；
@@ -54,7 +214,8 @@ S4 回执：[Operating and Gate-Closure Build Note](./docs/operations/build-note
 - Day 1 启动 14 天 Founder dogfooding 和每周 2–3 次最近行为访谈；
 - 至少 3 位目标用户提交真实 Seed，观察复用或明确不复用原因；
 - 通过人 + Codex Concierge 交付母稿，并至少提出一次真实价格；
-- 当前产品只验证捕获/修订/恢复；“有来源、像本人、值得付费”由 Concierge 独立验证；
+- 当前产品只验证捕获/修订、provider-free local Draft与append-only logical Undo的本地闭包；
+  “有来源、像本人、值得付费”由 Concierge 独立验证；
 - 明确 `continue / narrow / pivot` 首个用户群与输出类型。
 
 Gate：
@@ -75,12 +236,67 @@ Gate：
 
 状态：**S1、S2 工程完成；S3 real model protocol adapter、isolated synthetic
 Eval Runner、本地 attempt durability 与 terminal record create-only repair
-工程切片已通过。Live-provider smoke 尚未执行。S4 已完成 deterministic
+工程切片已通过。曾执行一次 bounded intermediate DeepSeek request，但在
+`RESPONSE_METADATA_MISMATCH` 处 fail closed；当时 artifact hash 未冻结，current final bytes
+仍没有 live PASS，provider compatibility、retention 与 billing 均未知。S4 已完成 deterministic
 Verifier comparison、canonical durable report，以及 Pack 005 Tool arguments、
 Pack 006 post-dispatch deadline 和 Pack 007 typed read-only Worker 三个有限故障/
-runtime 工程切片。Pack 007 只覆盖 single/synchronous/`depth=1`、one Worker、
-read-only Fake 路径；完整 fault suite、stochastic Harness、通用 multi-agent 与
-真实 Seed Gate 尚未完成。**
+runtime 工程切片。Pack009已把 one-shot graph与 provider-accepted crash truth落到
+PostgreSQL V7；Pack010 offline slice已把 attributed terminal graph、sequence-17 seal、
+三份 fresh repetition与 complete-only Harness Report落到 PostgreSQL V8；本地
+owner-TTY facade、local permit object one-winner与 r1→r2→r3 predecessor atomic claim
+子切片也已完成；forward-only V9 runtime role/ACL + exact TX-B/TX-C semantic function与
+fat-JAR-first/test-shell successor hard-kill/two-JVM也已 focused Green。
+shipping artifact内的 dormant exact credential broker/session composer，以及
+intent persistence failure→HTTP 0、attribution fail-closed→无 replay增量的本机 loopback
+sentinel也已 focused Green；owner-approved同进程线性 capability handoff与独立、默认拒绝的
+role/ACL provisioning bootstrap也已取得 focused evidence；dormant V9 fixed-role writer
+composition又绑定 exact owner terminal capability。sequence-7 durable provider-session intent
+已在 credential/client/model/session/HTTP effect之前原子落库，并覆盖 exact binding、并发
+one-shot、expiry/replay及 commit前/后 hard-kill + restart；complete attribution仍必须先于
+terminal transaction。runtime拒绝 cross-attempt/two-database splice、alternating identity、
+transitive helper/trigger `tgattr` drift与 prefix TEMP/ACL drift，expiry与 semantic call合并为
+单条 SQL；TX-B/TX-C各一次及 PostgreSQL process restart reconciliation；dedicated DB pure audit
+也已扩为全 grantee allowlist、exact helper topology与
+真实 audit-failure atomic rollback。最新 Acceptance又把 credential lease的 durable
+intent/owner/expiry带到 key/client/model/session每个 effect boundary、把 Coordinator固定到
+authority-bound Store，并要求 OwnerTty与 exact prefix direct-login identity相同；数据库返回的
+session cursor受 canonical event复合外键约束，额外非 internal session-intent trigger fail closed。
+后续 actual review又补上 compose后 `next`/exact pre-HTTP双重 expiry复核，以及全部35个 public
+non-internal trigger的 shipping SHA-256 topology；provisioning与 terminal runtime同时固定相同的
+16-helper signature/properties/search_path/body SHA-256 closure。production provider response
+attribution又完成exact content-decoded bytes hash、完整token split的durable-before-semantic
+ordering、PostgreSQL restart与fresh packaged JVM no-replay matrix。actual success structured-final
+也已成为绑定 exact lease/Coordinator/egress/manifest/attribution/expiry的process-local opaque
+outcome，并只能 one-shot派生 typed TX-B command；wrong/malformed/forged/expired/replayed/
+concurrent/hard-kill均 fail closed。V9 exact row keys与 Candidate/WorkerResult nested integrity、
+完整child AgentRun/binding/event 15/sequence-15 snapshot及Trace/resource/Run relation在
+claim前关闭，extra/duplicate/trailing/tampered payload不烧毁 outcome；actual PUBLIC loopback
+outcome已沿同一 owner/Coordinator/egress capability进入 PostgreSQL TX-B并通过 restart
+reconciliation。successful sequence 15又只能经 strict parent aggregate review派生 process-local
+opaque typed TX-C command；Owner facade自行read-back durable seq15，forged/no-burn、wrong runtime、
+完整 parent AgentRun/ArtifactLineage/sequence-17 snapshot及全部 relation mirror value必须通过 Core
+aggregate invariant，event audit timestamp由PostgreSQL在TX-C内生成；两个 commands并发、
+PostgreSQL restart→seq17 reconciliation均已 focused Green。production App/public writer又已移除raw
+terminal payload ABI，PostgreSQL adapter以typed terminal truth与verified seq14/15 snapshot mint
+private-constructor one-shot TX-B/TX-C transition；wrong typed truth no-burn、child/parent并发一个winner
+与PostgreSQL restart reconciliation均已Green。forward-only V10又把 active executor surface固定为
+exact child/parent semantic pair并撤销V9 executor EXECUTE；fresh migration PUBLIC revoke、独立
+provisioning SHA-256/ACL/trigger/helper read-back、V8→V9→V10 fidelity，以及两个独立数据库session
+的 TX-B/TX-C one-winner + seq14→15→17 restart reconciliation均已Green。failure protocol现在只接受
+Core closed allowlist和exact parent mapping；forward-only V11又把typed failure verdict与request-2
+attribution原子落为durable provenance，并通过dedicated resumer、state version、DB-clock lease与
+exact head完成two-JVM one-winner、hard-kill、PostgreSQL restart和lease-expiry reclaim。forward-only
+V12已把该claim与failure TX-B/TX-C原子绑定，并以fresh JVM completion、commit前hard-kill回滚、
+PostgreSQL restart、child/parent two-JVM race及raw V10 bypass fence关闭跨JVM failure terminal resume
+缺口。V13 local-only bounded semantic attestation已把真实loopback reviewed outcome、exact manifest
+execution binding、DB challenge、typed signature receipt与TX-A原子提交串成同一Acceptance，并以
+raw/tamper/replay/expiry/cross-attempt/cross-DB/fault/race fail-closed证明不依赖Java-only precheck；
+V14 `PROFILE_ASSERTION_ONLY`以pico-USD精确费率冻结只读provider profile assertion，但不提交graph truth；
+V15 `REQUIREMENT_GUARD_ONLY`再于seq13登记one-way marker并由deferred PostgreSQL guard阻止已登记attempt
+回退到历史nano-USD TX-A，`exactPicoAttribution=NOT_IMPLEMENTED`、`TX-A=NOT_IMPLEMENTED`；
+PostgreSQL-native验签、production key custody、shipping execute/live r1/r2/r3、完整 stochastic Harness、
+通用multi-agent 与真实 Seed Gate仍未完成。**
 这条技术主线来自项目所有者 2026-07-30 的 Roadmap
 顺序例外；它不代表 Stage 1 的学习、市场或真实 Connector Gate 已完成。
 
@@ -119,6 +335,39 @@ S4 post-dispatch deadline 回执：
 
 S4 typed read-only Worker 回执：
 [Typed Read-only Worker Handoff Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-typed-read-only-worker-handoff.md)。
+
+S4 Pack009 durable graph crash 回执：
+[Pack009 Durable Graph Crash Build Note](./docs/operations/build-notes/2026-07-31-s2-s4-pack009-durable-graph-crash.md)。
+
+S4 Pack010 offline terminal graph / Harness 回执：
+[Pack010 Terminal Graph / Harness Report Build Note](./docs/operations/build-notes/2026-08-01-s2-s4-pack010-terminal-graph-harness-report.md)。
+
+S4 Pack010 owner TTY / predecessor authority子切片回执：
+[Pack010 Owner TTY / Predecessor Authority Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-owner-tty-predecessor-authority.md)。
+
+S4 Pack010 V9 terminal authority / packaged successor子切片回执：
+[Pack010 V9 Terminal Authority Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-v9-terminal-authority.md)。
+
+S4 Pack010 dormant provider capability / loopback ordering子切片回执：
+[Pack010 Dormant Provider Capability Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-dormant-provider-capabilities.md)。
+
+S4 Pack010 production capability handoff / role provisioning / runtime composition子切片回执：
+[Pack010 Capability Handoff / Provisioning Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-capability-handoff-provisioning.md)。
+
+S4 Pack010 exact provider response attribution子切片回执：
+[Pack010 Exact Provider Attribution Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-exact-provider-attribution.md)。
+
+S4 Pack010 terminal outcome binding子切片回执：
+[Pack010 Terminal Outcome Binding Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-terminal-outcome-binding.md)。
+
+S4 Pack010 adapter-owned canonical terminal transition子切片回执：
+[Pack010 Canonical Terminal Transitions Build Note](./docs/operations/build-notes/2026-08-02-s2-s4-pack010-canonical-terminal-transitions.md)。
+
+S4 Pack010 V10 attributed failure authority子切片回执：
+[Pack010 V10 Attributed Failure Authority Build Note](./docs/operations/build-notes/2026-08-09-s2-s4-pack010-v10-attributed-failure-authority.md)。
+
+S4 Pack010 durable attributed failure outcome / resume fencing子切片回执：
+[Pack010 Durable Attributed Failure Resume Build Note](./docs/operations/build-notes/2026-08-09-s2-s4-pack010-durable-attributed-failure-resume.md)。
 
 产品/工程：
 

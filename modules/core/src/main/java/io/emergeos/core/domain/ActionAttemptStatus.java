@@ -14,7 +14,7 @@ public enum ActionAttemptStatus {
 
   public boolean canTransitionTo(ActionAttemptStatus next) {
     return switch (this) {
-      case PLANNED -> next == DISPATCHING;
+      case PLANNED -> next == DISPATCHING || next == SUCCEEDED;
       case DISPATCHING -> next == SUCCEEDED || next == FAILED || next == UNKNOWN;
       case UNKNOWN -> next == RECONCILING;
       case RECONCILING -> next == SUCCEEDED || next == FAILED || next == UNKNOWN;

@@ -77,7 +77,7 @@ class Stage1MigrationAndRecoveryTest {
     v1.migrate();
     populateCapture(fromV1, "v1");
     DatabaseSnapshot v1Before = snapshot(fromV1, S1_TABLES);
-    Flyway v1Current = flyway(fromV1, "from_v1", null);
+    Flyway v1Current = flyway(fromV1, "from_v1", "12");
     v1Current.migrate();
     assertCurrent(v1Current);
     assertEquals(v1Before, snapshot(fromV1, S1_TABLES));
@@ -89,7 +89,7 @@ class Stage1MigrationAndRecoveryTest {
     ArtifactLineage v2Artifact = populateArtifact(fromV2, "v2");
     reviseArtifact(fromV2, v2Artifact, "v2");
     DatabaseSnapshot v2Before = snapshot(fromV2, S2_TABLES);
-    Flyway v2Current = flyway(fromV2, "from_v2", null);
+    Flyway v2Current = flyway(fromV2, "from_v2", "12");
     v2Current.migrate();
     assertCurrent(v2Current);
     assertEquals(v2Before, snapshot(fromV2, S2_TABLES));
@@ -102,7 +102,7 @@ class Stage1MigrationAndRecoveryTest {
     ArtifactLineage v3Revised = reviseArtifact(fromV3, v3Artifact, "v3");
     populateSucceededAction(fromV3, v3Revised, "v3");
     DatabaseSnapshot v3Before = snapshot(fromV3, S3_TABLES);
-    Flyway v3Current = flyway(fromV3, "from_v3", null);
+    Flyway v3Current = flyway(fromV3, "from_v3", "12");
     v3Current.migrate();
     assertCurrent(v3Current);
     assertEquals(v3Before, snapshot(fromV3, S3_TABLES));
@@ -110,16 +110,16 @@ class Stage1MigrationAndRecoveryTest {
 
     DriverManagerDataSource fresh =
         schemaDataSource(SOURCE_DATABASE, "fresh_current");
-    Flyway freshCurrent = flyway(fresh, "fresh_current", null);
+    Flyway freshCurrent = flyway(fresh, "fresh_current", "12");
     freshCurrent.migrate();
     assertCurrent(freshCurrent);
-    assertEquals(15, businessTableCount(fresh));
+    assertEquals(21, businessTableCount(fresh));
     assertEquals(0L, graphRowCount(fresh));
 
     System.out.println(
-        "PACK009_V7_MIGRATION_RECEIPT "
+        "PACK010_V12_MIGRATION_RECEIPT "
             + "从V1升级=业务真相稳定 从V2升级=业务真相稳定 "
-            + "从V3升级=业务真相稳定 全新安装=V7 业务表=15 "
+            + "从V3升级=业务真相稳定 全新安装=V12 业务表=21 "
             + "graph真相=空 synthetic=true");
   }
 
@@ -128,7 +128,7 @@ class Stage1MigrationAndRecoveryTest {
       throws Exception {
     String schema = "game_day";
     DriverManagerDataSource source = schemaDataSource(SOURCE_DATABASE, schema);
-    Flyway sourceFlyway = flyway(source, schema, null);
+    Flyway sourceFlyway = flyway(source, schema, "12");
     sourceFlyway.migrate();
     ArtifactLineage artifact = populateArtifact(source, "game-day");
     ArtifactLineage revised = reviseArtifact(source, artifact, "game-day");
@@ -182,10 +182,10 @@ class Stage1MigrationAndRecoveryTest {
 
     DriverManagerDataSource restored =
         schemaDataSource(RESTORED_DATABASE, schema);
-    Flyway restoredFlyway = flyway(restored, schema, null);
+    Flyway restoredFlyway = flyway(restored, schema, "12");
     assertCurrent(restoredFlyway);
     assertEquals(expected, snapshot(restored, S3_TABLES));
-    assertEquals(15, businessTableCount(restored));
+    assertEquals(21, businessTableCount(restored));
     assertEquals(0L, graphRowCount(restored));
     long recoveryMillis =
         Duration.ofNanos(System.nanoTime() - recoveryStarted).toMillis();
@@ -272,39 +272,125 @@ class Stage1MigrationAndRecoveryTest {
       DriverManagerDataSource dataSource,
       ArtifactLineage artifact,
       String suffix) {
-    DataSourceTransactionManager transactions =
-        new DataSourceTransactionManager(dataSource);
-    PostgresActionAttemptStore store =
-        new PostgresActionAttemptStore(dataSource, transactions);
     ActionAttempt proposed = planned(artifact, suffix);
-    ActionAttempt canonical =
-        assertInstanceOf(
-                ActionAttemptStore.PlanResult.Accepted.class,
-                store.planOrFind(proposed))
-            .attempt();
-    ActionAttempt dispatching =
-        assertInstanceOf(
-                ActionAttemptStore.ClaimResult.Claimed.class,
-                store.claimDispatch(canonical, NOW.plusSeconds(180)))
-            .attempt();
-    ActionAttempt unknown =
-        store.markUnknown(dispatching, NOW.plusSeconds(181));
-    ActionAttempt reconciling =
-        assertInstanceOf(
-                ActionAttemptStore.ClaimResult.Claimed.class,
-                store.claimReconciliation(unknown, NOW.plusSeconds(182)))
-            .attempt();
-    store.complete(
-        reconciling,
-        ActionReceipt.succeeded(
-            "receipt-" + suffix,
-            proposed.attemptId(),
-            "sim-object-" + suffix,
-            "sim-request-" + suffix,
-            "simulated://provider/" + suffix,
-            NOW.plusSeconds(183),
-            true),
-        NOW.plusSeconds(183));
+    ActionPlan plan = proposed.plan();
+    ApprovalDecision approval = proposed.approval();
+    ActionCapability capability = proposed.capability();
+    JdbcClient jdbc = JdbcClient.create(dataSource);
+    var transactions =
+        new org.springframework.transaction.support.TransactionTemplate(
+            new DataSourceTransactionManager(dataSource));
+    transactions.executeWithoutResult(
+        ignored -> {
+          assertEquals(
+              1,
+              jdbc.sql(
+                      """
+                      INSERT INTO action_attempts (
+                          principal_id, attempt_id, connector, account_ref, idempotency_key,
+                          status, state_version, capability_used_calls, capability_max_calls,
+                          plan_id, plan_hash, action_type, target_ref,
+                          artifact_id, artifact_version, artifact_hash,
+                          risk, policy_version, plan_expires_at,
+                          approval_id, approved_at,
+                          capability_id, capability_subject, capability_connector,
+                          capability_audience, capability_account_ref,
+                          capability_plan_id, capability_plan_hash, capability_artifact_hash,
+                          capability_idempotency_key, capability_expires_at,
+                          created_at, updated_at
+                      ) VALUES (
+                          :principalId, :attemptId, :connector, :accountRef, :idempotencyKey,
+                          'SUCCEEDED', 5, 2, :maxCalls,
+                          :planId, :planHash, :actionType, :targetRef,
+                          :artifactId, :artifactVersion, :artifactHash,
+                          :risk, :policyVersion, :expiresAt,
+                          :approvalId, :approvedAt,
+                          :capabilityId, :principalId, :connector,
+                          :audience, :accountRef,
+                          :planId, :planHash, :artifactHash,
+                          :idempotencyKey, :expiresAt,
+                          :approvedAt, :completedAt
+                      )
+                      """)
+                  .param("principalId", plan.principalId())
+                  .param("attemptId", proposed.attemptId())
+                  .param("connector", capability.connector())
+                  .param("accountRef", capability.accountRef())
+                  .param("idempotencyKey", plan.idempotencyKey())
+                  .param("maxCalls", capability.maxCalls())
+                  .param("planId", plan.planId())
+                  .param("planHash", plan.planHash())
+                  .param("actionType", plan.actionType())
+                  .param("targetRef", plan.targetRef())
+                  .param("artifactId", plan.artifactId())
+                  .param("artifactVersion", plan.artifactVersion())
+                  .param("artifactHash", plan.artifactHash())
+                  .param("risk", plan.risk().name())
+                  .param("policyVersion", plan.policyVersion())
+                  .param("expiresAt", java.sql.Timestamp.from(plan.expiresAt()))
+                  .param("approvalId", approval.decisionId())
+                  .param("approvedAt", java.sql.Timestamp.from(approval.decidedAt()))
+                  .param("capabilityId", capability.capabilityId())
+                  .param("audience", capability.audience())
+                  .param("completedAt", java.sql.Timestamp.from(NOW.plusSeconds(183)))
+                  .update());
+          List<ActionTransition> transitions =
+              List.of(
+                  new ActionTransition(1, null, ActionAttemptStatus.PLANNED, NOW.plusSeconds(170)),
+                  new ActionTransition(2, ActionAttemptStatus.PLANNED, ActionAttemptStatus.DISPATCHING, NOW.plusSeconds(180)),
+                  new ActionTransition(3, ActionAttemptStatus.DISPATCHING, ActionAttemptStatus.UNKNOWN, NOW.plusSeconds(181)),
+                  new ActionTransition(4, ActionAttemptStatus.UNKNOWN, ActionAttemptStatus.RECONCILING, NOW.plusSeconds(182)),
+                  new ActionTransition(5, ActionAttemptStatus.RECONCILING, ActionAttemptStatus.SUCCEEDED, NOW.plusSeconds(183)));
+          for (ActionTransition transition : transitions) {
+            assertEquals(
+                1,
+                jdbc.sql(
+                        """
+                        INSERT INTO action_attempt_transitions (
+                            principal_id, attempt_id, sequence, from_status, to_status,
+                            capability_use_delta, occurred_at
+                        ) VALUES (
+                            :principalId, :attemptId, :sequence, :fromStatus, :toStatus,
+                            :useDelta, :occurredAt
+                        )
+                        """)
+                    .param("principalId", plan.principalId())
+                    .param("attemptId", proposed.attemptId())
+                    .param("sequence", transition.sequence())
+                    .param(
+                        "fromStatus",
+                        transition.fromStatus() == null ? null : transition.fromStatus().name())
+                    .param("toStatus", transition.toStatus().name())
+                    .param(
+                        "useDelta",
+                        transition.toStatus() == ActionAttemptStatus.DISPATCHING
+                                || transition.toStatus() == ActionAttemptStatus.RECONCILING
+                            ? 1
+                            : 0)
+                    .param("occurredAt", java.sql.Timestamp.from(transition.occurredAt()))
+                    .update());
+          }
+          assertEquals(
+              1,
+              jdbc.sql(
+                      """
+                      INSERT INTO action_receipts (
+                          principal_id, attempt_id, receipt_id, outcome, external_id,
+                          reason_code, provider_request_id, raw_response_ref, occurred_at, simulated
+                      ) VALUES (
+                          :principalId, :attemptId, :receiptId, 'SUCCEEDED', :externalId,
+                          NULL, :providerRequestId, :rawResponseRef, :occurredAt, TRUE
+                      )
+                      """)
+                  .param("principalId", plan.principalId())
+                  .param("attemptId", proposed.attemptId())
+                  .param("receiptId", "receipt-" + suffix)
+                  .param("externalId", "sim-object-" + suffix)
+                  .param("providerRequestId", "sim-request-" + suffix)
+                  .param("rawResponseRef", "simulated://provider/" + suffix)
+                  .param("occurredAt", java.sql.Timestamp.from(NOW.plusSeconds(183)))
+                  .update());
+        });
   }
 
   private static ActionAttempt planned(
@@ -395,7 +481,7 @@ class Stage1MigrationAndRecoveryTest {
   private static void assertCurrent(Flyway flyway) {
     assertTrue(flyway.validateWithResult().validationSuccessful);
     assertEquals(
-        MigrationVersion.fromVersion("7"),
+        MigrationVersion.fromVersion("12"),
         flyway.info().current().getVersion());
     assertEquals(0, flyway.info().pending().length);
   }
@@ -429,6 +515,12 @@ class Stage1MigrationAndRecoveryTest {
                 'agent_runs', 'agent_trace_events', 'agent_run_resource_bindings',
                 'agent_worker_results',
                 'agent_graph_attempts', 'agent_graph_attempt_run_bindings',
+                'agent_graph_attempt_candidates',
+                'agent_graph_attempt_provider_attributions',
+                'agent_graph_provider_session_intents',
+                'agent_graph_attributed_failure_outcomes',
+                'agent_graph_attributed_failure_terminal_resumes',
+                'agent_graph_attempt_terminal_bindings',
                 'agent_graph_attempt_events', 'agent_graph_attempt_heads',
                 'agent_graph_attempt_seals'
               )
@@ -445,6 +537,12 @@ class Stage1MigrationAndRecoveryTest {
             SELECT
               (SELECT count(*) FROM agent_graph_attempts)
               + (SELECT count(*) FROM agent_graph_attempt_run_bindings)
+              + (SELECT count(*) FROM agent_graph_attempt_candidates)
+              + (SELECT count(*) FROM agent_graph_attempt_provider_attributions)
+              + (SELECT count(*) FROM agent_graph_provider_session_intents)
+              + (SELECT count(*) FROM agent_graph_attributed_failure_outcomes)
+              + (SELECT count(*) FROM agent_graph_attributed_failure_terminal_resumes)
+              + (SELECT count(*) FROM agent_graph_attempt_terminal_bindings)
               + (SELECT count(*) FROM agent_graph_attempt_events)
               + (SELECT count(*) FROM agent_graph_attempt_heads)
               + (SELECT count(*) FROM agent_graph_attempt_seals)

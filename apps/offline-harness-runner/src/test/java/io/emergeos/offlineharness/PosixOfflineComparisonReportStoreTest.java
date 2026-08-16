@@ -184,6 +184,162 @@ class PosixOfflineComparisonReportStoreTest {
   }
 
   @Test
+  void safeClaimWriteWindowIsIncompleteAndUnsafeMetadataStaysInvalid()
+      throws Exception {
+    Path home = privateDirectory("claim-write-race-home");
+    OfflineComparisonReport report = report();
+    PosixOfflineComparisonReportStore first =
+        new PosixOfflineComparisonReportStore(home);
+    PosixOfflineComparisonReportStore second =
+        new PosixOfflineComparisonReportStore(home);
+    CountDownLatch claimCreated = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+
+    try (ExecutorService executor =
+        Executors.newSingleThreadExecutor()) {
+      Future<PosixOfflineComparisonReportStore.Stored> winner =
+          executor.submit(
+              () ->
+                  first.save(
+                      report,
+                      phase -> {
+                        if (phase
+                            == OfflineComparisonPersistenceObserver
+                                .Phase.CLAIM_WRITE_STARTED) {
+                          claimCreated.countDown();
+                          await(release);
+                        }
+                      }));
+      assertTrue(claimCreated.await(5, TimeUnit.SECONDS));
+
+      try {
+        PosixOfflineComparisonReportStore.ReadResult observed =
+            second.inspect();
+        assertEquals(
+            PosixOfflineComparisonReportStore.Disposition.UNKNOWN,
+            observed.disposition());
+        assertEquals(
+            PosixOfflineComparisonReportStore.RecordState
+                .CLAIM_NON_AUTHORITATIVE,
+            observed.state());
+        assertEquals(
+            "REPORT_COMMIT_INCOMPLETE", observed.failureCode());
+        assertRejected(
+            "REPORT_COMMIT_INCOMPLETE",
+            () -> second.save(report));
+      } finally {
+        release.countDown();
+      }
+      assertEquals(report.reportId(), winner.get().reportId());
+    }
+
+    assertEquals(
+        PosixOfflineComparisonReportStore.Disposition.FINAL,
+        first.inspect().disposition());
+
+    Path unsafeHome = privateDirectory("unsafe-claim-home");
+    PosixOfflineComparisonReportStore unsafe =
+        new PosixOfflineComparisonReportStore(unsafeHome);
+    Path unsafeClaim =
+        state(unsafeHome)
+            .resolve(
+                PosixOfflineComparisonReportStore.CLAIM_FILE_NAME);
+    Files.createDirectories(
+        unsafeClaim.getParent(),
+        PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rwx------")));
+    Files.write(
+        unsafeClaim,
+        new byte[0],
+        StandardOpenOption.CREATE_NEW);
+    Files.setPosixFilePermissions(
+        unsafeClaim,
+        PosixFilePermissions.fromString("rw-r-----"));
+    assertInvalidCode("REPORT_FILE_UNSAFE", unsafe.inspect());
+
+    Path malformedHome = privateDirectory("malformed-claim-home");
+    PosixOfflineComparisonReportStore malformed =
+        new PosixOfflineComparisonReportStore(malformedHome);
+    Path malformedClaim =
+        state(malformedHome)
+            .resolve(
+                PosixOfflineComparisonReportStore.CLAIM_FILE_NAME);
+    Files.createDirectories(
+        malformedClaim.getParent(),
+        PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rwx------")));
+    byte[] malformedBytes =
+        new byte[
+            Files.readAllBytes(
+                    state(home)
+                        .resolve(
+                            PosixOfflineComparisonReportStore
+                                .CLAIM_FILE_NAME))
+                .length];
+    Files.write(
+        malformedClaim,
+        malformedBytes,
+        StandardOpenOption.CREATE_NEW);
+    Files.setPosixFilePermissions(
+        malformedClaim,
+        PosixFilePermissions.fromString("rw-------"));
+    assertInvalidCode(
+        "REPORT_CLAIM_INVALID", malformed.inspect());
+
+    Path shortMalformedHome =
+        privateDirectory("short-malformed-claim-home");
+    PosixOfflineComparisonReportStore shortMalformed =
+        new PosixOfflineComparisonReportStore(shortMalformedHome);
+    Path shortMalformedClaim =
+        state(shortMalformedHome)
+            .resolve(
+                PosixOfflineComparisonReportStore.CLAIM_FILE_NAME);
+    Files.createDirectories(
+        shortMalformedClaim.getParent(),
+        PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rwx------")));
+    Files.write(
+        shortMalformedClaim,
+        "forged".getBytes(StandardCharsets.US_ASCII),
+        StandardOpenOption.CREATE_NEW);
+    Files.setPosixFilePermissions(
+        shortMalformedClaim,
+        PosixFilePermissions.fromString("rw-------"));
+    assertInvalidCode(
+        "REPORT_CLAIM_INVALID", shortMalformed.inspect());
+
+    Path conflictedHome =
+        privateDirectory("partial-claim-conflict-home");
+    PosixOfflineComparisonReportStore conflicted =
+        new PosixOfflineComparisonReportStore(conflictedHome);
+    Path conflictedState = state(conflictedHome);
+    Files.createDirectories(
+        conflictedState,
+        PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rwx------")));
+    Files.write(
+        conflictedState.resolve(
+            PosixOfflineComparisonReportStore.CLAIM_FILE_NAME),
+        new byte[0],
+        StandardOpenOption.CREATE_NEW);
+    Files.setPosixFilePermissions(
+        conflictedState.resolve(
+            PosixOfflineComparisonReportStore.CLAIM_FILE_NAME),
+        PosixFilePermissions.fromString("rw-------"));
+    Files.write(
+        conflictedState.resolve(
+            PosixOfflineComparisonReportStore.PENDING_FILE_NAME),
+        new byte[0],
+        StandardOpenOption.CREATE_NEW);
+    Files.setPosixFilePermissions(
+        conflictedState.resolve(
+            PosixOfflineComparisonReportStore.PENDING_FILE_NAME),
+        PosixFilePermissions.fromString("rw-------"));
+    assertInvalidCode(
+        "REPORT_PATH_STATE_CONFLICT", conflicted.inspect());
+  }
+
+  @Test
   void targetCreatedAfterPrecheckIsNeverOverwritten()
       throws Exception {
     Path home = privateDirectory("commit-race-home");

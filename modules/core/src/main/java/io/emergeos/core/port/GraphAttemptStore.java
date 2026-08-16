@@ -1,11 +1,16 @@
 package io.emergeos.core.port;
 
 import io.emergeos.core.domain.AgentRun;
+import io.emergeos.core.domain.ArtifactLineage;
 import io.emergeos.core.domain.GraphAttemptCursor;
 import io.emergeos.core.domain.GraphAttemptManifest;
 import io.emergeos.core.domain.GraphAttemptVerification;
+import io.emergeos.core.domain.GraphAttributedFailureCode;
 import io.emergeos.core.domain.GraphOperatorApproval;
+import io.emergeos.core.domain.GraphProviderAttribution;
 import io.emergeos.core.domain.GraphProviderIntent;
+import io.emergeos.contracts.WorkerResultEnvelope;
+import io.emergeos.contracts.HarnessCandidateEnvelope;
 import java.time.Instant;
 
 /**
@@ -13,7 +18,7 @@ import java.time.Instant;
  *
  * <p>There is intentionally no generic append method and no resume method.
  */
-public interface GraphAttemptStore {
+public interface GraphAttemptStore extends GraphAttemptReader {
 
   CreateResult create(
       GraphAttemptManifest manifest, Instant occurredAt);
@@ -72,6 +77,38 @@ public interface GraphAttemptStore {
       GraphAttemptManifest manifest,
       GraphAttemptCursor expected,
       GraphProviderIntent intent,
+      Instant occurredAt);
+
+  GraphAttemptCursor providerAttributed(
+      GraphAttemptManifest manifest,
+      GraphAttemptCursor expected,
+      GraphProviderAttribution attribution,
+      Instant occurredAt);
+
+  default GraphAttemptCursor providerFailureAttributed(
+      GraphAttemptManifest manifest,
+      GraphAttemptCursor expected,
+      GraphProviderAttribution attribution,
+      GraphAttributedFailureCode failureCode,
+      Instant occurredAt) {
+    throw new UnsupportedOperationException(
+        "durable attributed failure is not supported by this store");
+  }
+
+  GraphAttemptCursor completeChild(
+      GraphAttemptManifest manifest,
+      GraphAttemptCursor expected,
+      AgentRunContext parent,
+      AgentRun terminalChild,
+      HarnessCandidateEnvelope candidate,
+      WorkerResultEnvelope workerResult,
+      Instant occurredAt);
+
+  GraphAttemptCursor completeParentAndSeal(
+      GraphAttemptManifest manifest,
+      GraphAttemptCursor expected,
+      AgentRun terminalParent,
+      ArtifactLineage artifact,
       Instant occurredAt);
 
   GraphAttemptVerification findVerified(

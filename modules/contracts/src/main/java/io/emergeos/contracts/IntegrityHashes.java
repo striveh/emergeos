@@ -18,6 +18,12 @@ public final class IntegrityHashes {
   private static final String BUNDLE_DOMAIN = "emergeos.harness-run-bundle.v1";
   private static final String WORKER_RESULT_DOMAIN =
       "emergeos.worker-result-envelope.v1";
+  private static final String HARNESS_CANDIDATE_DOMAIN =
+      "emergeos.harness-candidate-envelope.v1";
+  private static final String HARNESS_EVALUATION_REPORT_DOMAIN =
+      "emergeos.harness-evaluation-report.v1";
+  private static final String HARNESS_EVALUATION_REPORT_ID_DOMAIN =
+      "emergeos.harness-evaluation-report-id.v1";
 
   private IntegrityHashes() {}
 
@@ -84,6 +90,73 @@ public final class IntegrityHashes {
   static String workerResultHash(Map<String, Object> preimage) {
     return domainHash(
         WORKER_RESULT_DOMAIN, CanonicalEncoding.encode(preimage));
+  }
+
+  public static String harnessCandidateHash(
+      HarnessCandidateEnvelope candidate) {
+    if (candidate == null) {
+      throw new NullPointerException("candidate");
+    }
+    return domainHash(
+        HARNESS_CANDIDATE_DOMAIN,
+        CanonicalEncoding.encode(
+            CanonicalEncoding.recordValues(
+                candidate, Set.of("integrityHash"))));
+  }
+
+  static String harnessCandidateHash(
+      Map<String, Object> preimage) {
+    return domainHash(
+        HARNESS_CANDIDATE_DOMAIN,
+        CanonicalEncoding.encode(preimage));
+  }
+
+  public static String harnessEvaluationReportHash(
+      HarnessEvaluationReport report) {
+    if (report == null) {
+      throw new NullPointerException("report");
+    }
+    return domainHash(
+        HARNESS_EVALUATION_REPORT_DOMAIN,
+        CanonicalEncoding.encode(
+            CanonicalEncoding.recordValues(
+                report, Set.of("integrityHash"))));
+  }
+
+  static String harnessEvaluationReportHash(
+      Map<String, Object> preimage) {
+    return domainHash(
+        HARNESS_EVALUATION_REPORT_DOMAIN,
+        CanonicalEncoding.encode(preimage));
+  }
+
+  public static String harnessEvaluationReportId(
+      HarnessEvaluationReport report) {
+    if (report == null) {
+      throw new NullPointerException("report");
+    }
+    return harnessEvaluationReportId(
+        HarnessEvaluationReport.idPreimage(
+            report.schemaVersion(),
+            report.reportKind(),
+            report.graphProtocolVersion(),
+            report.packRawSha256(),
+            report.environmentRawSha256(),
+            report.evaluatorArms(),
+            report.repetitions(),
+            report.evaluations(),
+            report.usageAggregate(),
+            report.evaluatorEffects(),
+            report.reportStatus(),
+            report.integrityProfile()));
+  }
+
+  static String harnessEvaluationReportId(
+      Map<String, Object> preimage) {
+    return "harness-evaluation-report-"
+        + domainHash(
+            HARNESS_EVALUATION_REPORT_ID_DOMAIN,
+            CanonicalEncoding.encode(preimage));
   }
 
   /** Standard SHA-256 over the exact UTF-8 bytes of immutable user-visible content. */

@@ -40,13 +40,7 @@ class AgentDraftSecurityBoundaryTest extends PostgresApiTest {
   @BeforeEach
   void setUp() {
     mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-    JdbcClient.create(dataSource)
-        .sql(
-            "TRUNCATE TABLE agent_trace_events, agent_run_resource_bindings, "
-                + "agent_worker_results, agent_runs, "
-                + "action_receipts, action_attempt_transitions, action_attempts, "
-                + "artifact_versions, artifacts, captures")
-        .update();
+    truncateBusinessTruth(dataSource);
   }
 
   @Test

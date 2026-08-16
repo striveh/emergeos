@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:emergeos:schema:v1:harness-candidate-envelope",
+  "title": "HarnessCandidateEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "safeText2048": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    },
+    "safeContent65536": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 65536,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    },
+    "id128": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+    },
+    "captureRef": {
+      "type": "string",
+      "pattern": "^capture://[A-Za-z0-9][A-Za-z0-9._~-]{0,199}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "candidateRef",
+    "attemptId",
+    "executionSlotId",
+    "repetition",
+    "childRunId",
+    "childTaskId",
+    "sourceRequestOrdinal",
+    "sourceResponseHash",
+    "traceRootHash",
+    "outputSchema",
+    "content",
+    "contentHash",
+    "evidenceRefs",
+    "obtainedEvidenceRefs",
+    "requiredEvidenceRef",
+    "requiredEvidenceAvailable",
+    "integrityProfile",
+    "integrityHash"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "candidateRef": {
+      "type": "string",
+      "pattern": "^harness-candidate://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+    },
+    "attemptId": {"$ref": "#/$defs/hash"},
+    "executionSlotId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,199}$"
+    },
+    "repetition": {"type": "integer", "enum": [1, 2, 3]},
+    "childRunId": {"$ref": "#/$defs/id128"},
+    "childTaskId": {"$ref": "#/$defs/id128"},
+    "sourceRequestOrdinal": {"const": 2},
+    "sourceResponseHash": {"$ref": "#/$defs/hash"},
+    "traceRootHash": {"$ref": "#/$defs/hash"},
+    "outputSchema": {"$ref": "#/$defs/safeText2048"},
+    "content": {"$ref": "#/$defs/safeContent65536"},
+    "contentHash": {"$ref": "#/$defs/hash"},
+    "evidenceRefs": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/captureRef"}
+    },
+    "obtainedEvidenceRefs": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/captureRef"}
+    },
+    "requiredEvidenceRef": {"$ref": "#/$defs/captureRef"},
+    "requiredEvidenceAvailable": {"type": "boolean"},
+    "integrityProfile": {"const": "emergeos-length-prefixed-sha256-v1"},
+    "integrityHash": {"$ref": "#/$defs/hash"}
+  }
+}

@@ -46,4 +46,15 @@ final class GraphAttemptDomains {
     }
     return value;
   }
+
+  static String safeReference(String value, String name) {
+    if (value == null
+        || value.isBlank()
+        || value.length() > 1_024
+        || value.chars().anyMatch(character -> character < 0x20)) {
+      throw new IllegalArgumentException(
+          name + " is not a bounded safe reference");
+    }
+    return value;
+  }
 }

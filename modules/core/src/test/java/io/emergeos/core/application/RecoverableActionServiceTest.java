@@ -1,10 +1,14 @@
 package io.emergeos.core.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.emergeos.contracts.RiskLevel;
 import io.emergeos.core.domain.ActionAttempt;
+import io.emergeos.core.domain.ActionApprovalScope;
 import io.emergeos.core.domain.ActionAttemptStatus;
 import io.emergeos.core.domain.ActionReceipt;
 import io.emergeos.core.domain.ActionTransition;
@@ -36,6 +40,73 @@ class RecoverableActionServiceTest {
   private static final String ACCOUNT = "simulated-account:action-owner";
 
   @Test
+  void exactApprovalPlansOnceWithoutClaimingOrInvokingProvider() {
+    ArtifactLineage artifact = artifact();
+    InMemoryAttemptStore attempts = new InMemoryAttemptStore();
+    RecordingProvider provider = new RecordingProvider(attempts);
+    RecoverableActionService service = service(attempts, provider, artifact);
+    ActionApprovalScope scope =
+        service.previewApprovalScope(
+            artifact.artifactId(),
+            artifact.current().version(),
+            artifact.current().contentHash());
+    PlanLocalApprovalCommand command =
+        new PlanLocalApprovalCommand(
+            artifact.artifactId(),
+            artifact.current().version(),
+            artifact.current().contentHash(),
+            "exact-approval-nonce",
+            scope.scopeSchema(),
+            scope.scopeHash());
+
+    RecoverableActionService.PlannedApproval created = service.planApproval(command);
+    RecoverableActionService.PlannedApproval replayed = service.planApproval(command);
+    attempts.artifact = revised(artifact);
+    RecoverableActionService.PlannedApproval replayedAfterHeadAdvanced =
+        service.planApproval(command);
+
+    assertTrue(created.created());
+    assertFalse(replayed.created());
+    assertFalse(replayedAfterHeadAdvanced.created());
+    assertEquals(created.attempt(), replayed.attempt());
+    assertEquals(created.attempt(), replayedAfterHeadAdvanced.attempt());
+    assertEquals(ActionAttemptStatus.PLANNED, created.attempt().status());
+    assertEquals(0, created.attempt().capabilityUsedCalls());
+    assertEquals(1, created.attempt().transitions().size());
+    assertNull(created.attempt().receipt());
+    assertTrue(provider.requests.isEmpty());
+    assertEquals(
+        created.attempt(),
+        service.getPlannedExplicitApproval(created.attempt().attemptId()));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            transitioned(
+                created.attempt(),
+                ActionAttemptStatus.DISPATCHING,
+                1,
+                null,
+                NOW.plusSeconds(1)));
+    assertEquals(ActionAttemptStatus.PLANNED, attempts.current.status());
+    assertEquals(created.attempt(), attempts.current);
+    assertEquals(
+        created.attempt(),
+        service.getPlannedExplicitApproval(created.attempt().attemptId()));
+    assertThrows(
+        ApprovalStaleException.class,
+        () ->
+            service.planApproval(
+                new PlanLocalApprovalCommand(
+                    artifact.artifactId(),
+                    artifact.current().version() + 1,
+                    artifact.current().contentHash(),
+                    "stale-approval-nonce",
+                    scope.scopeSchema(),
+                    scope.scopeHash())));
+    assertEquals(created.attempt(), attempts.current);
+  }
+
+  @Test
   void persistsAndClaimsBeforeProviderThenReconcilesOneDefiniteReceipt() {
     ArtifactLineage artifact = artifact();
     InMemoryAttemptStore attempts = new InMemoryAttemptStore();
@@ -64,6 +135,9 @@ class RecoverableActionServiceTest {
     assertEquals(
         ProviderActionRequest.ProviderOperation.EXECUTE,
         provider.requests.getFirst().operation());
+    assertThrows(
+        java.util.NoSuchElementException.class,
+        () -> service.getPlannedExplicitApproval(unknown.attemptId()));
 
     ActionAttempt succeeded = service.reconcile(unknown.attemptId());
 
@@ -85,6 +159,139 @@ class RecoverableActionServiceTest {
 
     assertEquals(succeeded, service.reconcile(succeeded.attemptId()));
     assertEquals(2, provider.requests.size());
+  }
+
+  @Test
+  void preV17UnprovenUnknownHistoryCannotBeReconciledOrMutated() {
+    ArtifactLineage artifact = artifact();
+    InMemoryAttemptStore attempts = new InMemoryAttemptStore();
+    RecordingProvider provider = new RecordingProvider(attempts);
+    RecoverableActionService service = service(attempts, provider, artifact);
+    ActionApprovalScope scope =
+        service.previewApprovalScope(
+            artifact.artifactId(),
+            artifact.current().version(),
+            artifact.current().contentHash());
+    ActionAttempt planned =
+        service
+            .planApproval(
+                new PlanLocalApprovalCommand(
+                    artifact.artifactId(),
+                    artifact.current().version(),
+                    artifact.current().contentHash(),
+                    "pre-v17-unproven-reconcile",
+                    scope.scopeSchema(),
+                    scope.scopeHash()))
+            .attempt();
+    ActionApprovalScope legacyProvenScope =
+        new ActionApprovalScope(
+            ActionApprovalScope.CONFIGURED_LOCAL_PRINCIPAL,
+            planned.plan().principalId(),
+            ActionApprovalScope.LEGACY_SERVER_IMPLICIT,
+            ActionApprovalScope.SIMULATED_PROVIDER_V1,
+            planned.plan().actionType(),
+            planned.plan().targetRef(),
+            planned.plan().artifactId(),
+            planned.plan().artifactVersion(),
+            planned.plan().artifactHash(),
+            planned.plan().risk(),
+            planned.plan().policyVersion(),
+            planned.capability().connector(),
+            planned.capability().audience(),
+            planned.capability().accountRef(),
+            planned.approvalScope().capabilityTtlMicros(),
+            planned.capability().maxCalls());
+    ActionAttempt legacyPlanned =
+        new ActionAttempt(
+            planned.attemptId(),
+            planned.plan(),
+            planned.approval(),
+            planned.capability(),
+            planned.status(),
+            planned.capabilityUsedCalls(),
+            planned.transitions(),
+            planned.receipt(),
+            legacyProvenScope);
+    ActionAttempt dispatching =
+        transitioned(legacyPlanned, ActionAttemptStatus.DISPATCHING, 1, null, NOW);
+    ActionAttempt provenUnknown =
+        transitioned(dispatching, ActionAttemptStatus.UNKNOWN, 1, null, NOW);
+    ActionAttempt historicalUnknown =
+        new ActionAttempt(
+            provenUnknown.attemptId(),
+            provenUnknown.plan(),
+            provenUnknown.approval(),
+            provenUnknown.capability(),
+            provenUnknown.status(),
+            provenUnknown.capabilityUsedCalls(),
+            provenUnknown.transitions(),
+            provenUnknown.receipt());
+    attempts.current = historicalUnknown;
+    attempts.stateVersion = 2;
+    provider.results.add(new ProviderResult.Unknown());
+
+    assertEquals(
+        ActionApprovalScope.PRE_V17_UNPROVEN,
+        historicalUnknown.approvalScope().approvalOrigin());
+    assertEquals(
+        ActionApprovalScope.SIMULATED_PROVIDER_V1,
+        historicalUnknown.approvalScope().executionRoute());
+    assertEquals(ActionAttemptStatus.UNKNOWN, historicalUnknown.status());
+    int stateVersionBefore = attempts.stateVersion;
+    List<ActionTransition> transitionsBefore = historicalUnknown.transitions();
+    int usedCallsBefore = historicalUnknown.capabilityUsedCalls();
+    ActionReceipt receiptBefore = historicalUnknown.receipt();
+
+    RuntimeException rejection =
+        assertThrows(
+            RuntimeException.class,
+            () -> service.reconcile(historicalUnknown.attemptId()),
+            "PRE_V17_UNPROVEN_RECONCILE_NOT_REJECTED");
+
+    assertTrue(
+        rejection instanceof IllegalStateException
+            || rejection instanceof java.util.NoSuchElementException
+            || rejection.getClass().getName().startsWith("io.emergeos.core."),
+        "PRE_V17_UNPROVEN_RECONCILE_REJECTION_NOT_TYPED");
+    assertEquals(0, attempts.dispatchClaimCalls, "PRE_V17_UNPROVEN_DISPATCH_CLAIMED");
+    assertEquals(
+        0,
+        attempts.reconciliationClaimCalls,
+        "PRE_V17_UNPROVEN_RECONCILIATION_CLAIMED");
+    assertEquals(
+        stateVersionBefore,
+        attempts.stateVersion,
+        "PRE_V17_UNPROVEN_STATE_VERSION_MUTATED");
+    assertEquals(
+        0L,
+        provider.requests.stream()
+            .filter(
+                request ->
+                    request.operation() == ProviderActionRequest.ProviderOperation.EXECUTE)
+            .count(),
+        "PRE_V17_UNPROVEN_PROVIDER_DISPATCHED");
+    assertEquals(
+        0L,
+        provider.requests.stream()
+            .filter(
+                request ->
+                    request.operation()
+                        == ProviderActionRequest.ProviderOperation.RECONCILE_ONLY)
+            .count(),
+        "PRE_V17_UNPROVEN_PROVIDER_RECONCILED");
+    assertEquals(historicalUnknown, attempts.current, "PRE_V17_UNPROVEN_STORE_MUTATED");
+    assertEquals(
+        transitionsBefore,
+        attempts.current.transitions(),
+        "PRE_V17_UNPROVEN_TRANSITIONS_MUTATED");
+    assertEquals(
+        usedCallsBefore,
+        attempts.current.capabilityUsedCalls(),
+        "PRE_V17_UNPROVEN_USED_CALLS_MUTATED");
+    assertEquals(
+        receiptBefore,
+        attempts.current.receipt(),
+        "PRE_V17_UNPROVEN_RECEIPT_MUTATED");
   }
 
   @Test
@@ -141,6 +348,7 @@ class RecoverableActionServiceTest {
 
   private static RecoverableActionService service(
       InMemoryAttemptStore attempts, ActionProvider provider, ArtifactLineage artifact) {
+    attempts.artifact = artifact;
     return new RecoverableActionService(
         attempts,
         new OwnedArtifactStore(artifact),
@@ -171,6 +379,23 @@ class RecoverableActionServiceTest {
                 1, content, ContentHashes.sha256(content), null, null, NOW.minusSeconds(60))));
   }
 
+  private static ArtifactLineage revised(ArtifactLineage artifact) {
+    String content = "synthetic revised local draft";
+    return new ArtifactLineage(
+        artifact.artifactId(),
+        artifact.principalId(),
+        artifact.sourceCaptureId(),
+        List.of(
+            artifact.current(),
+            new ArtifactLineageEntry(
+                2,
+                content,
+                ContentHashes.sha256(content),
+                1,
+                artifact.current().contentHash(),
+                NOW.plusSeconds(1))));
+  }
+
   private static ActionAttempt transitioned(
       ActionAttempt current,
       ActionAttemptStatus to,
@@ -189,7 +414,8 @@ class RecoverableActionServiceTest {
         to,
         usedCalls,
         transitions,
-        receipt);
+        receipt,
+        current.approvalScope());
   }
 
   private static final class RecordingProvider implements ActionProvider {
@@ -209,7 +435,11 @@ class RecoverableActionServiceTest {
               ? ActionAttemptStatus.DISPATCHING
               : ActionAttemptStatus.RECONCILING;
       assertEquals(expected, durable.status(), "claim must commit before provider access");
-      assertEquals(requests.size() + 1, durable.capabilityUsedCalls());
+      int expectedUsedCalls =
+          request.operation() == ProviderActionRequest.ProviderOperation.EXECUTE
+              ? requests.size() + 1
+              : 2;
+      assertEquals(expectedUsedCalls, durable.capabilityUsedCalls());
       requests.add(request);
       return results.removeFirst();
     }
@@ -217,26 +447,62 @@ class RecoverableActionServiceTest {
 
   private static final class InMemoryAttemptStore implements ActionAttemptStore {
     private ActionAttempt current;
+    private int stateVersion;
+    private int dispatchClaimCalls;
+    private int reconciliationClaimCalls;
 
     @Override
     public PlanResult planOrFind(ActionAttempt proposed) {
-      if (current == null) {
-        current = proposed;
-        return new PlanResult.Accepted(current);
-      }
-      boolean sameRequest =
-          current.plan().principalId().equals(proposed.plan().principalId())
-              && current.connector().equals(proposed.connector())
-              && current.accountRef().equals(proposed.accountRef())
-              && current.plan().artifactId().equals(proposed.plan().artifactId())
-              && current.plan().artifactVersion() == proposed.plan().artifactVersion()
-              && current.plan().artifactHash().equals(proposed.plan().artifactHash())
-              && current.plan().idempotencyKey().equals(proposed.plan().idempotencyKey());
-      return sameRequest ? new PlanResult.Accepted(current) : new PlanResult.Conflict();
+      return plan(proposed, false);
     }
 
     @Override
+    public PlanResult planApprovalOrFind(ActionAttempt proposed) {
+      return plan(proposed, true);
+    }
+
+    private PlanResult plan(ActionAttempt proposed, boolean requireCurrentArtifact) {
+      if (current == null) {
+        if (requireCurrentArtifact
+            && (artifact == null
+                || !artifact.artifactId().equals(proposed.plan().artifactId())
+                || artifact.current().version() != proposed.plan().artifactVersion()
+                || !artifact.current().contentHash().equals(proposed.plan().artifactHash()))) {
+          return new PlanResult.Stale();
+        }
+        current = proposed;
+        return new PlanResult.Accepted(current, true);
+      }
+      boolean sameUniqueKey =
+          current.connector().equals(proposed.connector())
+              && current.accountRef().equals(proposed.accountRef())
+              && current.plan().idempotencyKey().equals(proposed.plan().idempotencyKey());
+      if (sameUniqueKey) {
+        boolean sameRequest =
+            current.plan().principalId().equals(proposed.plan().principalId())
+                && current.plan().artifactId().equals(proposed.plan().artifactId())
+                && current.plan().artifactVersion() == proposed.plan().artifactVersion()
+                && current.plan().artifactHash().equals(proposed.plan().artifactHash());
+        return sameRequest
+            ? new PlanResult.Accepted(current, false)
+            : new PlanResult.Conflict();
+      }
+      if (requireCurrentArtifact
+          && (artifact == null
+              || !artifact.artifactId().equals(proposed.plan().artifactId())
+              || artifact.current().version() != proposed.plan().artifactVersion()
+              || !artifact.current().contentHash().equals(proposed.plan().artifactHash()))) {
+        return new PlanResult.Stale();
+      }
+      current = proposed;
+      return new PlanResult.Accepted(current, true);
+    }
+
+    private ArtifactLineage artifact;
+
+    @Override
     public ClaimResult claimDispatch(ActionAttempt expected, Instant now) {
+      dispatchClaimCalls += 1;
       if (current.status() != ActionAttemptStatus.PLANNED) {
         return new ClaimResult.Observed(current);
       }
@@ -247,11 +513,13 @@ class RecoverableActionServiceTest {
               current.capabilityUsedCalls() + 1,
               null,
               now);
+      stateVersion += 1;
       return new ClaimResult.Claimed(current);
     }
 
     @Override
     public ClaimResult claimReconciliation(ActionAttempt expected, Instant now) {
+      reconciliationClaimCalls += 1;
       if (current.status() != ActionAttemptStatus.UNKNOWN) {
         return new ClaimResult.Observed(current);
       }
@@ -265,6 +533,7 @@ class RecoverableActionServiceTest {
               current.capabilityUsedCalls() + 1,
               null,
               now);
+      stateVersion += 1;
       return new ClaimResult.Claimed(current);
     }
 
@@ -277,6 +546,7 @@ class RecoverableActionServiceTest {
               current.capabilityUsedCalls(),
               null,
               now);
+      stateVersion += 1;
       return current;
     }
 
@@ -290,6 +560,7 @@ class RecoverableActionServiceTest {
               current.capabilityUsedCalls(),
               receipt,
               now);
+      stateVersion += 1;
       return current;
     }
 

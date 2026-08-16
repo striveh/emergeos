@@ -34,6 +34,7 @@ info:
     artifact-lineage-persistence: postgresql
     action-attempt-persistence: postgresql
     action-provider: simulated-loopback-only
+    local-draftbox-persistence: postgresql-artifact-reference-only
     agent-kernel: framework-free-scripted-fake-conductor-with-read-only-worker
     agent-run-persistence: postgresql
     agent-trace-persistence: postgresql
@@ -52,3 +53,5 @@ emerge:
     request-timeout: PT0.5S
     capability-ttl: PT5M
     max-provider-calls: 2
+  local-draftbox:
+    capability-ttl: PT5M
