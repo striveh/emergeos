@@ -1,0 +1,1146 @@
+{
+  "acceptanceRate": 1,
+  "environmentRawSha256": "b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+  "evaluations": [
+    {
+      "armId": "h0-schema-only",
+      "candidateIntegrityHash": "36ff515d77c2d3471ee58dec6243b35ea3262aabd2aaeaea88941ce5ef68ab40",
+      "candidateRef": "harness-candidate://pack010-child-run-1",
+      "evaluatorVersion": "schema-only-eval-v1",
+      "failureCode": null,
+      "repetition": 1,
+      "status": "ACCEPTED"
+    },
+    {
+      "armId": "h1-reference-grounding",
+      "candidateIntegrityHash": "36ff515d77c2d3471ee58dec6243b35ea3262aabd2aaeaea88941ce5ef68ab40",
+      "candidateRef": "harness-candidate://pack010-child-run-1",
+      "evaluatorVersion": "agent-draft-verifier-v1",
+      "failureCode": null,
+      "repetition": 1,
+      "status": "ACCEPTED"
+    },
+    {
+      "armId": "h0-schema-only",
+      "candidateIntegrityHash": "ed6ca325c4763deab5966ac0e70549901c45c3dd9220b4389c6c3438b4031fcd",
+      "candidateRef": "harness-candidate://pack010-child-run-2",
+      "evaluatorVersion": "schema-only-eval-v1",
+      "failureCode": null,
+      "repetition": 2,
+      "status": "ACCEPTED"
+    },
+    {
+      "armId": "h1-reference-grounding",
+      "candidateIntegrityHash": "ed6ca325c4763deab5966ac0e70549901c45c3dd9220b4389c6c3438b4031fcd",
+      "candidateRef": "harness-candidate://pack010-child-run-2",
+      "evaluatorVersion": "agent-draft-verifier-v1",
+      "failureCode": "INVALID_EVIDENCE_CLAIM",
+      "repetition": 2,
+      "status": "REJECTED"
+    },
+    {
+      "armId": "h0-schema-only",
+      "candidateIntegrityHash": "6c20aa911b9e546c6e5c87f3692dda15492ec85d4455c41e2d0e2fe64e3c8c25",
+      "candidateRef": "harness-candidate://pack010-child-run-3",
+      "evaluatorVersion": "schema-only-eval-v1",
+      "failureCode": null,
+      "repetition": 3,
+      "status": "ACCEPTED"
+    },
+    {
+      "armId": "h1-reference-grounding",
+      "candidateIntegrityHash": "6c20aa911b9e546c6e5c87f3692dda15492ec85d4455c41e2d0e2fe64e3c8c25",
+      "candidateRef": "harness-candidate://pack010-child-run-3",
+      "evaluatorVersion": "agent-draft-verifier-v1",
+      "failureCode": null,
+      "repetition": 3,
+      "status": "ACCEPTED"
+    }
+  ],
+  "evaluatorArms": [
+    {
+      "armId": "h0-schema-only",
+      "evaluatorVersion": "schema-only-eval-v1"
+    },
+    {
+      "armId": "h1-reference-grounding",
+      "evaluatorVersion": "agent-draft-verifier-v1"
+    }
+  ],
+  "evaluatorEffects": {
+    "connectorCalls": 0,
+    "credentialReads": 0,
+    "evaluations": 6,
+    "externalSideEffects": 0,
+    "modelInvocations": 0,
+    "networkCalls": 0,
+    "productTruthWrites": 0,
+    "realUserDataReads": 0,
+    "sharedCandidateInputs": 3,
+    "toolExecutions": 0
+  },
+  "graphProtocolVersion": "postgres-graph-terminal-v1",
+  "integrityHash": "3294d622073f72c2a8dac57468164eaf489c2ea48d7905bd7c86d8facc22fd8f",
+  "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+  "packRawSha256": "6be032741abd1a01e2c6dbc93667e6a6977f8ee54d4f7ad10a413c87d8c15ea8",
+  "repetitions": [
+    {
+      "artifactBinding": {
+        "contentHash": "e56e5eff7dbb3f55a4f2c5ea22ea92af49c857d650a84bdbfb35940046a3ef95",
+        "ordinal": 0,
+        "ref": "artifact-version://pack010-artifact-1/1",
+        "role": "ARTIFACT"
+      },
+      "attemptId": "f9941b17bac4bebfcde18d584d8d31b775785bfbca82a8135daf14bbe488a6e1",
+      "candidate": {
+        "attemptId": "f9941b17bac4bebfcde18d584d8d31b775785bfbca82a8135daf14bbe488a6e1",
+        "candidateRef": "harness-candidate://pack010-child-run-1",
+        "childRunId": "pack010-child-run-1",
+        "childTaskId": "pack010-child-task-1",
+        "content": "第1次：参透世界之后，仍然认真生活。🌌",
+        "contentHash": "e56e5eff7dbb3f55a4f2c5ea22ea92af49c857d650a84bdbfb35940046a3ef95",
+        "evidenceRefs": [
+          "capture://pack010-capture"
+        ],
+        "executionSlotId": "pilot-slot-1",
+        "integrityHash": "36ff515d77c2d3471ee58dec6243b35ea3262aabd2aaeaea88941ce5ef68ab40",
+        "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+        "obtainedEvidenceRefs": [
+          "capture://pack010-capture"
+        ],
+        "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+        "repetition": 1,
+        "requiredEvidenceAvailable": true,
+        "requiredEvidenceRef": "capture://pack010-capture",
+        "schemaVersion": "1.0",
+        "sourceRequestOrdinal": 2,
+        "sourceResponseHash": "9521b6ab5e99616747a4031a62b908da42bc5c163b10b44f253b638f668fda30",
+        "traceRootHash": "e31e69cceab4a72c1a2172c63f3d54b98ec7ea55a15596b2378ccc991aa0a7bd"
+      },
+      "childRun": {
+        "bundle": {
+          "checkpointRefs": [],
+          "componentVersions": {
+            "agent": "agent-draft-service-v1",
+            "model-adapter": "openai-responses-protocol-v1",
+            "trace-integrity": "emergeos-length-prefixed-sha256-v1",
+            "verifier": "agent-draft-verifier-v1"
+          },
+          "costUsd": 0.000045,
+          "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+          "experiment": {
+            "arm": "shared-candidate-live-pilot",
+            "repetition": 1
+          },
+          "failureAttribution": null,
+          "handoffRefs": [],
+          "harnessVersion": "framework-free-agent-kernel-v1",
+          "integrityHash": "49dc0e5ad8c5d0e19b6d36d657d8b5aafeac8b1b1574c6411abadc52cc2a7d81",
+          "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+          "latencyMs": 40,
+          "modelResolved": "gpt-5.6-terra",
+          "outcome": "SUCCEEDED",
+          "resourceBindings": [
+            {
+              "contentHash": "519ed7fd7bdae9e11cdb4d2b47edf6ed5c65b371f490cbb7e3fafb2780a36ba3",
+              "ordinal": 0,
+              "ref": "capture://pack010-capture",
+              "role": "EVIDENCE"
+            },
+            {
+              "contentHash": "aab72d3861e743e81e66a94768ab81548767efebc366cdb6b125f5aea19fd606",
+              "ordinal": 0,
+              "ref": "worker-result://pack010-child-run-1",
+              "role": "WORKER_RESULT"
+            }
+          ],
+          "result": {
+            "agentVersion": "agent-draft-service-v1",
+            "artifactRefs": [],
+            "claims": [],
+            "costUsd": 0.000045,
+            "evidenceRefs": [
+              "capture://pack010-capture"
+            ],
+            "failureReason": null,
+            "latencyMs": 40,
+            "receiptRefs": [],
+            "resolvedModel": "gpt-5.6-terra",
+            "runId": "pack010-child-run-1",
+            "schemaVersion": "1.0",
+            "status": "SUCCEEDED",
+            "taskId": "pack010-child-task-1",
+            "tokenCount": 45,
+            "traceRef": "/api/v1/agent-runs/pack010-child-run-1/trace",
+            "uncertainty": [],
+            "verifierVersion": "agent-draft-verifier-v1"
+          },
+          "runId": "pack010-child-run-1",
+          "schemaVersion": "1.1",
+          "task": {
+            "acceptanceChecks": [
+              "uses exact synthetic evidence"
+            ],
+            "allowParallel": false,
+            "budgetUsd": 1,
+            "capabilityRefs": [
+              "capability://worker-handoff/article-draft-read-v1"
+            ],
+            "contextPolicyVersion": "references-first-v1",
+            "dataClass": "PUBLIC",
+            "deadlineMs": 5000,
+            "delegationChain": [
+              "pack010-parent-task-1"
+            ],
+            "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+            "evidenceRefs": [],
+            "id": "pack010-child-task-1",
+            "idempotencyKey": "pack010-request-1",
+            "inputRefs": [
+              "capture://pack010-capture"
+            ],
+            "intent": "Create one PUBLIC synthetic draft for repetition 1",
+            "kind": "PROPOSE_ARTICLE_DRAFT",
+            "latencyClass": "INTERACTIVE",
+            "maxModelSteps": 2,
+            "maxToolCalls": 1,
+            "modalities": [
+              "text"
+            ],
+            "modelProvider": "openai.responses",
+            "modelRequested": "gpt-5.6-terra",
+            "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+            "parentId": "pack010-parent-task-1",
+            "policyVersion": "agent-draft-policy-v1",
+            "pricingProfile": "openai-gpt-5.6-terra-pack010-v1",
+            "principalRef": "owner-public-synthetic",
+            "requiredTools": [
+              "capture.read"
+            ],
+            "returnControlWhen": "return terminal graph truth",
+            "risk": "REVERSIBLE",
+            "schemaVersion": "1.1",
+            "stateVersion": "pack010-state-v1",
+            "toolRegistryVersion": "agent-tools-v2",
+            "unresolvedDecisions": []
+          },
+          "taskId": "pack010-child-task-1",
+          "tokenCount": 45,
+          "toolRegistryVersion": "agent-tools-v2",
+          "traceRef": "/api/v1/agent-runs/pack010-child-run-1/trace",
+          "traceRootHash": "e31e69cceab4a72c1a2172c63f3d54b98ec7ea55a15596b2378ccc991aa0a7bd",
+          "verificationRef": null,
+          "workingSelfRef": null
+        },
+        "completedAt": "2026-07-31T00:00:10.040001Z",
+        "startedAt": "2026-07-31T00:00:10.000001Z",
+        "terminalHash": "a90b36d5aedb21aac838f492bf4b1d5ca6ca0c3865b206ec29101aacbe7198da"
+      },
+      "executionSlotId": "pilot-slot-1",
+      "manifestHash": "f9941b17bac4bebfcde18d584d8d31b775785bfbca82a8135daf14bbe488a6e1",
+      "parentRun": {
+        "bundle": {
+          "checkpointRefs": [],
+          "componentVersions": {
+            "agent": "agent-draft-service-v1",
+            "trace-integrity": "emergeos-length-prefixed-sha256-v1",
+            "verifier": "agent-draft-verifier-v1"
+          },
+          "costUsd": 0.000045,
+          "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+          "experiment": {
+            "arm": "shared-candidate-live-pilot",
+            "repetition": 1
+          },
+          "failureAttribution": null,
+          "handoffRefs": [
+            "agent-run://pack010-child-run-1"
+          ],
+          "harnessVersion": "framework-free-agent-kernel-v1",
+          "integrityHash": "9f5d2a2a3d7542373e0c08a2aa11bb3bfcb4e47e5e1165bbd8fd72404144598c",
+          "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+          "latencyMs": 40,
+          "modelResolved": "gpt-5.6-terra",
+          "outcome": "SUCCEEDED",
+          "resourceBindings": [
+            {
+              "contentHash": "519ed7fd7bdae9e11cdb4d2b47edf6ed5c65b371f490cbb7e3fafb2780a36ba3",
+              "ordinal": 0,
+              "ref": "capture://pack010-capture",
+              "role": "EVIDENCE"
+            },
+            {
+              "contentHash": "e56e5eff7dbb3f55a4f2c5ea22ea92af49c857d650a84bdbfb35940046a3ef95",
+              "ordinal": 0,
+              "ref": "artifact-version://pack010-artifact-1/1",
+              "role": "ARTIFACT"
+            },
+            {
+              "contentHash": "49dc0e5ad8c5d0e19b6d36d657d8b5aafeac8b1b1574c6411abadc52cc2a7d81",
+              "ordinal": 0,
+              "ref": "agent-run://pack010-child-run-1",
+              "role": "HANDOFF"
+            }
+          ],
+          "result": {
+            "agentVersion": "agent-draft-service-v1",
+            "artifactRefs": [
+              "artifact-version://pack010-artifact-1/1"
+            ],
+            "claims": [],
+            "costUsd": 0.000045,
+            "evidenceRefs": [
+              "capture://pack010-capture"
+            ],
+            "failureReason": null,
+            "latencyMs": 40,
+            "receiptRefs": [],
+            "resolvedModel": "gpt-5.6-terra",
+            "runId": "pack010-parent-run-1",
+            "schemaVersion": "1.0",
+            "status": "SUCCEEDED",
+            "taskId": "pack010-parent-task-1",
+            "tokenCount": 45,
+            "traceRef": "/api/v1/agent-runs/pack010-parent-run-1/trace",
+            "uncertainty": [],
+            "verifierVersion": "agent-draft-verifier-v1"
+          },
+          "runId": "pack010-parent-run-1",
+          "schemaVersion": "1.0",
+          "task": {
+            "acceptanceChecks": [
+              "uses exact synthetic evidence"
+            ],
+            "allowParallel": false,
+            "budgetUsd": 1,
+            "capabilityRefs": [],
+            "contextPolicyVersion": "references-first-v1",
+            "dataClass": "PUBLIC",
+            "deadlineMs": 5000,
+            "delegationChain": [],
+            "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+            "evidenceRefs": [],
+            "id": "pack010-parent-task-1",
+            "idempotencyKey": null,
+            "inputRefs": [
+              "capture://pack010-capture"
+            ],
+            "intent": "Create one PUBLIC synthetic draft for repetition 1",
+            "kind": "CREATE_ARTICLE_DRAFT",
+            "latencyClass": "INTERACTIVE",
+            "maxModelSteps": 2,
+            "maxToolCalls": 1,
+            "modalities": [
+              "text"
+            ],
+            "modelProvider": null,
+            "modelRequested": null,
+            "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+            "parentId": null,
+            "policyVersion": "agent-draft-policy-v1",
+            "pricingProfile": null,
+            "principalRef": "owner-public-synthetic",
+            "requiredTools": [
+              "capture.read"
+            ],
+            "returnControlWhen": "return terminal graph truth",
+            "risk": "REVERSIBLE",
+            "schemaVersion": "1.0",
+            "stateVersion": "pack010-state-v1",
+            "toolRegistryVersion": "agent-tools-v2",
+            "unresolvedDecisions": []
+          },
+          "taskId": "pack010-parent-task-1",
+          "tokenCount": 45,
+          "toolRegistryVersion": "agent-tools-v2",
+          "traceRef": "/api/v1/agent-runs/pack010-parent-run-1/trace",
+          "traceRootHash": "9d0439819eb194a93e05596e7213888c7dbd5dfb3742dda7c6b32608580a4fd4",
+          "verificationRef": null,
+          "workingSelfRef": null
+        },
+        "completedAt": "2026-07-31T00:00:10.041001Z",
+        "startedAt": "2026-07-31T00:00:09.999001Z",
+        "terminalHash": "2d877a5fd5b2d7818bf21853927658d3046734bba18c03b10ac3b13d2d310c98"
+      },
+      "providerAttributions": [
+        {
+          "attributionHash": "afa390f0b1e904878483fb25e1ebbc694296e0db525d2b19e0df56d238d09c4d",
+          "cachedInputNanoUsdPerToken": 1000,
+          "cachedInputTokens": 0,
+          "inputTokens": 10,
+          "modelRequested": "gpt-5.6-terra",
+          "modelResolved": "gpt-5.6-terra",
+          "observedCostUsd": 0.000015,
+          "outputNanoUsdPerToken": 1000,
+          "outputTokens": 5,
+          "pricingModelRequested": "gpt-5.6-terra",
+          "pricingProfileFingerprint": "2d8bbc939f6b0e4e85c28efa11ba995801b823020df77d7f1e99d254f38c859f",
+          "pricingProfileId": "openai-gpt-5.6-terra-pack010-v1",
+          "pricingProvider": "openai",
+          "providerActor": "openai.responses",
+          "reasoningOutputTokens": 5,
+          "requestHash": "b1d62094ac334eb5e9d9fa3e6d4b55696c8bdf9eb6091410e388c4d9686d1ef2",
+          "requestOrdinal": 1,
+          "responseHash": "52e87ddefa33889f86ba289c0a04e5a500cc898bf4db0dc374100473862c506f",
+          "totalTokens": 15,
+          "uncachedInputNanoUsdPerToken": 1000
+        },
+        {
+          "attributionHash": "c861aa931e18bb9251d7092375a5bf5a614835acf10adb1d979ffad51fa8e5a4",
+          "cachedInputNanoUsdPerToken": 1000,
+          "cachedInputTokens": 0,
+          "inputTokens": 20,
+          "modelRequested": "gpt-5.6-terra",
+          "modelResolved": "gpt-5.6-terra",
+          "observedCostUsd": 0.000030,
+          "outputNanoUsdPerToken": 1000,
+          "outputTokens": 10,
+          "pricingModelRequested": "gpt-5.6-terra",
+          "pricingProfileFingerprint": "2d8bbc939f6b0e4e85c28efa11ba995801b823020df77d7f1e99d254f38c859f",
+          "pricingProfileId": "openai-gpt-5.6-terra-pack010-v1",
+          "pricingProvider": "openai",
+          "providerActor": "openai.responses",
+          "reasoningOutputTokens": 0,
+          "requestHash": "624c531b83e1403d29df9baeac1e139b729b680bf48797e728eb249646c74755",
+          "requestOrdinal": 2,
+          "responseHash": "9521b6ab5e99616747a4031a62b908da42bc5c163b10b44f253b638f668fda30",
+          "totalTokens": 30,
+          "uncachedInputNanoUsdPerToken": 1000
+        }
+      ],
+      "repetition": 1,
+      "terminalSeal": {
+        "attemptId": "f9941b17bac4bebfcde18d584d8d31b775785bfbca82a8135daf14bbe488a6e1",
+        "billingStatus": "ATTRIBUTED",
+        "candidateIntegrityHash": "36ff515d77c2d3471ee58dec6243b35ea3262aabd2aaeaea88941ce5ef68ab40",
+        "candidateRef": "harness-candidate://pack010-child-run-1",
+        "childTerminalHash": "a90b36d5aedb21aac838f492bf4b1d5ca6ca0c3865b206ec29101aacbe7198da",
+        "finalHeadHash": "7fa286b9c0317d8d3e3cd1520d7fc8f0d94e52127ac6307648483b4d2f42631c",
+        "finalSequence": 17,
+        "graphOutcome": "SUCCEEDED",
+        "manifestHash": "f9941b17bac4bebfcde18d584d8d31b775785bfbca82a8135daf14bbe488a6e1",
+        "parentTerminalHash": "2d877a5fd5b2d7818bf21853927658d3046734bba18c03b10ac3b13d2d310c98",
+        "preSealHeadHash": "d7e404192c1f23ba347fb7f8c8a18d4b3ced26edb89313653a6f6545dc4efe1e",
+        "providerAttributionHashes": [
+          "afa390f0b1e904878483fb25e1ebbc694296e0db525d2b19e0df56d238d09c4d",
+          "c861aa931e18bb9251d7092375a5bf5a614835acf10adb1d979ffad51fa8e5a4"
+        ],
+        "sealHash": "f302554f69e4f6fbc0fe8dc1ac29692619b08cd6afae46cf146f567af33915a9",
+        "sealedAt": "2026-07-31T00:00:10.042001Z"
+      },
+      "workerResult": {
+        "childRunId": "pack010-child-run-1",
+        "childTaskId": "pack010-child-task-1",
+        "content": "第1次：参透世界之后，仍然认真生活。🌌",
+        "contentHash": "e56e5eff7dbb3f55a4f2c5ea22ea92af49c857d650a84bdbfb35940046a3ef95",
+        "evidenceRefs": [
+          "capture://pack010-capture"
+        ],
+        "integrityHash": "aab72d3861e743e81e66a94768ab81548767efebc366cdb6b125f5aea19fd606",
+        "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+        "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+        "schemaVersion": "1.0",
+        "workerResultRef": "worker-result://pack010-child-run-1"
+      }
+    },
+    {
+      "artifactBinding": null,
+      "attemptId": "b29e51d7ef5060e73a3c004855503f6e8ec9e8dc77ef2307c6637801321a9f36",
+      "candidate": {
+        "attemptId": "b29e51d7ef5060e73a3c004855503f6e8ec9e8dc77ef2307c6637801321a9f36",
+        "candidateRef": "harness-candidate://pack010-child-run-2",
+        "childRunId": "pack010-child-run-2",
+        "childTaskId": "pack010-child-task-2",
+        "content": "第2次：结构合法，但引用了错误证据。🧭",
+        "contentHash": "b33bc6dbf8dadcf1d99951e493c2dbc3dda4f532571377bb9e84f72e9a887d0e",
+        "evidenceRefs": [
+          "capture://other"
+        ],
+        "executionSlotId": "pilot-slot-2",
+        "integrityHash": "ed6ca325c4763deab5966ac0e70549901c45c3dd9220b4389c6c3438b4031fcd",
+        "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+        "obtainedEvidenceRefs": [
+          "capture://pack010-capture"
+        ],
+        "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+        "repetition": 2,
+        "requiredEvidenceAvailable": true,
+        "requiredEvidenceRef": "capture://pack010-capture",
+        "schemaVersion": "1.0",
+        "sourceRequestOrdinal": 2,
+        "sourceResponseHash": "09e70a91fa64e32176fa549b2d94736e18b6f353b55744c9c081644412a339f6",
+        "traceRootHash": "dbe50ce27f428c89b83d03b53107df47e2d9b07884ee1a842feaf795a6f56881"
+      },
+      "childRun": {
+        "bundle": {
+          "checkpointRefs": [],
+          "componentVersions": {
+            "agent": "agent-draft-service-v1",
+            "model-adapter": "openai-responses-protocol-v1",
+            "trace-integrity": "emergeos-length-prefixed-sha256-v1",
+            "verifier": "agent-draft-verifier-v1"
+          },
+          "costUsd": 0.000045,
+          "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+          "experiment": {
+            "arm": "shared-candidate-live-pilot",
+            "repetition": 2
+          },
+          "failureAttribution": "INVALID_EVIDENCE_CLAIM",
+          "handoffRefs": [],
+          "harnessVersion": "framework-free-agent-kernel-v1",
+          "integrityHash": "31f4a0c769d8054eecf6367e2c6d78290f8fcaf07c4149ec6b1ad15cba04d86a",
+          "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+          "latencyMs": 40,
+          "modelResolved": "gpt-5.6-terra",
+          "outcome": "FAILED",
+          "resourceBindings": [
+            {
+              "contentHash": "519ed7fd7bdae9e11cdb4d2b47edf6ed5c65b371f490cbb7e3fafb2780a36ba3",
+              "ordinal": 0,
+              "ref": "capture://pack010-capture",
+              "role": "EVIDENCE"
+            }
+          ],
+          "result": {
+            "agentVersion": "agent-draft-service-v1",
+            "artifactRefs": [],
+            "claims": [],
+            "costUsd": 0.000045,
+            "evidenceRefs": [
+              "capture://pack010-capture"
+            ],
+            "failureReason": "INVALID_EVIDENCE_CLAIM",
+            "latencyMs": 40,
+            "receiptRefs": [],
+            "resolvedModel": "gpt-5.6-terra",
+            "runId": "pack010-child-run-2",
+            "schemaVersion": "1.0",
+            "status": "FAILED",
+            "taskId": "pack010-child-task-2",
+            "tokenCount": 45,
+            "traceRef": "/api/v1/agent-runs/pack010-child-run-2/trace",
+            "uncertainty": [],
+            "verifierVersion": "agent-draft-verifier-v1"
+          },
+          "runId": "pack010-child-run-2",
+          "schemaVersion": "1.1",
+          "task": {
+            "acceptanceChecks": [
+              "uses exact synthetic evidence"
+            ],
+            "allowParallel": false,
+            "budgetUsd": 1,
+            "capabilityRefs": [
+              "capability://worker-handoff/article-draft-read-v1"
+            ],
+            "contextPolicyVersion": "references-first-v1",
+            "dataClass": "PUBLIC",
+            "deadlineMs": 5000,
+            "delegationChain": [
+              "pack010-parent-task-2"
+            ],
+            "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+            "evidenceRefs": [],
+            "id": "pack010-child-task-2",
+            "idempotencyKey": "pack010-request-2",
+            "inputRefs": [
+              "capture://pack010-capture"
+            ],
+            "intent": "Create one PUBLIC synthetic draft for repetition 2",
+            "kind": "PROPOSE_ARTICLE_DRAFT",
+            "latencyClass": "INTERACTIVE",
+            "maxModelSteps": 2,
+            "maxToolCalls": 1,
+            "modalities": [
+              "text"
+            ],
+            "modelProvider": "openai.responses",
+            "modelRequested": "gpt-5.6-terra",
+            "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+            "parentId": "pack010-parent-task-2",
+            "policyVersion": "agent-draft-policy-v1",
+            "pricingProfile": "openai-gpt-5.6-terra-pack010-v1",
+            "principalRef": "owner-public-synthetic",
+            "requiredTools": [
+              "capture.read"
+            ],
+            "returnControlWhen": "return terminal graph truth",
+            "risk": "REVERSIBLE",
+            "schemaVersion": "1.1",
+            "stateVersion": "pack010-state-v1",
+            "toolRegistryVersion": "agent-tools-v2",
+            "unresolvedDecisions": []
+          },
+          "taskId": "pack010-child-task-2",
+          "tokenCount": 45,
+          "toolRegistryVersion": "agent-tools-v2",
+          "traceRef": "/api/v1/agent-runs/pack010-child-run-2/trace",
+          "traceRootHash": "dbe50ce27f428c89b83d03b53107df47e2d9b07884ee1a842feaf795a6f56881",
+          "verificationRef": null,
+          "workingSelfRef": null
+        },
+        "completedAt": "2026-07-31T00:00:20.040001Z",
+        "startedAt": "2026-07-31T00:00:20.000001Z",
+        "terminalHash": "2ae9b6acc22799795a1a4500b9a5b637c2fa86a6804e1a369f3ad99003071894"
+      },
+      "executionSlotId": "pilot-slot-2",
+      "manifestHash": "b29e51d7ef5060e73a3c004855503f6e8ec9e8dc77ef2307c6637801321a9f36",
+      "parentRun": {
+        "bundle": {
+          "checkpointRefs": [],
+          "componentVersions": {
+            "agent": "agent-draft-service-v1",
+            "trace-integrity": "emergeos-length-prefixed-sha256-v1",
+            "verifier": "agent-draft-verifier-v1"
+          },
+          "costUsd": 0.000045,
+          "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+          "experiment": {
+            "arm": "shared-candidate-live-pilot",
+            "repetition": 2
+          },
+          "failureAttribution": "HANDOFF_CHILD_FAILED",
+          "handoffRefs": [
+            "agent-run://pack010-child-run-2"
+          ],
+          "harnessVersion": "framework-free-agent-kernel-v1",
+          "integrityHash": "02ce421f1b270c47d73b9457d6fed6a225ddfd3767d46bb7220b2572371e3b0e",
+          "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+          "latencyMs": 40,
+          "modelResolved": "gpt-5.6-terra",
+          "outcome": "FAILED",
+          "resourceBindings": [
+            {
+              "contentHash": "519ed7fd7bdae9e11cdb4d2b47edf6ed5c65b371f490cbb7e3fafb2780a36ba3",
+              "ordinal": 0,
+              "ref": "capture://pack010-capture",
+              "role": "EVIDENCE"
+            },
+            {
+              "contentHash": "31f4a0c769d8054eecf6367e2c6d78290f8fcaf07c4149ec6b1ad15cba04d86a",
+              "ordinal": 0,
+              "ref": "agent-run://pack010-child-run-2",
+              "role": "HANDOFF"
+            }
+          ],
+          "result": {
+            "agentVersion": "agent-draft-service-v1",
+            "artifactRefs": [],
+            "claims": [],
+            "costUsd": 0.000045,
+            "evidenceRefs": [
+              "capture://pack010-capture"
+            ],
+            "failureReason": "HANDOFF_CHILD_FAILED",
+            "latencyMs": 40,
+            "receiptRefs": [],
+            "resolvedModel": "gpt-5.6-terra",
+            "runId": "pack010-parent-run-2",
+            "schemaVersion": "1.0",
+            "status": "FAILED",
+            "taskId": "pack010-parent-task-2",
+            "tokenCount": 45,
+            "traceRef": "/api/v1/agent-runs/pack010-parent-run-2/trace",
+            "uncertainty": [],
+            "verifierVersion": "agent-draft-verifier-v1"
+          },
+          "runId": "pack010-parent-run-2",
+          "schemaVersion": "1.0",
+          "task": {
+            "acceptanceChecks": [
+              "uses exact synthetic evidence"
+            ],
+            "allowParallel": false,
+            "budgetUsd": 1,
+            "capabilityRefs": [],
+            "contextPolicyVersion": "references-first-v1",
+            "dataClass": "PUBLIC",
+            "deadlineMs": 5000,
+            "delegationChain": [],
+            "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+            "evidenceRefs": [],
+            "id": "pack010-parent-task-2",
+            "idempotencyKey": null,
+            "inputRefs": [
+              "capture://pack010-capture"
+            ],
+            "intent": "Create one PUBLIC synthetic draft for repetition 2",
+            "kind": "CREATE_ARTICLE_DRAFT",
+            "latencyClass": "INTERACTIVE",
+            "maxModelSteps": 2,
+            "maxToolCalls": 1,
+            "modalities": [
+              "text"
+            ],
+            "modelProvider": null,
+            "modelRequested": null,
+            "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+            "parentId": null,
+            "policyVersion": "agent-draft-policy-v1",
+            "pricingProfile": null,
+            "principalRef": "owner-public-synthetic",
+            "requiredTools": [
+              "capture.read"
+            ],
+            "returnControlWhen": "return terminal graph truth",
+            "risk": "REVERSIBLE",
+            "schemaVersion": "1.0",
+            "stateVersion": "pack010-state-v1",
+            "toolRegistryVersion": "agent-tools-v2",
+            "unresolvedDecisions": []
+          },
+          "taskId": "pack010-parent-task-2",
+          "tokenCount": 45,
+          "toolRegistryVersion": "agent-tools-v2",
+          "traceRef": "/api/v1/agent-runs/pack010-parent-run-2/trace",
+          "traceRootHash": "db67e58ec288b3adda87126141aae93f43809b7580babc9fc272ab983d5f0cc3",
+          "verificationRef": null,
+          "workingSelfRef": null
+        },
+        "completedAt": "2026-07-31T00:00:20.041001Z",
+        "startedAt": "2026-07-31T00:00:19.999001Z",
+        "terminalHash": "c83d26eaef1a370405d14af09a0a91d0b701ddd83aaeae08d5b747648217ec3a"
+      },
+      "providerAttributions": [
+        {
+          "attributionHash": "2d18d9becccde13f626b872c7dae9533aca390c8b0ed26d2b613e4f63c886aeb",
+          "cachedInputNanoUsdPerToken": 1000,
+          "cachedInputTokens": 0,
+          "inputTokens": 10,
+          "modelRequested": "gpt-5.6-terra",
+          "modelResolved": "gpt-5.6-terra",
+          "observedCostUsd": 0.000015,
+          "outputNanoUsdPerToken": 1000,
+          "outputTokens": 5,
+          "pricingModelRequested": "gpt-5.6-terra",
+          "pricingProfileFingerprint": "2d8bbc939f6b0e4e85c28efa11ba995801b823020df77d7f1e99d254f38c859f",
+          "pricingProfileId": "openai-gpt-5.6-terra-pack010-v1",
+          "pricingProvider": "openai",
+          "providerActor": "openai.responses",
+          "reasoningOutputTokens": 5,
+          "requestHash": "e9e005f72005047125ea775af175490f14806afbcebcaedcd6fdd6e84a4fc7b9",
+          "requestOrdinal": 1,
+          "responseHash": "4d2eed64d96dbc7460c7d5c779295719cc70e8876057de3af6614e6f8a2f07ca",
+          "totalTokens": 15,
+          "uncachedInputNanoUsdPerToken": 1000
+        },
+        {
+          "attributionHash": "713f220584bffab46daf6fe7f65f70a6e9a23c3e3d9275d68d50e92bd0dc795c",
+          "cachedInputNanoUsdPerToken": 1000,
+          "cachedInputTokens": 0,
+          "inputTokens": 20,
+          "modelRequested": "gpt-5.6-terra",
+          "modelResolved": "gpt-5.6-terra",
+          "observedCostUsd": 0.000030,
+          "outputNanoUsdPerToken": 1000,
+          "outputTokens": 10,
+          "pricingModelRequested": "gpt-5.6-terra",
+          "pricingProfileFingerprint": "2d8bbc939f6b0e4e85c28efa11ba995801b823020df77d7f1e99d254f38c859f",
+          "pricingProfileId": "openai-gpt-5.6-terra-pack010-v1",
+          "pricingProvider": "openai",
+          "providerActor": "openai.responses",
+          "reasoningOutputTokens": 0,
+          "requestHash": "ef06ff2a9a0e4d076b92b23d7dee96defbf8dcd09e4b765233a8e2666b2b5da7",
+          "requestOrdinal": 2,
+          "responseHash": "09e70a91fa64e32176fa549b2d94736e18b6f353b55744c9c081644412a339f6",
+          "totalTokens": 30,
+          "uncachedInputNanoUsdPerToken": 1000
+        }
+      ],
+      "repetition": 2,
+      "terminalSeal": {
+        "attemptId": "b29e51d7ef5060e73a3c004855503f6e8ec9e8dc77ef2307c6637801321a9f36",
+        "billingStatus": "ATTRIBUTED",
+        "candidateIntegrityHash": "ed6ca325c4763deab5966ac0e70549901c45c3dd9220b4389c6c3438b4031fcd",
+        "candidateRef": "harness-candidate://pack010-child-run-2",
+        "childTerminalHash": "2ae9b6acc22799795a1a4500b9a5b637c2fa86a6804e1a369f3ad99003071894",
+        "finalHeadHash": "5417542d3b514a44e1982f09dd5e7d60347ea5837b52e321f27422284b2ddb01",
+        "finalSequence": 17,
+        "graphOutcome": "FAILED",
+        "manifestHash": "b29e51d7ef5060e73a3c004855503f6e8ec9e8dc77ef2307c6637801321a9f36",
+        "parentTerminalHash": "c83d26eaef1a370405d14af09a0a91d0b701ddd83aaeae08d5b747648217ec3a",
+        "preSealHeadHash": "7764297d89817597bd94e4df6625fb91fc2e2c8463ad75df5aceb6e35912ced7",
+        "providerAttributionHashes": [
+          "2d18d9becccde13f626b872c7dae9533aca390c8b0ed26d2b613e4f63c886aeb",
+          "713f220584bffab46daf6fe7f65f70a6e9a23c3e3d9275d68d50e92bd0dc795c"
+        ],
+        "sealHash": "02fc303b8c6f6a3a16fe66684d530d49178a5bbaefd1e24fee2cf8d7c42304fc",
+        "sealedAt": "2026-07-31T00:00:20.042001Z"
+      },
+      "workerResult": null
+    },
+    {
+      "artifactBinding": {
+        "contentHash": "4403f277dc5b9a75ee3f273fffe8ddd9b13c4096e28b5f477982373dcdbfdcbb",
+        "ordinal": 0,
+        "ref": "artifact-version://pack010-artifact-3/1",
+        "role": "ARTIFACT"
+      },
+      "attemptId": "d0afbf8fe26488c5c5ca37a16eab281ce2c4fd557dd1e877cab510f28e3bf49f",
+      "candidate": {
+        "attemptId": "d0afbf8fe26488c5c5ca37a16eab281ce2c4fd557dd1e877cab510f28e3bf49f",
+        "candidateRef": "harness-candidate://pack010-child-run-3",
+        "childRunId": "pack010-child-run-3",
+        "childTaskId": "pack010-child-task-3",
+        "content": "第3次：参透世界之后，仍然认真生活。🌌",
+        "contentHash": "4403f277dc5b9a75ee3f273fffe8ddd9b13c4096e28b5f477982373dcdbfdcbb",
+        "evidenceRefs": [
+          "capture://pack010-capture"
+        ],
+        "executionSlotId": "pilot-slot-3",
+        "integrityHash": "6c20aa911b9e546c6e5c87f3692dda15492ec85d4455c41e2d0e2fe64e3c8c25",
+        "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+        "obtainedEvidenceRefs": [
+          "capture://pack010-capture"
+        ],
+        "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+        "repetition": 3,
+        "requiredEvidenceAvailable": true,
+        "requiredEvidenceRef": "capture://pack010-capture",
+        "schemaVersion": "1.0",
+        "sourceRequestOrdinal": 2,
+        "sourceResponseHash": "018d0e9a91bc657eb1043aad00dcd8860babd26b22823f84d0d85de4ff33c8b2",
+        "traceRootHash": "54a8dcc32408bcc4e2f524fce16feb66eb20f3997c77015af6b525a6d532adaa"
+      },
+      "childRun": {
+        "bundle": {
+          "checkpointRefs": [],
+          "componentVersions": {
+            "agent": "agent-draft-service-v1",
+            "model-adapter": "openai-responses-protocol-v1",
+            "trace-integrity": "emergeos-length-prefixed-sha256-v1",
+            "verifier": "agent-draft-verifier-v1"
+          },
+          "costUsd": 0.000045,
+          "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+          "experiment": {
+            "arm": "shared-candidate-live-pilot",
+            "repetition": 3
+          },
+          "failureAttribution": null,
+          "handoffRefs": [],
+          "harnessVersion": "framework-free-agent-kernel-v1",
+          "integrityHash": "ad5f7299d7456c5575de1c2e421b3b5f74cd82c9b39787558fdd16f5f8aa2dc4",
+          "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+          "latencyMs": 40,
+          "modelResolved": "gpt-5.6-terra",
+          "outcome": "SUCCEEDED",
+          "resourceBindings": [
+            {
+              "contentHash": "519ed7fd7bdae9e11cdb4d2b47edf6ed5c65b371f490cbb7e3fafb2780a36ba3",
+              "ordinal": 0,
+              "ref": "capture://pack010-capture",
+              "role": "EVIDENCE"
+            },
+            {
+              "contentHash": "d8806db190b34acdf3aae4ca2612b3185c1be0f73be2c6512ed180a2ea327d43",
+              "ordinal": 0,
+              "ref": "worker-result://pack010-child-run-3",
+              "role": "WORKER_RESULT"
+            }
+          ],
+          "result": {
+            "agentVersion": "agent-draft-service-v1",
+            "artifactRefs": [],
+            "claims": [],
+            "costUsd": 0.000045,
+            "evidenceRefs": [
+              "capture://pack010-capture"
+            ],
+            "failureReason": null,
+            "latencyMs": 40,
+            "receiptRefs": [],
+            "resolvedModel": "gpt-5.6-terra",
+            "runId": "pack010-child-run-3",
+            "schemaVersion": "1.0",
+            "status": "SUCCEEDED",
+            "taskId": "pack010-child-task-3",
+            "tokenCount": 45,
+            "traceRef": "/api/v1/agent-runs/pack010-child-run-3/trace",
+            "uncertainty": [],
+            "verifierVersion": "agent-draft-verifier-v1"
+          },
+          "runId": "pack010-child-run-3",
+          "schemaVersion": "1.1",
+          "task": {
+            "acceptanceChecks": [
+              "uses exact synthetic evidence"
+            ],
+            "allowParallel": false,
+            "budgetUsd": 1,
+            "capabilityRefs": [
+              "capability://worker-handoff/article-draft-read-v1"
+            ],
+            "contextPolicyVersion": "references-first-v1",
+            "dataClass": "PUBLIC",
+            "deadlineMs": 5000,
+            "delegationChain": [
+              "pack010-parent-task-3"
+            ],
+            "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+            "evidenceRefs": [],
+            "id": "pack010-child-task-3",
+            "idempotencyKey": "pack010-request-3",
+            "inputRefs": [
+              "capture://pack010-capture"
+            ],
+            "intent": "Create one PUBLIC synthetic draft for repetition 3",
+            "kind": "PROPOSE_ARTICLE_DRAFT",
+            "latencyClass": "INTERACTIVE",
+            "maxModelSteps": 2,
+            "maxToolCalls": 1,
+            "modalities": [
+              "text"
+            ],
+            "modelProvider": "openai.responses",
+            "modelRequested": "gpt-5.6-terra",
+            "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+            "parentId": "pack010-parent-task-3",
+            "policyVersion": "agent-draft-policy-v1",
+            "pricingProfile": "openai-gpt-5.6-terra-pack010-v1",
+            "principalRef": "owner-public-synthetic",
+            "requiredTools": [
+              "capture.read"
+            ],
+            "returnControlWhen": "return terminal graph truth",
+            "risk": "REVERSIBLE",
+            "schemaVersion": "1.1",
+            "stateVersion": "pack010-state-v1",
+            "toolRegistryVersion": "agent-tools-v2",
+            "unresolvedDecisions": []
+          },
+          "taskId": "pack010-child-task-3",
+          "tokenCount": 45,
+          "toolRegistryVersion": "agent-tools-v2",
+          "traceRef": "/api/v1/agent-runs/pack010-child-run-3/trace",
+          "traceRootHash": "54a8dcc32408bcc4e2f524fce16feb66eb20f3997c77015af6b525a6d532adaa",
+          "verificationRef": null,
+          "workingSelfRef": null
+        },
+        "completedAt": "2026-07-31T00:00:30.040001Z",
+        "startedAt": "2026-07-31T00:00:30.000001Z",
+        "terminalHash": "3c3d2ef3e35295316959a21ab6143124cc834dea329a29dbd71163642b3cf12c"
+      },
+      "executionSlotId": "pilot-slot-3",
+      "manifestHash": "d0afbf8fe26488c5c5ca37a16eab281ce2c4fd557dd1e877cab510f28e3bf49f",
+      "parentRun": {
+        "bundle": {
+          "checkpointRefs": [],
+          "componentVersions": {
+            "agent": "agent-draft-service-v1",
+            "trace-integrity": "emergeos-length-prefixed-sha256-v1",
+            "verifier": "agent-draft-verifier-v1"
+          },
+          "costUsd": 0.000045,
+          "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+          "experiment": {
+            "arm": "shared-candidate-live-pilot",
+            "repetition": 3
+          },
+          "failureAttribution": null,
+          "handoffRefs": [
+            "agent-run://pack010-child-run-3"
+          ],
+          "harnessVersion": "framework-free-agent-kernel-v1",
+          "integrityHash": "bd06edc6e27069a8a989bbbb6f2beb424b8627e5ed494fcb594f64acc48d0110",
+          "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+          "latencyMs": 40,
+          "modelResolved": "gpt-5.6-terra",
+          "outcome": "SUCCEEDED",
+          "resourceBindings": [
+            {
+              "contentHash": "519ed7fd7bdae9e11cdb4d2b47edf6ed5c65b371f490cbb7e3fafb2780a36ba3",
+              "ordinal": 0,
+              "ref": "capture://pack010-capture",
+              "role": "EVIDENCE"
+            },
+            {
+              "contentHash": "4403f277dc5b9a75ee3f273fffe8ddd9b13c4096e28b5f477982373dcdbfdcbb",
+              "ordinal": 0,
+              "ref": "artifact-version://pack010-artifact-3/1",
+              "role": "ARTIFACT"
+            },
+            {
+              "contentHash": "ad5f7299d7456c5575de1c2e421b3b5f74cd82c9b39787558fdd16f5f8aa2dc4",
+              "ordinal": 0,
+              "ref": "agent-run://pack010-child-run-3",
+              "role": "HANDOFF"
+            }
+          ],
+          "result": {
+            "agentVersion": "agent-draft-service-v1",
+            "artifactRefs": [
+              "artifact-version://pack010-artifact-3/1"
+            ],
+            "claims": [],
+            "costUsd": 0.000045,
+            "evidenceRefs": [
+              "capture://pack010-capture"
+            ],
+            "failureReason": null,
+            "latencyMs": 40,
+            "receiptRefs": [],
+            "resolvedModel": "gpt-5.6-terra",
+            "runId": "pack010-parent-run-3",
+            "schemaVersion": "1.0",
+            "status": "SUCCEEDED",
+            "taskId": "pack010-parent-task-3",
+            "tokenCount": 45,
+            "traceRef": "/api/v1/agent-runs/pack010-parent-run-3/trace",
+            "uncertainty": [],
+            "verifierVersion": "agent-draft-verifier-v1"
+          },
+          "runId": "pack010-parent-run-3",
+          "schemaVersion": "1.0",
+          "task": {
+            "acceptanceChecks": [
+              "uses exact synthetic evidence"
+            ],
+            "allowParallel": false,
+            "budgetUsd": 1,
+            "capabilityRefs": [],
+            "contextPolicyVersion": "references-first-v1",
+            "dataClass": "PUBLIC",
+            "deadlineMs": 5000,
+            "delegationChain": [],
+            "environmentSnapshotRef": "environment://sha256:b7707a0d4c1d9c7d97f2f6b94941e30b135d26309f2235cf266180f26e3a9a4e",
+            "evidenceRefs": [],
+            "id": "pack010-parent-task-3",
+            "idempotencyKey": null,
+            "inputRefs": [
+              "capture://pack010-capture"
+            ],
+            "intent": "Create one PUBLIC synthetic draft for repetition 3",
+            "kind": "CREATE_ARTICLE_DRAFT",
+            "latencyClass": "INTERACTIVE",
+            "maxModelSteps": 2,
+            "maxToolCalls": 1,
+            "modalities": [
+              "text"
+            ],
+            "modelProvider": null,
+            "modelRequested": null,
+            "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+            "parentId": null,
+            "policyVersion": "agent-draft-policy-v1",
+            "pricingProfile": null,
+            "principalRef": "owner-public-synthetic",
+            "requiredTools": [
+              "capture.read"
+            ],
+            "returnControlWhen": "return terminal graph truth",
+            "risk": "REVERSIBLE",
+            "schemaVersion": "1.0",
+            "stateVersion": "pack010-state-v1",
+            "toolRegistryVersion": "agent-tools-v2",
+            "unresolvedDecisions": []
+          },
+          "taskId": "pack010-parent-task-3",
+          "tokenCount": 45,
+          "toolRegistryVersion": "agent-tools-v2",
+          "traceRef": "/api/v1/agent-runs/pack010-parent-run-3/trace",
+          "traceRootHash": "2c93c81ca79e61341dbeb539a0b67fac4c3012657fe6b5c8ab57ea568193b343",
+          "verificationRef": null,
+          "workingSelfRef": null
+        },
+        "completedAt": "2026-07-31T00:00:30.041001Z",
+        "startedAt": "2026-07-31T00:00:29.999001Z",
+        "terminalHash": "f39f994c1455f7a72d0454b98881833e558d1365bbd8755005499bd289590343"
+      },
+      "providerAttributions": [
+        {
+          "attributionHash": "1350bb151478dcbd39af48d89314d483df7470ed0e89d54b3e6c19354477af14",
+          "cachedInputNanoUsdPerToken": 1000,
+          "cachedInputTokens": 0,
+          "inputTokens": 10,
+          "modelRequested": "gpt-5.6-terra",
+          "modelResolved": "gpt-5.6-terra",
+          "observedCostUsd": 0.000015,
+          "outputNanoUsdPerToken": 1000,
+          "outputTokens": 5,
+          "pricingModelRequested": "gpt-5.6-terra",
+          "pricingProfileFingerprint": "2d8bbc939f6b0e4e85c28efa11ba995801b823020df77d7f1e99d254f38c859f",
+          "pricingProfileId": "openai-gpt-5.6-terra-pack010-v1",
+          "pricingProvider": "openai",
+          "providerActor": "openai.responses",
+          "reasoningOutputTokens": 5,
+          "requestHash": "c8d026ce196ab7ef8bf07124791a17e8b75fbddaea01576cbd3b1e2ba3d7ed40",
+          "requestOrdinal": 1,
+          "responseHash": "d1d02f15d7c1a15b20b4541da48fa65bbd6290ab6a4143dad6345e37768de400",
+          "totalTokens": 15,
+          "uncachedInputNanoUsdPerToken": 1000
+        },
+        {
+          "attributionHash": "8fa3a0e499209cd031cefcdde1551838c1dfacfd4656cd677da327c3f9a8b88b",
+          "cachedInputNanoUsdPerToken": 1000,
+          "cachedInputTokens": 0,
+          "inputTokens": 20,
+          "modelRequested": "gpt-5.6-terra",
+          "modelResolved": "gpt-5.6-terra",
+          "observedCostUsd": 0.000030,
+          "outputNanoUsdPerToken": 1000,
+          "outputTokens": 10,
+          "pricingModelRequested": "gpt-5.6-terra",
+          "pricingProfileFingerprint": "2d8bbc939f6b0e4e85c28efa11ba995801b823020df77d7f1e99d254f38c859f",
+          "pricingProfileId": "openai-gpt-5.6-terra-pack010-v1",
+          "pricingProvider": "openai",
+          "providerActor": "openai.responses",
+          "reasoningOutputTokens": 0,
+          "requestHash": "e77117cf490d80fc74db702d3b972414825e87cbe9123e25ab2ca77334b943c9",
+          "requestOrdinal": 2,
+          "responseHash": "018d0e9a91bc657eb1043aad00dcd8860babd26b22823f84d0d85de4ff33c8b2",
+          "totalTokens": 30,
+          "uncachedInputNanoUsdPerToken": 1000
+        }
+      ],
+      "repetition": 3,
+      "terminalSeal": {
+        "attemptId": "d0afbf8fe26488c5c5ca37a16eab281ce2c4fd557dd1e877cab510f28e3bf49f",
+        "billingStatus": "ATTRIBUTED",
+        "candidateIntegrityHash": "6c20aa911b9e546c6e5c87f3692dda15492ec85d4455c41e2d0e2fe64e3c8c25",
+        "candidateRef": "harness-candidate://pack010-child-run-3",
+        "childTerminalHash": "3c3d2ef3e35295316959a21ab6143124cc834dea329a29dbd71163642b3cf12c",
+        "finalHeadHash": "5a1fc1346c35c5e0411b40305f7d04ff347b94ce2f64ae46581bf3f75166066c",
+        "finalSequence": 17,
+        "graphOutcome": "SUCCEEDED",
+        "manifestHash": "d0afbf8fe26488c5c5ca37a16eab281ce2c4fd557dd1e877cab510f28e3bf49f",
+        "parentTerminalHash": "f39f994c1455f7a72d0454b98881833e558d1365bbd8755005499bd289590343",
+        "preSealHeadHash": "84cc5d6f234ee84581e11ebf586cddf6e1faf5fbeac30ef1b103236509a360dc",
+        "providerAttributionHashes": [
+          "1350bb151478dcbd39af48d89314d483df7470ed0e89d54b3e6c19354477af14",
+          "8fa3a0e499209cd031cefcdde1551838c1dfacfd4656cd677da327c3f9a8b88b"
+        ],
+        "sealHash": "c71af8b9e72d4d61acfa39f5a2bf617e09316c4192748af612c259c478caa3b5",
+        "sealedAt": "2026-07-31T00:00:30.042001Z"
+      },
+      "workerResult": {
+        "childRunId": "pack010-child-run-3",
+        "childTaskId": "pack010-child-task-3",
+        "content": "第3次：参透世界之后，仍然认真生活。🌌",
+        "contentHash": "4403f277dc5b9a75ee3f273fffe8ddd9b13c4096e28b5f477982373dcdbfdcbb",
+        "evidenceRefs": [
+          "capture://pack010-capture"
+        ],
+        "integrityHash": "d8806db190b34acdf3aae4ca2612b3185c1be0f73be2c6512ed180a2ea327d43",
+        "integrityProfile": "emergeos-length-prefixed-sha256-v1",
+        "outputSchema": "urn:emergeos:schema:internal:agent-draft-proposal:v1",
+        "schemaVersion": "1.0",
+        "workerResultRef": "worker-result://pack010-child-run-3"
+      }
+    }
+  ],
+  "reportId": "harness-evaluation-report-01c1b2dd6eaedee7a2abf6bd865616cba2802de9076f0ee34145fb7251a5f14c",
+  "reportKind": "LIVE_MODEL_SHARED_CANDIDATE_VERIFIER_PILOT",
+  "reportStatus": "COMPLETE",
+  "schemaVersion": "1.0",
+  "usageAggregate": {
+    "cachedInputTokens": 0,
+    "inputTokens": 90,
+    "observedCostUsd": 0.000135,
+    "outputTokens": 45,
+    "providerRequests": 6,
+    "reasoningOutputTokens": 15,
+    "totalTokens": 135
+  }
+}

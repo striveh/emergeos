@@ -1,0 +1,208 @@
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  color: #17221d;
+  background: #f4f1e9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% 10%, rgb(221 236 225 / 85%), transparent 34rem),
+    linear-gradient(145deg, #f8f5ed, #edf2ec);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.capture-shell {
+  width: min(100% - 2rem, 46rem);
+  margin-inline: auto;
+  padding: clamp(3rem, 9vw, 7rem) 0;
+}
+
+.capture-heading {
+  margin-bottom: 1.75rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: #49705c;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.6rem, 9vw, 5rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 0.96;
+}
+
+.intro {
+  max-width: 34rem;
+  margin: 1rem 0 0;
+  color: #526159;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.capture-card {
+  display: grid;
+  gap: 1.35rem;
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+  border: 1px solid rgb(76 105 89 / 24%);
+  border-radius: 1.5rem;
+  background: rgb(255 255 252 / 82%);
+  box-shadow: 0 1.5rem 4rem rgb(41 60 50 / 10%);
+  backdrop-filter: blur(18px);
+}
+
+.field-stack {
+  display: grid;
+  gap: 0.6rem;
+}
+
+label,
+legend {
+  color: #26372e;
+  font-weight: 700;
+}
+
+textarea,
+input[type="url"] {
+  width: 100%;
+  border: 1px solid #bdc9c1;
+  border-radius: 0.9rem;
+  color: #17221d;
+  background: #fff;
+  outline: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+textarea {
+  min-height: 12rem;
+  padding: 1rem;
+  line-height: 1.65;
+  resize: vertical;
+}
+
+input[type="url"] {
+  padding: 0.85rem 0.95rem;
+}
+
+textarea:focus-visible,
+input[type="url"]:focus-visible,
+button:focus-visible,
+input[type="radio"]:focus-visible + label {
+  border-color: #2e7251;
+  box-shadow: 0 0 0 0.22rem rgb(56 134 94 / 18%);
+}
+
+fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+legend {
+  margin-bottom: 0.65rem;
+}
+
+.source-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.source-option input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+}
+
+.source-option label {
+  display: block;
+  min-width: 6rem;
+  padding: 0.72rem 1rem;
+  border: 1px solid #c4cec8;
+  border-radius: 999px;
+  color: #44564c;
+  text-align: center;
+  cursor: pointer;
+}
+
+.source-option input:checked + label {
+  border-color: #2e7251;
+  color: #fff;
+  background: #2e7251;
+}
+
+.capture-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+button {
+  min-height: 2.9rem;
+  padding: 0.75rem 1.2rem;
+  border: 0;
+  border-radius: 0.85rem;
+  color: #fff;
+  background: #172c21;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #244937;
+}
+
+.status {
+  margin: 0;
+  color: #647168;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+[hidden] {
+  display: none;
+}
+
+@media (max-width: 34rem) {
+  .capture-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}

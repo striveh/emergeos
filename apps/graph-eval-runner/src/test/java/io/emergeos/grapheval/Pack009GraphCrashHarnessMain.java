@@ -8,6 +8,7 @@ import io.emergeos.adapters.openai.OpenAiResponsesModel;
 import io.emergeos.adapters.openai.ReviewedOpenAiClient;
 import io.emergeos.adapters.postgres.PostgresCaptureStore;
 import io.emergeos.adapters.postgres.PostgresGraphAttemptStore;
+import io.emergeos.adapters.postgres.Pack010GraphTerminalStoreBridge;
 import io.emergeos.core.application.GraphAttemptCoordinator;
 import io.emergeos.core.domain.GraphAttemptConflictException;
 import io.emergeos.core.domain.GraphOperatorApproval;
@@ -118,7 +119,7 @@ public final class Pack009GraphCrashHarnessMain {
     System.out.flush();
 
     PostgresGraphAttemptStore graphStore =
-        new PostgresGraphAttemptStore(dataSource);
+        Pack010GraphTerminalStoreBridge.openWriter(dataSource);
     GraphAttemptCoordinator coordinator =
         new GraphAttemptCoordinator(graphStore);
     var manifest = Pack009GraphEvalCatalog.manifest();

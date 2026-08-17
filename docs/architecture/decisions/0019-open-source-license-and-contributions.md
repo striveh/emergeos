@@ -1,4 +1,4 @@
-# ADR-0012：采用 Apache-2.0、DCO 与公开治理边界
+# ADR-0019：采用 Apache-2.0、DCO 与公开治理边界
 
 - Status: Accepted
 - Date: 2026-08-01

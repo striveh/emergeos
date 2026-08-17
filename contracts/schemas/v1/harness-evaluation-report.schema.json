@@ -1,0 +1,383 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:emergeos:schema:v1:harness-evaluation-report",
+  "title": "HarnessEvaluationReport",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "id200": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,199}$"
+    },
+    "safeName200": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^(?=[\\s\\S]*[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000])[^\\u0000]*$"
+    },
+    "safeModel512": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~:/-]{0,511}$"
+    },
+    "safeCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "usd": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 999999.999999,
+      "multipleOf": 0.000001
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\\.[0-9]{1,6})?Z$"
+    },
+    "evaluatorArm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["armId", "evaluatorVersion"],
+      "properties": {
+        "armId": {"$ref": "#/$defs/id200"},
+        "evaluatorVersion": {"$ref": "#/$defs/id200"}
+      }
+    },
+    "providerAttribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestOrdinal",
+        "requestHash",
+        "responseHash",
+        "providerActor",
+        "modelRequested",
+        "modelResolved",
+        "pricingProfileId",
+        "pricingProvider",
+        "pricingModelRequested",
+        "uncachedInputNanoUsdPerToken",
+        "cachedInputNanoUsdPerToken",
+        "outputNanoUsdPerToken",
+        "pricingProfileFingerprint",
+        "inputTokens",
+        "cachedInputTokens",
+        "outputTokens",
+        "reasoningOutputTokens",
+        "totalTokens",
+        "observedCostUsd",
+        "attributionHash"
+      ],
+      "properties": {
+        "requestOrdinal": {"type": "integer", "enum": [1, 2]},
+        "requestHash": {"$ref": "#/$defs/hash"},
+        "responseHash": {"$ref": "#/$defs/hash"},
+        "providerActor": {"$ref": "#/$defs/safeName200"},
+        "modelRequested": {"$ref": "#/$defs/safeModel512"},
+        "modelResolved": {"$ref": "#/$defs/safeModel512"},
+        "pricingProfileId": {"$ref": "#/$defs/id200"},
+        "pricingProvider": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+        },
+        "pricingModelRequested": {"$ref": "#/$defs/safeModel512"},
+        "uncachedInputNanoUsdPerToken": {"$ref": "#/$defs/safeCount"},
+        "cachedInputNanoUsdPerToken": {"$ref": "#/$defs/safeCount"},
+        "outputNanoUsdPerToken": {"$ref": "#/$defs/safeCount"},
+        "pricingProfileFingerprint": {"$ref": "#/$defs/hash"},
+        "inputTokens": {"$ref": "#/$defs/safeCount"},
+        "cachedInputTokens": {"$ref": "#/$defs/safeCount"},
+        "outputTokens": {"$ref": "#/$defs/safeCount"},
+        "reasoningOutputTokens": {"$ref": "#/$defs/safeCount"},
+        "totalTokens": {"$ref": "#/$defs/safeCount"},
+        "observedCostUsd": {"$ref": "#/$defs/usd"},
+        "attributionHash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "terminalRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startedAt", "completedAt", "bundle", "terminalHash"],
+      "properties": {
+        "startedAt": {"$ref": "#/$defs/timestamp"},
+        "completedAt": {"$ref": "#/$defs/timestamp"},
+        "bundle": {"$ref": "urn:emergeos:schema:v1:harness-run-bundle"},
+        "terminalHash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "terminalSeal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attemptId",
+        "manifestHash",
+        "finalSequence",
+        "preSealHeadHash",
+        "finalHeadHash",
+        "graphOutcome",
+        "billingStatus",
+        "providerAttributionHashes",
+        "candidateRef",
+        "candidateIntegrityHash",
+        "childTerminalHash",
+        "parentTerminalHash",
+        "sealHash",
+        "sealedAt"
+      ],
+      "properties": {
+        "attemptId": {"$ref": "#/$defs/hash"},
+        "manifestHash": {"$ref": "#/$defs/hash"},
+        "finalSequence": {"const": 17},
+        "preSealHeadHash": {"$ref": "#/$defs/hash"},
+        "finalHeadHash": {"$ref": "#/$defs/hash"},
+        "graphOutcome": {"enum": ["SUCCEEDED", "FAILED"]},
+        "billingStatus": {"const": "ATTRIBUTED"},
+        "providerAttributionHashes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/hash"}
+        },
+        "candidateRef": {
+          "type": "string",
+          "pattern": "^harness-candidate://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+        },
+        "candidateIntegrityHash": {"$ref": "#/$defs/hash"},
+        "childTerminalHash": {"$ref": "#/$defs/hash"},
+        "parentTerminalHash": {"$ref": "#/$defs/hash"},
+        "sealHash": {"$ref": "#/$defs/hash"},
+        "sealedAt": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "artifactBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "ordinal", "ref", "contentHash"],
+      "properties": {
+        "role": {"const": "ARTIFACT"},
+        "ordinal": {"const": 0},
+        "ref": {
+          "type": "string",
+          "pattern": "^artifact-version://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}/[1-9][0-9]*$"
+        },
+        "contentHash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "repetition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repetition",
+        "executionSlotId",
+        "attemptId",
+        "manifestHash",
+        "providerAttributions",
+        "parentRun",
+        "childRun",
+        "candidate",
+        "workerResult",
+        "artifactBinding",
+        "terminalSeal"
+      ],
+      "properties": {
+        "repetition": {"type": "integer", "enum": [1, 2, 3]},
+        "executionSlotId": {"$ref": "#/$defs/id200"},
+        "attemptId": {"$ref": "#/$defs/hash"},
+        "manifestHash": {"$ref": "#/$defs/hash"},
+        "providerAttributions": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {"allOf": [{"$ref": "#/$defs/providerAttribution"}, {"type": "object", "properties": {"requestOrdinal": {"const": 1}}}]},
+            {"allOf": [{"$ref": "#/$defs/providerAttribution"}, {"type": "object", "properties": {"requestOrdinal": {"const": 2}}}]}
+          ],
+          "items": false
+        },
+        "parentRun": {"$ref": "#/$defs/terminalRun"},
+        "childRun": {"$ref": "#/$defs/terminalRun"},
+        "candidate": {"$ref": "urn:emergeos:schema:v1:harness-candidate-envelope"},
+        "workerResult": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "urn:emergeos:schema:v1:worker-result-envelope"}
+          ]
+        },
+        "artifactBinding": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/artifactBinding"}
+          ]
+        },
+        "terminalSeal": {"$ref": "#/$defs/terminalSeal"}
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repetition",
+        "armId",
+        "evaluatorVersion",
+        "candidateRef",
+        "candidateIntegrityHash",
+        "status",
+        "failureCode"
+      ],
+      "properties": {
+        "repetition": {"type": "integer", "enum": [1, 2, 3]},
+        "armId": {"$ref": "#/$defs/id200"},
+        "evaluatorVersion": {"$ref": "#/$defs/id200"},
+        "candidateRef": {
+          "type": "string",
+          "pattern": "^harness-candidate://[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$"
+        },
+        "candidateIntegrityHash": {"$ref": "#/$defs/hash"},
+        "status": {"enum": ["ACCEPTED", "REJECTED"]},
+        "failureCode": {
+          "type": ["string", "null"],
+          "enum": [
+            null,
+            "MISSING_REQUIRED_EVIDENCE",
+            "UNSAFE_EVIDENCE_BINDING",
+            "INVALID_EVIDENCE_CLAIM",
+            "REQUIRED_EVIDENCE_NOT_FOUND"
+          ]
+        }
+      }
+    },
+    "usageAggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerRequests",
+        "inputTokens",
+        "cachedInputTokens",
+        "outputTokens",
+        "reasoningOutputTokens",
+        "totalTokens",
+        "observedCostUsd"
+      ],
+      "properties": {
+        "providerRequests": {"$ref": "#/$defs/safeCount"},
+        "inputTokens": {"$ref": "#/$defs/safeCount"},
+        "cachedInputTokens": {"$ref": "#/$defs/safeCount"},
+        "outputTokens": {"$ref": "#/$defs/safeCount"},
+        "reasoningOutputTokens": {"$ref": "#/$defs/safeCount"},
+        "totalTokens": {"$ref": "#/$defs/safeCount"},
+        "observedCostUsd": {"$ref": "#/$defs/usd"}
+      }
+    },
+    "evaluatorEffects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sharedCandidateInputs",
+        "evaluations",
+        "modelInvocations",
+        "toolExecutions",
+        "networkCalls",
+        "credentialReads",
+        "connectorCalls",
+        "productTruthWrites",
+        "externalSideEffects",
+        "realUserDataReads"
+      ],
+      "properties": {
+        "sharedCandidateInputs": {"const": 3},
+        "evaluations": {"const": 6},
+        "modelInvocations": {"const": 0},
+        "toolExecutions": {"const": 0},
+        "networkCalls": {"const": 0},
+        "credentialReads": {"const": 0},
+        "connectorCalls": {"const": 0},
+        "productTruthWrites": {"const": 0},
+        "externalSideEffects": {"const": 0},
+        "realUserDataReads": {"const": 0}
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "reportKind",
+    "reportId",
+    "graphProtocolVersion",
+    "packRawSha256",
+    "environmentRawSha256",
+    "evaluatorArms",
+    "repetitions",
+    "evaluations",
+    "usageAggregate",
+    "evaluatorEffects",
+    "reportStatus",
+    "integrityProfile",
+    "integrityHash"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "reportKind": {"const": "LIVE_MODEL_SHARED_CANDIDATE_VERIFIER_PILOT"},
+    "reportId": {
+      "type": "string",
+      "pattern": "^harness-evaluation-report-[a-f0-9]{64}$"
+    },
+    "graphProtocolVersion": {"const": "postgres-graph-terminal-v1"},
+    "packRawSha256": {"$ref": "#/$defs/hash"},
+    "environmentRawSha256": {"$ref": "#/$defs/hash"},
+    "evaluatorArms": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "allOf": [
+            {"$ref": "#/$defs/evaluatorArm"},
+            {"type": "object", "properties": {"armId": {"const": "h0-schema-only"}, "evaluatorVersion": {"const": "schema-only-eval-v1"}}}
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/evaluatorArm"},
+            {"type": "object", "properties": {"armId": {"const": "h1-reference-grounding"}, "evaluatorVersion": {"const": "agent-draft-verifier-v1"}}}
+          ]
+        }
+      ],
+      "items": false
+    },
+    "repetitions": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {"allOf": [{"$ref": "#/$defs/repetition"}, {"type": "object", "properties": {"repetition": {"const": 1}}}]},
+        {"allOf": [{"$ref": "#/$defs/repetition"}, {"type": "object", "properties": {"repetition": {"const": 2}}}]},
+        {"allOf": [{"$ref": "#/$defs/repetition"}, {"type": "object", "properties": {"repetition": {"const": 3}}}]}
+      ],
+      "items": false
+    },
+    "evaluations": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        {"allOf": [{"$ref": "#/$defs/evaluation"}, {"type": "object", "properties": {"repetition": {"const": 1}, "armId": {"const": "h0-schema-only"}, "evaluatorVersion": {"const": "schema-only-eval-v1"}}}]},
+        {"allOf": [{"$ref": "#/$defs/evaluation"}, {"type": "object", "properties": {"repetition": {"const": 1}, "armId": {"const": "h1-reference-grounding"}, "evaluatorVersion": {"const": "agent-draft-verifier-v1"}}}]},
+        {"allOf": [{"$ref": "#/$defs/evaluation"}, {"type": "object", "properties": {"repetition": {"const": 2}, "armId": {"const": "h0-schema-only"}, "evaluatorVersion": {"const": "schema-only-eval-v1"}}}]},
+        {"allOf": [{"$ref": "#/$defs/evaluation"}, {"type": "object", "properties": {"repetition": {"const": 2}, "armId": {"const": "h1-reference-grounding"}, "evaluatorVersion": {"const": "agent-draft-verifier-v1"}}}]},
+        {"allOf": [{"$ref": "#/$defs/evaluation"}, {"type": "object", "properties": {"repetition": {"const": 3}, "armId": {"const": "h0-schema-only"}, "evaluatorVersion": {"const": "schema-only-eval-v1"}}}]},
+        {"allOf": [{"$ref": "#/$defs/evaluation"}, {"type": "object", "properties": {"repetition": {"const": 3}, "armId": {"const": "h1-reference-grounding"}, "evaluatorVersion": {"const": "agent-draft-verifier-v1"}}}]}
+      ],
+      "items": false
+    },
+    "usageAggregate": {"$ref": "#/$defs/usageAggregate"},
+    "evaluatorEffects": {"$ref": "#/$defs/evaluatorEffects"},
+    "reportStatus": {"const": "COMPLETE"},
+    "integrityProfile": {"const": "emergeos-length-prefixed-sha256-v1"},
+    "integrityHash": {"$ref": "#/$defs/hash"}
+  }
+}

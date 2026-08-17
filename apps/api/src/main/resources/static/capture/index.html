@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>快速捕获 · EmergeOS</title>
+    <link rel="stylesheet" href="/capture/quick-capture.css">
+    <script src="/capture/quick-capture.js" defer></script>
+  </head>
+  <body>
+    <main class="capture-shell">
+      <header class="capture-heading">
+        <p class="eyebrow">EmergeOS · Quick Capture</p>
+        <h1>记下此刻</h1>
+        <p class="intro">先保存原始想法，再决定它将走向哪里。</p>
+      </header>
+
+      <form
+        id="quick-capture-form"
+        class="capture-card"
+        action="/capture"
+        method="post"
+        autocomplete="off"
+      >
+        <div class="field-stack">
+          <label for="capture-content">你看见或想到什么？</label>
+          <textarea
+            id="capture-content"
+            name="content"
+            rows="8"
+            maxlength="12000"
+            placeholder="写下事实、线索或刚刚冒出的念头……"
+            required
+          ></textarea>
+        </div>
+
+        <fieldset>
+          <legend>来源类型</legend>
+          <div class="source-options">
+            <div class="source-option">
+              <input
+                id="source-text"
+                name="sourceType"
+                type="radio"
+                value="TEXT"
+                checked
+              >
+              <label for="source-text">文字</label>
+            </div>
+            <div class="source-option">
+              <input
+                id="source-link"
+                name="sourceType"
+                type="radio"
+                value="LINK"
+              >
+              <label for="source-link">链接</label>
+            </div>
+          </div>
+        </fieldset>
+
+        <div id="link-source-field" class="field-stack" hidden>
+          <label for="source-ref">原始链接</label>
+          <input
+            id="source-ref"
+            name="sourceRef"
+            type="url"
+            inputmode="url"
+            autocomplete="url"
+            placeholder="https://example.com/…"
+          >
+        </div>
+
+        <div class="capture-actions">
+          <button type="submit">暂存这条想法</button>
+          <p id="capture-status" class="status" role="status" aria-live="polite">
+            当前切片仅提供本地界面，尚未启用提交。
+          </p>
+        </div>
+      </form>
+    </main>
+  </body>
+</html>

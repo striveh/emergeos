@@ -3,6 +3,7 @@ package io.emergeos.grapheval;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -218,12 +219,18 @@ class GraphEvalArchitectureTest {
       jar.closeEntry();
     }
 
-    assertEquals(
-        List.of(
+    List<String> violations =
+        GraphEvalBytecodeGate.shippingJarViolations(jarPath);
+    assertTrue(
+        violations.contains(
             harnessResource
-                + " -> archive:unreviewed-graph-eval-class"),
-        GraphEvalBytecodeGate.shippingJarViolations(
-            jarPath));
+                + " -> archive:unreviewed-graph-eval-class"));
+    assertTrue(
+        violations.stream()
+            .anyMatch(
+                violation ->
+                    violation.contains(
+                        "capability:unreviewed-consumer:")));
   }
 
   @Test

@@ -42,14 +42,24 @@ public final class PostgresArtifactLineageStore implements ArtifactLineageStore 
 
   private final JdbcClient jdbc;
   private final TransactionTemplate transactions;
+  private final CreateProbe createProbe;
 
   public PostgresArtifactLineageStore(
       DataSource dataSource, PlatformTransactionManager transactionManager) {
+    this(dataSource, transactionManager, ignored -> {});
+  }
+
+  PostgresArtifactLineageStore(
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager,
+      CreateProbe createProbe) {
     this.jdbc = JdbcClient.create(Objects.requireNonNull(dataSource, "dataSource"));
     this.transactions =
         new TransactionTemplate(
             Objects.requireNonNull(transactionManager, "transactionManager"));
     this.transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+    this.createProbe =
+        Objects.requireNonNull(createProbe, "createProbe");
   }
 
   @Override
@@ -78,10 +88,24 @@ public final class PostgresArtifactLineageStore implements ArtifactLineageStore 
                   .param("currentVersion", initial.version())
                   .param("currentHash", initial.contentHash())
                   .update();
+              createProbe.hit(
+                  CreateStatement.ARTIFACT_ROW_INSERTED);
               insertVersion(proposed.principalId(), proposed.artifactId(), initial);
+              createProbe.hit(
+                  CreateStatement.ARTIFACT_VERSION_INSERTED);
               return requireOwned(proposed.principalId(), proposed.artifactId());
             }),
         "Artifact create transaction result");
+  }
+
+  enum CreateStatement {
+    ARTIFACT_ROW_INSERTED,
+    ARTIFACT_VERSION_INSERTED
+  }
+
+  @FunctionalInterface
+  interface CreateProbe {
+    void hit(CreateStatement statement);
   }
 
   @Override

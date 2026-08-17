@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "0.2",
+  "reviewedAt": "2026-08-01",
+  "javaRelease": 21,
+  "openaiJavaVersion": "4.43.0",
+  "protocolVersion": "openai-responses-v1-openai-java-4.43.0",
+  "harnessVersion": "framework-free-agent-kernel-v2",
+  "toolRegistryVersion": "agent-tools-v2",
+  "tools": [
+    "capture.read"
+  ],
+  "providerApi": "responses",
+  "model": {
+    "requested": "gpt-5.6-terra",
+    "pricingFamily": "gpt-5.6-terra",
+    "maxInputTokens": 272000,
+    "maxOutputTokens": 128000,
+    "reference": "docs/rfcs/0007-attributed-terminal-graph-and-shared-candidate-harness.md"
+  },
+  "requestPolicy": {
+    "store": false,
+    "parallelToolCalls": false,
+    "serviceTier": "offline",
+    "maxRetries": 0,
+    "productionBaseUrl": null,
+    "productionBaseUrlOverrideAllowed": false,
+    "ambientProxyAllowed": false,
+    "sdkLogLevel": "OFF",
+    "maximumProviderRequests": 2,
+    "maximumInputTokensPerRequest": 272000,
+    "maximumOutputTokensPerRequest": 1000,
+    "networkAllowed": false,
+    "realModelAllowed": false,
+    "credentialReadsAllowed": false
+  },
+  "pricing": {
+    "kind": "SYNTHETIC_NON_BILLING",
+    "currency": "USD",
+    "unit": "NANO_USD_PER_TOKEN",
+    "uncachedInput": 1000,
+    "cachedInput": 1000,
+    "output": 1000,
+    "fullRunReservationUsd": "0.546000",
+    "reference": "docs/rfcs/0007-attributed-terminal-graph-and-shared-candidate-harness.md"
+  },
+  "inputTokenUpperBound": {
+    "method": "REVIEWED_SYNTHETIC_BOUND",
+    "tokens": 272000,
+    "reference": "docs/rfcs/0007-attributed-terminal-graph-and-shared-candidate-harness.md"
+  },
+  "promptCachePolicy": {
+    "mode": "DISABLED_OFFLINE_PREFLIGHT",
+    "cacheWriteFeeIncluded": false,
+    "reference": "docs/rfcs/0007-attributed-terminal-graph-and-shared-candidate-harness.md"
+  },
+  "evaluatorPolicy": {
+    "arms": [
+      "h0-schema-only",
+      "h1-reference-grounding"
+    ],
+    "sharedCandidateInputs": 3,
+    "evaluations": 6,
+    "networkCalls": 0,
+    "credentialReads": 0,
+    "connectorCalls": 0,
+    "productTruthWrites": 0,
+    "externalSideEffects": 0,
+    "realUserDataReads": 0
+  },
+  "operatorGate": {
+    "postgresqlCanonicalGraphAttemptRequired": true,
+    "stableExecutionSlotRequired": true,
+    "realTtyChallengeRequired": true,
+    "credentialReadAfterDurableChildConsume": true,
+    "durableGraphJournalRequired": true,
+    "terminalGraphSealRequired": true,
+    "sequentialOwnerApprovalRequired": true,
+    "shippingExecuteRouteEnabled": false
+  }
+}

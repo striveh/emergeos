@@ -9,7 +9,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-/** Applies the private Agent API cache contract before MVC can reject a request. */
+/** Applies the private API cache contract before MVC can reject a request. */
 @Component
 final class AgentApiCacheControlFilter extends OncePerRequestFilter {
 
@@ -18,10 +18,15 @@ final class AgentApiCacheControlFilter extends OncePerRequestFilter {
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     String path = request.getRequestURI();
-    return !(path.equals("/api/v1/agent-drafts")
-        || path.startsWith("/api/v1/agent-drafts/")
-        || path.equals("/api/v1/agent-runs")
-        || path.startsWith("/api/v1/agent-runs/"));
+    return !(isAtOrBelow(path, "/api/v1/captures")
+        || isAtOrBelow(path, "/api/v1/artifacts")
+        || isAtOrBelow(path, "/api/v1/manifestations")
+        || isAtOrBelow(path, "/api/v1/agent-drafts")
+        || isAtOrBelow(path, "/api/v1/agent-runs"));
+  }
+
+  private static boolean isAtOrBelow(String path, String root) {
+    return path.equals(root) || path.startsWith(root + "/");
   }
 
   @Override

@@ -6,6 +6,7 @@ import io.emergeos.contracts.RunStatus;
 import io.emergeos.contracts.TraceEventType;
 import io.emergeos.contracts.WorkerResultEnvelope;
 import io.emergeos.core.domain.AgentRun;
+import io.emergeos.core.domain.AgentTraceProtocol;
 import java.util.List;
 import java.util.Objects;
 
@@ -107,15 +108,9 @@ public final class ReadOnlyWorkerHandoffVerifier {
           child.bundle().resourceBindings().stream()
               .filter(binding -> binding.role() == ResourceRole.EVIDENCE)
               .toList();
-      String proposalRef =
-          child.trace().events().stream()
-              .filter(event -> event.type() == TraceEventType.STRUCTURED_FINAL)
-              .map(event -> event.reference())
-              .findFirst()
-              .orElseThrow(
-                  () ->
-                      new IllegalArgumentException(
-                          "successful Worker lacks structured final"));
+      String proposalContentHash =
+          AgentTraceProtocol
+              .structuredFinalProposalContentHash(child.trace());
       if (!workerResult.childRunId().equals(child.runId())
           || !workerResult.childTaskId().equals(child.task().id())
           || !workerResult.outputSchema().equals(child.task().outputSchema())
@@ -131,8 +126,9 @@ public final class ReadOnlyWorkerHandoffVerifier {
               .getFirst()
               .contentHash()
               .equals(workerResult.integrityHash())
-          || !proposalRef.equals(
-              "proposal://sha256:" + workerResult.contentHash())) {
+          || !workerResult
+              .contentHash()
+              .equals(proposalContentHash)) {
         throw new IllegalArgumentException(
             "Worker Result is not hash-bound to child terminal truth");
       }
@@ -238,23 +234,18 @@ public final class ReadOnlyWorkerHandoffVerifier {
           parent.bundle().resourceBindings().stream()
               .filter(binding -> binding.role() == ResourceRole.ARTIFACT)
               .toList();
-      String parentProposalRef =
-          parent.trace().events().stream()
-              .filter(event -> event.type() == TraceEventType.STRUCTURED_FINAL)
-              .map(event -> event.reference())
-              .findFirst()
-              .orElseThrow(
-                  () ->
-                      new IllegalArgumentException(
-                          "successful parent lacks structured final"));
+      String parentProposalContentHash =
+          AgentTraceProtocol
+              .structuredFinalProposalContentHash(parent.trace());
       if (child.result().status() != RunStatus.SUCCEEDED
           || artifacts.size() != 1
           || !artifacts
               .getFirst()
               .contentHash()
               .equals(workerResult.contentHash())
-          || !parentProposalRef.equals(
-              "proposal://sha256:" + workerResult.contentHash())
+          || !workerResult
+              .contentHash()
+              .equals(parentProposalContentHash)
           || !parent
               .result()
               .evidenceRefs()

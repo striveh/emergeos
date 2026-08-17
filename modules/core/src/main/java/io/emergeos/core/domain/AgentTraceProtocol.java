@@ -101,6 +101,36 @@ public final class AgentTraceProtocol {
         result.latencyMs());
   }
 
+  /**
+   * Returns the one proposal content hash bound by a structured-final
+   * Trace event, or {@code null} when no structured final exists.
+   */
+  public static String structuredFinalProposalContentHash(
+      AgentTraceEnvelope trace) {
+    Objects.requireNonNull(trace, "trace");
+    List<AgentTraceEntry> finals =
+        trace.events().stream()
+            .filter(
+                event ->
+                    event.type() == TraceEventType.STRUCTURED_FINAL)
+            .toList();
+    if (finals.isEmpty()) {
+      return null;
+    }
+    if (finals.size() != 1
+        || !finals
+            .getFirst()
+            .reference()
+            .matches("proposal://sha256:[a-f0-9]{64}")) {
+      throw new IllegalArgumentException(
+          "Trace does not bind one structured-final proposal hash");
+    }
+    return finals
+        .getFirst()
+        .reference()
+        .substring("proposal://sha256:".length());
+  }
+
   private static void verifyKernelEvents(
       TaskEnvelope task,
       RunStatus status,

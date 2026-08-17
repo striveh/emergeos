@@ -1,6 +1,6 @@
 package io.emergeos.grapheval;
 
-import io.emergeos.adapters.postgres.PostgresGraphAttemptStore;
+import io.emergeos.adapters.postgres.Pack010GraphTerminalStoreBridge;
 import java.io.DataInputStream;
 import java.nio.file.Path;
 import javax.sql.DataSource;
@@ -74,7 +74,8 @@ public final class Pack009GraphVerifierMain {
             jdbcUrl, username, databasePassword);
     Pack009GraphVerifier.Result result =
         new Pack009GraphVerifier(
-                new PostgresGraphAttemptStore(dataSource))
+                Pack010GraphTerminalStoreBridge
+                    .openLegacyWriterBackedReader(dataSource))
             .verify();
     System.out.println(result.receipt());
     System.out.flush();

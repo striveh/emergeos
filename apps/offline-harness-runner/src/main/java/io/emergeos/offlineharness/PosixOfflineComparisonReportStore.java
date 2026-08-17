@@ -122,7 +122,13 @@ final class PosixOfflineComparisonReportStore {
 
       Path claim =
           trusted.directory().resolve(CLAIM_FILE_NAME);
-      writeNewFile(claim, CLAIM_BYTES);
+      writeNewFile(
+          claim,
+          CLAIM_BYTES,
+          () ->
+              observer.observed(
+                  OfflineComparisonPersistenceObserver.Phase
+                      .CLAIM_WRITE_STARTED));
       requireSafeFile(
           claim,
           trusted.owner(),
@@ -314,18 +320,41 @@ final class PosixOfflineComparisonReportStore {
     }
     if (claimExists) {
       try {
-        requireSafeFile(
-            claim,
-            trusted.owner(),
-            CLAIM_BYTES.length,
-            CLAIM_BYTES.length);
-        if (!MessageDigest.isEqual(
-            readBounded(
-                claim,
-                trusted.owner(),
-                CLAIM_BYTES.length,
-                CLAIM_BYTES.length),
-            CLAIM_BYTES)) {
+        byte[] claimBytes;
+        try {
+          claimBytes =
+              readBounded(
+                  claim,
+                  trusted.owner(),
+                  0,
+                  CLAIM_BYTES.length);
+        } catch (Rejected changed) {
+          if ("REPORT_CHANGED_DURING_READ".equals(
+                  changed.code())
+              && !pendingExists
+              && !targetExists) {
+            return ReadResult.unknown(
+                RecordState.CLAIM_NON_AUTHORITATIVE,
+                "REPORT_COMMIT_INCOMPLETE");
+          }
+          throw changed;
+        }
+        if (claimBytes.length < CLAIM_BYTES.length) {
+          if (pendingExists || targetExists) {
+            return ReadResult.invalid(
+                RecordState.PATH_STATE_CONFLICT,
+                "REPORT_PATH_STATE_CONFLICT");
+          }
+          if (!isClaimPrefix(claimBytes)) {
+            return ReadResult.invalid(
+                RecordState.PATH_STATE_CONFLICT,
+                "REPORT_CLAIM_INVALID");
+          }
+          return ReadResult.unknown(
+              RecordState.CLAIM_NON_AUTHORITATIVE,
+              "REPORT_COMMIT_INCOMPLETE");
+        }
+        if (!MessageDigest.isEqual(claimBytes, CLAIM_BYTES)) {
           return ReadResult.invalid(
               RecordState.PATH_STATE_CONFLICT,
               "REPORT_CLAIM_INVALID");
@@ -721,6 +750,15 @@ final class PosixOfflineComparisonReportStore {
     return CLAIM_FILE_NAME.equals(name)
         || PENDING_FILE_NAME.equals(name)
         || REPORT_FILE_NAME.equals(name);
+  }
+
+  private static boolean isClaimPrefix(byte[] bytes) {
+    for (int index = 0; index < bytes.length; index++) {
+      if (bytes[index] != CLAIM_BYTES[index]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static String sha256(byte[] bytes) {

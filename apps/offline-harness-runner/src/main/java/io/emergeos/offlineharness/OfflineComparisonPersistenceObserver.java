@@ -10,6 +10,7 @@ interface OfflineComparisonPersistenceObserver {
   }
 
   enum Phase {
+    CLAIM_WRITE_STARTED,
     CLAIM_DURABLE,
     PENDING_WRITE_STARTED,
     PENDING_FILE_FSYNC_COMPLETE,
